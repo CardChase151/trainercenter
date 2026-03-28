@@ -1271,9 +1271,22 @@ function App() {
         <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ccc', margin: '0 0 8px 0' }}>
           Trainer <span style={{ color: '#C8102E' }}>Center</span>
         </p>
-        <p style={{ fontSize: '0.75rem', margin: 0 }}>
+        <p style={{ fontSize: '0.75rem', margin: '0 0 20px 0' }}>
           Pokemon cards, collectibles, and community events
         </p>
+        <a
+          href="https://appcatalyst.org"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#555',
+            textDecoration: 'none',
+            fontSize: '0.65rem',
+            transition: 'color 0.2s'
+          }}
+        >
+          Built by App Catalyst
+        </a>
       </footer>
 
       <style>{`
