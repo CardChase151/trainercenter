@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, Menu, X } from 'lucide-react';
 import './App.css';
 
 // ─── Photo Grid ───────────────────────────────────────────
-function PhotoGrid({ photos }) {
+function PhotoGrid({ photos, isMobile }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+      gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(250px, 1fr))' : 'repeat(auto-fill, minmax(300px, 1fr))',
       gap: '16px'
     }}>
       {photos.map((photo, i) => (
@@ -332,7 +332,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff }) {
+function Calendar({ isStaff, isMobile }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [events, setEvents] = useState([]);
@@ -512,10 +512,10 @@ function Calendar({ isStaff }) {
         </div>
 
         {/* Body */}
-        <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}>
         {/* Calendar side */}
         <div style={{
-          flex: hasSelection ? '0 0 58%' : '1',
+          flex: isMobile ? '1' : (hasSelection ? '0 0 58%' : '1'),
           transition: 'flex 0.3s ease',
           minWidth: 0
         }}>
@@ -557,16 +557,17 @@ function Calendar({ isStaff }) {
           </div>
         </div>
 
-        {/* Day detail panel (slides in from right) */}
+        {/* Day detail panel (slides in from right, or below on mobile) */}
         {hasSelection && (
           <div style={{
-            flex: '0 0 42%',
-            borderLeft: '1px solid #eee',
+            flex: isMobile ? '1' : '0 0 42%',
+            borderLeft: isMobile ? 'none' : '1px solid #eee',
+            borderTop: isMobile ? '1px solid #eee' : 'none',
             backgroundColor: '#fafafa',
             padding: '0',
             display: 'flex',
             flexDirection: 'column',
-            animation: 'slideIn 0.25s ease-out'
+            animation: isMobile ? 'none' : 'slideIn 0.25s ease-out'
           }}>
             {/* Events list */}
             <div style={{ padding: '16px', flex: 1, overflowY: 'auto' }}>
@@ -664,6 +665,14 @@ function App() {
   const [navVisible, setNavVisible] = useState(false);
   const [staffUser, setStaffUser] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setNavVisible(window.scrollY > 100);
@@ -719,7 +728,8 @@ function App() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
-          {['Cards', 'Merchandise', 'Events'].map(item => (
+          {/* Desktop nav links */}
+          {!isMobile && ['Cards', 'Merchandise', 'Events'].map(item => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(' ', '-')}`}
@@ -736,7 +746,7 @@ function App() {
               {item}
             </a>
           ))}
-          {/* Staff lock icon */}
+          {/* Staff lock icon - always visible */}
           <button
             onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
             style={{
@@ -752,8 +762,63 @@ function App() {
           >
             {staffUser ? <Unlock size={20} /> : <Lock size={20} />}
           </button>
+          {/* Hamburger menu button - mobile only */}
+          {isMobile && (
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#1a1a1a',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              {menuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          )}
         </div>
       </nav>
+
+      {/* Mobile dropdown menu */}
+      {isMobile && menuOpen && navVisible && (
+        <div style={{
+          position: 'fixed',
+          top: '64px',
+          left: 0,
+          right: 0,
+          zIndex: 999,
+          backgroundColor: '#ffffff',
+          borderBottom: '1px solid #eee',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '8px 0'
+        }}>
+          {['Cards', 'Merchandise', 'Events'].map(item => (
+            <a
+              key={item}
+              href={`#${item.toLowerCase().replace(' ', '-')}`}
+              onClick={() => setMenuOpen(false)}
+              style={{
+                color: '#555',
+                textDecoration: 'none',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                padding: '14px 24px',
+                borderBottom: '1px solid #f0f0f0',
+                transition: 'background-color 0.2s, color 0.2s'
+              }}
+              onMouseEnter={e => { e.target.style.backgroundColor = '#fff0f0'; e.target.style.color = '#C8102E'; }}
+              onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = '#555'; }}
+            >
+              {item}
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* Hero - Full Viewport */}
       <header style={{
@@ -790,8 +855,8 @@ function App() {
           padding: '24px'
         }}>
           <div style={{
-            width: '220px',
-            height: '220px',
+            width: isMobile ? '150px' : '220px',
+            height: isMobile ? '150px' : '220px',
             borderRadius: '50%',
             backgroundColor: '#ffffff',
             boxShadow: '0 4px 30px rgba(0,0,0,0.25)',
@@ -802,23 +867,24 @@ function App() {
             overflow: 'hidden'
           }}>
             <img src="/logo-circle-transparent.png" alt="Logo" style={{
-              width: '380px',
-              height: '380px',
+              width: isMobile ? '260px' : '380px',
+              height: isMobile ? '260px' : '380px',
               objectFit: 'contain'
             }} />
           </div>
           <h1 style={{
-            fontSize: '5rem',
+            fontSize: isMobile ? 'clamp(2.2rem, 10vw, 3.5rem)' : '5rem',
             fontWeight: '900',
             margin: '0 0 12px 0',
             letterSpacing: '-0.03em',
             color: '#ffffff',
-            textShadow: '0 2px 20px rgba(0,0,0,0.4)'
+            textShadow: '0 2px 20px rgba(0,0,0,0.4)',
+            textAlign: 'center'
           }}>
             Trainer <span style={{ color: '#C8102E', backgroundColor: '#ffffff', padding: '0px 5px', borderRadius: '6px', marginLeft: '4px' }}>Center</span>
           </h1>
           <p style={{
-            fontSize: '1.6rem',
+            fontSize: isMobile ? 'clamp(1rem, 4vw, 1.3rem)' : '1.6rem',
             color: 'rgba(255,255,255,0.9)',
             maxWidth: '600px',
             margin: '0 auto 40px',
@@ -845,20 +911,20 @@ function App() {
             }}>
               {[...Array(4)].map((_, i) => (
                 <span key={i} style={{
-                  fontSize: '1.3rem',
+                  fontSize: isMobile ? '1rem' : '1.3rem',
                   fontWeight: '800',
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase'
                 }}>
-                  <span style={{ color: '#ffffff', margin: '0 20px' }}>Buy</span>
+                  <span style={{ color: '#ffffff', margin: isMobile ? '0 12px' : '0 20px' }}>Buy</span>
                   <span style={{ color: '#C8102E', margin: '0 8px' }}>-</span>
-                  <span style={{ color: '#ffffff', margin: '0 20px' }}>Battle</span>
+                  <span style={{ color: '#ffffff', margin: isMobile ? '0 12px' : '0 20px' }}>Battle</span>
                   <span style={{ color: '#C8102E', margin: '0 8px' }}>-</span>
-                  <span style={{ color: '#ffffff', margin: '0 20px' }}>Collect</span>
+                  <span style={{ color: '#ffffff', margin: isMobile ? '0 12px' : '0 20px' }}>Collect</span>
                   <span style={{ color: '#C8102E', margin: '0 8px' }}>-</span>
-                  <span style={{ color: '#ffffff', margin: '0 20px' }}>Sell</span>
+                  <span style={{ color: '#ffffff', margin: isMobile ? '0 12px' : '0 20px' }}>Sell</span>
                   <span style={{ color: '#C8102E', margin: '0 8px' }}>-</span>
-                  <span style={{ color: '#ffffff', margin: '0 20px' }}>Donate</span>
+                  <span style={{ color: '#ffffff', margin: isMobile ? '0 12px' : '0 20px' }}>Donate</span>
                   <span style={{ color: '#C8102E', margin: '0 8px' }}>-</span>
                 </span>
               ))}
@@ -868,7 +934,7 @@ function App() {
       </header>
 
       {/* Content */}
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '60px 24px' }}>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
 
         {/* ── MISSION ── */}
         <div id="mission" style={{ marginBottom: '64px' }}>
@@ -877,7 +943,7 @@ function App() {
             backgroundColor: '#ffffff',
             borderRadius: '16px',
             border: '1px solid #eee',
-            padding: '40px',
+            padding: isMobile ? '20px 16px' : '40px',
             maxWidth: '800px',
             margin: '0 auto'
           }}>
@@ -916,7 +982,7 @@ function App() {
           <SectionHeader title="Cards" subtitle="We carry Pokemon cards from every era" />
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
             gap: '20px'
           }}>
             {/* Vintage */}
@@ -1041,7 +1107,7 @@ function App() {
         <div id="merchandise" style={{ marginBottom: '64px' }}>
           <SectionHeader title="Merchandise & Collectibles" subtitle="Beyond the cards - consoles, plushies, figures, and more" />
 
-          <PhotoGrid photos={[
+          <PhotoGrid isMobile={isMobile} photos={[
             { src: '/photos/IMG_5668.jpg', alt: 'Retro consoles' },
             { src: '/photos/IMG_5666.jpg', alt: 'Switch and Game Boy' },
             { src: '/photos/IMG_5665.jpg', alt: 'Graded games' },
@@ -1066,7 +1132,7 @@ function App() {
           {/* Event type cards */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: isMobile ? (window.innerWidth < 480 ? '1fr' : 'repeat(2, 1fr)') : 'repeat(4, 1fr)',
             gap: '14px',
             marginBottom: '28px'
           }}>
@@ -1162,7 +1228,7 @@ function App() {
             />
             {/* Layer 3: calendar */}
             <div style={{ position: 'relative', zIndex: 2 }}>
-              <Calendar isStaff={!!staffUser} />
+              <Calendar isStaff={!!staffUser} isMobile={isMobile} />
             </div>
           </div>
         </div>
@@ -1223,6 +1289,9 @@ function App() {
         html { scroll-behavior: smooth; }
         * { box-sizing: border-box; }
         body { margin: 0; }
+        @media (max-width: 768px) {
+          body { -webkit-text-size-adjust: 100%; }
+        }
       `}</style>
     </div>
   );
