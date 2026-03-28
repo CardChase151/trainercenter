@@ -93,69 +93,6 @@ function SectionHeader({ title, subtitle }) {
   );
 }
 
-// ─── Era Card ─────────────────────────────────────────────
-function EraCard({ title, years, description, photos }) {
-  return (
-    <div style={{
-      backgroundColor: '#ffffff',
-      borderRadius: '16px',
-      border: '1px solid #eee',
-      overflow: 'hidden',
-      marginBottom: '28px'
-    }}>
-      {/* Photo strip */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${photos.length}, 1fr)`,
-        gap: '2px'
-      }}>
-        {photos.map((p, i) => (
-          <img
-            key={i}
-            src={p}
-            alt={title}
-            style={{
-              width: '100%',
-              height: '200px',
-              objectFit: 'cover',
-              display: 'block'
-            }}
-          />
-        ))}
-      </div>
-      <div style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '8px' }}>
-          <h3 style={{
-            fontSize: '1.3rem',
-            fontWeight: '800',
-            color: '#1a1a1a',
-            margin: 0
-          }}>
-            {title}
-          </h3>
-          <span style={{
-            fontSize: '0.8rem',
-            fontWeight: '700',
-            color: '#C8102E',
-            backgroundColor: '#fff0f0',
-            padding: '3px 10px',
-            borderRadius: '6px'
-          }}>
-            {years}
-          </span>
-        </div>
-        <p style={{
-          fontSize: '0.9rem',
-          color: '#666',
-          margin: 0,
-          lineHeight: '1.6'
-        }}>
-          {description}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // ─── Calendar Component ───────────────────────────────────
 // ─── Staff Login Modal ────────────────────────────────────
