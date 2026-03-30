@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock } from 'lucide-react';
 import './App.css';
 
 // ─── Photo Grid ───────────────────────────────────────────
@@ -729,10 +729,10 @@ function App() {
         </div>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
           {/* Desktop nav links */}
-          {!isMobile && ['Cards', 'Merchandise', 'Events'].map(item => (
+          {!isMobile && ['Cards', 'Merchandise', 'Events', 'Visit Us'].map(item => (
             <a
               key={item}
-              href={`#${item.toLowerCase().replace(' ', '-')}`}
+              href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
               style={{
                 color: '#555',
                 textDecoration: 'none',
@@ -797,10 +797,10 @@ function App() {
           flexDirection: 'column',
           padding: '8px 0'
         }}>
-          {['Cards', 'Merchandise', 'Events'].map(item => (
+          {['Cards', 'Merchandise', 'Events', 'Visit Us'].map(item => (
             <a
               key={item}
-              href={`#${item.toLowerCase().replace(' ', '-')}`}
+              href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
               onClick={() => setMenuOpen(false)}
               style={{
                 color: '#555',
@@ -1253,6 +1253,109 @@ function App() {
           Staff Mode - Click calendar days to add events
         </div>
       )}
+
+      {/* ── VISIT US ── */}
+      <div id="visit-us" style={{
+        padding: isMobile ? '48px 20px' : '64px 48px',
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        <SectionHeader title="Visit Us" subtitle="Come check us out at Harbour Landing" />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: '24px'
+        }}>
+          {/* Location & Contact */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '14px',
+            border: '1px solid #eee',
+            padding: '28px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <MapPin size={20} color="#C8102E" />
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Location</h3>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 4px 0', lineHeight: '1.6' }}>
+              4911 Warner Ave #210
+            </p>
+            <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 16px 0', lineHeight: '1.6' }}>
+              Huntington Beach, CA 92649
+            </p>
+            <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 24px 0' }}>
+              Located in Harbour Landing
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <Phone size={20} color="#C8102E" />
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Phone</h3>
+            </div>
+            <a
+              href="tel:+17149519100"
+              style={{
+                display: 'inline-block',
+                backgroundColor: '#C8102E',
+                color: '#fff',
+                padding: '12px 28px',
+                borderRadius: '10px',
+                fontSize: '0.95rem',
+                fontWeight: '700',
+                textDecoration: 'none',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              (714) 951-9100
+            </a>
+          </div>
+
+          {/* Hours */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '14px',
+            border: '1px solid #eee',
+            padding: '28px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <Clock size={20} color="#C8102E" />
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Hours</h3>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                {[
+                  ['Monday', 'Closed'],
+                  ['Tuesday', '12 - 8 PM'],
+                  ['Wednesday', '12 - 8 PM'],
+                  ['Thursday', '12 - 8 PM'],
+                  ['Friday', '12 - 10 PM'],
+                  ['Saturday', '10 AM - 8 PM'],
+                  ['Sunday', '10 AM - 5 PM']
+                ].map(([day, hours]) => (
+                  <tr key={day}>
+                    <td style={{
+                      padding: '8px 0',
+                      fontSize: '0.9rem',
+                      fontWeight: '600',
+                      color: hours === 'Closed' ? '#999' : '#1a1a1a',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>{day}</td>
+                    <td style={{
+                      padding: '8px 0',
+                      fontSize: '0.9rem',
+                      color: hours === 'Closed' ? '#ccc' : '#444',
+                      textAlign: 'right',
+                      fontWeight: hours === 'Closed' ? '400' : '600',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>{hours}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
       {/* Footer */}
       <footer style={{
