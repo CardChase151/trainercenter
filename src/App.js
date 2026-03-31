@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link, Routes, Route, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
 import './App.css';
+
+// ─── Scroll To Top on Route Change ──────────────────────
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 // ─── Photo Grid ───────────────────────────────────────────
 function PhotoGrid({ photos, isMobile }) {
@@ -660,166 +670,169 @@ function Calendar({ isStaff, isMobile }) {
   );
 }
 
-// ─── Main App ─────────────────────────────────────────────
-function App() {
-  const [navVisible, setNavVisible] = useState(false);
-  const [staffUser, setStaffUser] = useState(null);
-  const [showLogin, setShowLogin] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    const handleScroll = () => setNavVisible(window.scrollY > 100);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Check for existing staff session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setStaffUser(session?.user || null);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setStaffUser(session?.user || null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setStaffUser(null);
-  };
-
+// ─── Visit Us Section ─────────────────────────────────────
+function VisitUsSection({ isMobile }) {
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#f8f8f8',
-      color: '#1a1a1a',
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    <div id="visit-us" style={{
+      padding: isMobile ? '48px 20px' : '64px 48px',
+      maxWidth: '1200px',
+      margin: '0 auto'
     }}>
-      {/* Nav - hidden until scroll */}
-      <nav style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        backgroundColor: '#ffffff',
-        borderBottom: '1px solid #eee',
-        padding: '0 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        height: '64px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-        transform: navVisible ? 'translateY(0)' : 'translateY(-100%)',
-        transition: 'transform 0.35s ease-in-out'
+      <SectionHeader title="Visit Us" subtitle="Come check us out at Harbour Landing" />
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: '24px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
-          <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', letterSpacing: '-0.02em' }}>
-            Trainer <span style={{ color: '#C8102E' }}>Center</span>
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
-          {/* Desktop nav links */}
-          {!isMobile && ['Consultation', 'Grading', 'Buy/Sell', 'Calendar', 'Visit Us'].map(item => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-              style={{
-                color: '#555',
-                textDecoration: 'none',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                transition: 'color 0.2s'
-              }}
-              onMouseEnter={e => e.target.style.color = '#C8102E'}
-              onMouseLeave={e => e.target.style.color = '#555'}
-            >
-              {item}
-            </a>
-          ))}
-          {/* Staff lock icon - always visible */}
-          <button
-            onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              color: staffUser ? '#C8102E' : '#1a1a1a',
-              padding: '4px',
-              transition: 'color 0.2s'
-            }}
-            title={staffUser ? 'Staff: Logged in (click to logout)' : 'Staff Login'}
-          >
-            {staffUser ? <Unlock size={20} /> : <Lock size={20} />}
-          </button>
-          {/* Hamburger menu button - mobile only */}
-          {isMobile && (
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#1a1a1a',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center'
-              }}
-            >
-              {menuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          )}
-        </div>
-      </nav>
-
-      {/* Mobile dropdown menu */}
-      {isMobile && menuOpen && navVisible && (
+        {/* Location & Contact */}
         <div style={{
-          position: 'fixed',
-          top: '64px',
-          left: 0,
-          right: 0,
-          zIndex: 999,
-          backgroundColor: '#ffffff',
-          borderBottom: '1px solid #eee',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '8px 0'
+          backgroundColor: '#fff',
+          borderRadius: '14px',
+          border: '1px solid #eee',
+          padding: '28px'
         }}>
-          {['Consultation', 'Grading', 'Buy/Sell', 'Calendar', 'Visit Us'].map(item => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
-              onClick={() => setMenuOpen(false)}
-              style={{
-                color: '#555',
-                textDecoration: 'none',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                padding: '14px 24px',
-                borderBottom: '1px solid #f0f0f0',
-                transition: 'background-color 0.2s, color 0.2s'
-              }}
-              onMouseEnter={e => { e.target.style.backgroundColor = '#fff0f0'; e.target.style.color = '#C8102E'; }}
-              onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = '#555'; }}
-            >
-              {item}
-            </a>
-          ))}
-        </div>
-      )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <MapPin size={20} color="#C8102E" />
+            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Location</h3>
+          </div>
+          <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 4px 0', lineHeight: '1.6' }}>
+            4911 Warner Ave #210
+          </p>
+          <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 16px 0', lineHeight: '1.6' }}>
+            Huntington Beach, CA 92649
+          </p>
+          <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 24px 0' }}>
+            Located in Harbour Landing
+          </p>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <Phone size={20} color="#C8102E" />
+            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Phone</h3>
+          </div>
+          <a
+            href="tel:+17149519100"
+            style={{
+              display: 'inline-block',
+              backgroundColor: '#C8102E',
+              color: '#fff',
+              padding: '12px 28px',
+              borderRadius: '10px',
+              fontSize: '0.95rem',
+              fontWeight: '700',
+              textDecoration: 'none',
+              transition: 'opacity 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            (714) 951-9100
+          </a>
+        </div>
+
+        {/* Hours */}
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: '14px',
+          border: '1px solid #eee',
+          padding: '28px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+            <Clock size={20} color="#C8102E" />
+            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Hours</h3>
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {[
+                ['Monday', 'Closed'],
+                ['Tuesday', '12 - 8 PM'],
+                ['Wednesday', '12 - 8 PM'],
+                ['Thursday', '12 - 8 PM'],
+                ['Friday', '12 - 10 PM'],
+                ['Saturday', '10 AM - 8 PM'],
+                ['Sunday', '10 AM - 5 PM']
+              ].map(([day, hours]) => (
+                <tr key={day}>
+                  <td style={{
+                    padding: '8px 0',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    color: hours === 'Closed' ? '#999' : '#1a1a1a',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>{day}</td>
+                  <td style={{
+                    padding: '8px 0',
+                    fontSize: '0.9rem',
+                    color: hours === 'Closed' ? '#ccc' : '#444',
+                    textAlign: 'right',
+                    fontWeight: hours === 'Closed' ? '400' : '600',
+                    borderBottom: '1px solid #f0f0f0'
+                  }}>{hours}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Footer ───────────────────────────────────────────────
+function Footer() {
+  return (
+    <footer style={{
+      backgroundColor: '#1a1a1a',
+      color: '#999',
+      padding: '40px 24px',
+      textAlign: 'center'
+    }}>
+      <div style={{
+        width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 16px', overflow: 'hidden'
+      }}>
+        <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '76px', height: '76px', objectFit: 'contain' }} />
+      </div>
+      <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ccc', margin: '0 0 8px 0' }}>
+        Trainer <span style={{ color: '#C8102E' }}>Center</span>
+      </p>
+      <p style={{ fontSize: '0.75rem', margin: '0 0 20px 0' }}>
+        Pokemon cards, collectibles, and community events
+      </p>
+      <a
+        href="https://appcatalyst.org"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          color: '#555',
+          textDecoration: 'none',
+          fontSize: '0.65rem',
+          transition: 'color 0.2s'
+        }}
+      >
+        Built by App Catalyst
+      </a>
+    </footer>
+  );
+}
+
+// ─── Page Wrapper ─────────────────────────────────────────
+function PageWrapper({ children, isMobile }) {
+  return (
+    <>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
+        {children}
+      </main>
+      <VisitUsSection isMobile={isMobile} />
+      <Footer />
+    </>
+  );
+}
+
+// ─── Home Page ────────────────────────────────────────────
+function HomePage({ isMobile }) {
+  return (
+    <>
       {/* Hero - Full Viewport */}
       <header style={{
         height: '100vh',
@@ -933,10 +946,8 @@ function App() {
         </div>
       </header>
 
-      {/* Content */}
+      {/* Mission section + Visit Us + Footer */}
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
-
-        {/* ── MISSION ── */}
         <div id="mission" style={{ marginBottom: '64px' }}>
           <SectionHeader title="Our Mission" />
           <div style={{
@@ -976,366 +987,612 @@ function App() {
             </p>
           </div>
         </div>
+      </main>
 
-        {/* ── CONSULTATION ── */}
-        <div id="consultation" style={{ marginBottom: '64px' }}>
-          <SectionHeader title="Consultation" subtitle="Learn before you sell, trade, or grade" />
+      <VisitUsSection isMobile={isMobile} />
+      <Footer />
+    </>
+  );
+}
+
+// ─── Consultation Page ────────────────────────────────────
+function ConsultationPage({ isMobile }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Consultation" subtitle="Learn before you sell, trade, or grade" />
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '0 auto'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '12px',
+              backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <GraduationCap size={24} color="#C8102E" />
+            </div>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+              Free Collection Consultation
+            </h3>
+          </div>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
+            Whether you found a box of old cards in the attic or you have been collecting for years, our staff will sit down with you and walk through what you have. This is not a sales pitch. The goal is to educate you so you know what your collection is actually worth and you do not get taken advantage of.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
+            We may make you an offer, but the real value of the consultation is the knowledge you walk away with.
+          </p>
+
+          <h4 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>What we cover:</h4>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            gap: '12px',
+            marginBottom: '28px'
+          }}>
+            {[
+              { title: 'Card Identification', desc: 'We help you identify what you have, from Base Set shadowless to modern illustration rares.' },
+              { title: 'Market Value', desc: 'Learn what apps and tools to use to look up real-time prices so you always know what your cards are worth.' },
+              { title: 'Grading Advice', desc: 'Not every card is worth grading. We show you how to evaluate condition and which cards are worth the investment.' },
+              { title: 'Best Time to Buy or Sell', desc: 'Pokemon card values fluctuate with sets, seasons, and trends. We help you understand timing.' },
+              { title: 'Pokemon History', desc: 'Understand the eras, the rare prints, the errors, and the cards that collectors chase. Knowledge is your best tool.' },
+              { title: 'Vintage Collections', desc: 'Got old cards, sealed product, or Japanese imports? We help you sort through it all and understand what stands out.' }
+            ].map((item, i) => (
+              <div key={i} style={{
+                padding: '16px',
+                borderRadius: '10px',
+                backgroundColor: '#fafafa',
+                border: '1px solid #f0f0f0'
+              }}>
+                <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 4px 0' }}>{item.title}</h5>
+                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            backgroundColor: '#fff0f0',
+            borderRadius: '10px',
+            padding: '16px 20px',
+            textAlign: 'center'
+          }}>
+            <p style={{ fontSize: '0.9rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0' }}>
+              Call to schedule your consultation
+            </p>
+            <a href="tel:+17149519100" style={{
+              fontSize: '1.1rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
+            }}>
+              (714) 951-9100
+            </a>
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Grading Page ─────────────────────────────────────────
+function GradingPage({ isMobile }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Grading" subtitle="We help you evaluate and submit cards for professional grading" />
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '0 auto'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '12px',
+              backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Award size={24} color="#C8102E" />
+            </div>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+              PSA Grading Services
+            </h3>
+          </div>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '12px' }}>
+            Grading authenticates your card, seals it in a tamper-proof case, and assigns a condition score from 1 to 10. A high grade can multiply a card's value significantly. We help you decide which cards are worth grading, evaluate their condition, and handle the submission to PSA.
+          </p>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '28px' }}>
+            PSA (Professional Sports Authenticator) is the most recognized grading service in the hobby. Here are their current pricing tiers:
+          </p>
+
+          {/* PSA Pricing Table */}
+          <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#1a1a1a' }}>
+                  {['Service', 'Price/Card', 'Turnaround', 'Max Value'].map(h => (
+                    <th key={h} style={{
+                      padding: '12px 16px', textAlign: 'left', color: '#fff',
+                      fontWeight: '700', fontSize: '0.8rem'
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ['Value Bulk', '$25', '~95 days', '$500'],
+                  ['Value', '$33', '~75 days', '$500'],
+                  ['Value Plus', '$50', '~45 days', '$1,000'],
+                  ['Value Max', '$65', '~35 days', '$1,500'],
+                  ['Regular', '$80', '~25 days', '$1,500'],
+                  ['Express', '$160', '~10 days', '$2,999'],
+                  ['Super Express', '$300', '~5 days', '$4,999'],
+                ].map(([service, price, time, max], i) => (
+                  <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fafafa' : '#ffffff' }}>
+                    <td style={{ padding: '10px 16px', fontWeight: '600', color: '#1a1a1a', borderBottom: '1px solid #f0f0f0' }}>{service}</td>
+                    <td style={{ padding: '10px 16px', color: '#C8102E', fontWeight: '700', borderBottom: '1px solid #f0f0f0' }}>{price}</td>
+                    <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{time}</td>
+                    <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{max}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '24px', lineHeight: '1.5' }}>
+            Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
+          </p>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
+            gap: '12px'
+          }}>
+            {[
+              { title: 'We Evaluate', desc: 'Bring your cards in and we will assess condition and help you decide if grading is worth the cost.' },
+              { title: 'We Submit', desc: 'We handle the PSA submission process for you. No need to create an account or figure out shipping.' },
+              { title: 'You Profit', desc: 'A PSA 10 Charizard is worth significantly more than a raw one. Grading protects and increases value.' }
+            ].map((item, i) => (
+              <div key={i} style={{
+                padding: '16px', borderRadius: '10px',
+                backgroundColor: '#fafafa', border: '1px solid #f0f0f0', textAlign: 'center'
+              }}>
+                <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 6px 0' }}>{item.title}</h5>
+                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Buy/Sell Page ────────────────────────────────────────
+function BuySellPage({ isMobile }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Buy / Sell" subtitle="We buy collections and offer consignment for sellers" />
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: '24px',
+          maxWidth: '900px',
+          margin: '0 auto'
+        }}>
+          {/* Buying */}
           <div style={{
             backgroundColor: '#ffffff',
             borderRadius: '16px',
             border: '1px solid #eee',
-            padding: isMobile ? '24px 16px' : '40px',
-            maxWidth: '900px',
-            margin: '0 auto'
+            padding: '28px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <div style={{
-                width: '48px', height: '48px', borderRadius: '12px',
+                width: '40px', height: '40px', borderRadius: '10px',
+                backgroundColor: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <ShoppingBag size={20} color="#2e7d32" />
+              </div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>We Buy</h3>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
+              We buy Pokemon cards, collections, plushies, figures, sealed product, and collectible inventory. Whether it is a shoebox of old cards or an entire collection you are looking to move, we are interested.
+            </p>
+            <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
+              <li>Single cards and bulk lots</li>
+              <li>Vintage and modern collections</li>
+              <li>Sealed booster boxes, ETBs, and tins</li>
+              <li>Plushies, figures, and merchandise</li>
+              <li>Old collections and estate lots</li>
+            </ul>
+            <div style={{
+              backgroundColor: '#e8f5e9', borderRadius: '8px',
+              padding: '12px 16px', marginTop: '20px', textAlign: 'center'
+            }}>
+              <p style={{ fontSize: '0.85rem', color: '#2e7d32', fontWeight: '600', margin: 0 }}>
+                Call or visit the store for a quote
+              </p>
+            </div>
+          </div>
+
+          {/* Selling / Consignment */}
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            border: '1px solid #eee',
+            padding: '28px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '10px',
                 backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}>
-                <GraduationCap size={24} color="#C8102E" />
+                <ShoppingBag size={20} color="#C8102E" />
               </div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-                Free Collection Consultation
-              </h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Consignment</h3>
             </div>
-            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
-              Whether you found a box of old cards in the attic or you have been collecting for years, our staff will sit down with you and walk through what you have. This is not a sales pitch. The goal is to educate you so you know what your collection is actually worth and you do not get taken advantage of.
+            <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
+              Want to sell your graded cards or qualifying merchandise but do not want to deal with online marketplaces? We offer consignment. You leave your items at the store, we display and sell them, and when they sell you get paid.
             </p>
-            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
-              We may make you an offer, but the real value of the consultation is the knowledge you walk away with.
-            </p>
-
-            <h4 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>What we cover:</h4>
+            <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
+              <li>Graded cards (PSA, CGC, BGS)</li>
+              <li>Qualifying merchandise and collectibles</li>
+              <li>Your items displayed in-store</li>
+              <li>You get paid when they sell</li>
+            </ul>
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-              gap: '12px',
-              marginBottom: '28px'
+              backgroundColor: '#fff0f0', borderRadius: '8px',
+              padding: '12px 16px', marginTop: '20px', textAlign: 'center'
             }}>
-              {[
-                { title: 'Card Identification', desc: 'We help you identify what you have, from Base Set shadowless to modern illustration rares.' },
-                { title: 'Market Value', desc: 'Learn what apps and tools to use to look up real-time prices so you always know what your cards are worth.' },
-                { title: 'Grading Advice', desc: 'Not every card is worth grading. We show you how to evaluate condition and which cards are worth the investment.' },
-                { title: 'Best Time to Buy or Sell', desc: 'Pokemon card values fluctuate with sets, seasons, and trends. We help you understand timing.' },
-                { title: 'Pokemon History', desc: 'Understand the eras, the rare prints, the errors, and the cards that collectors chase. Knowledge is your best tool.' },
-                { title: 'Vintage Collections', desc: 'Got old cards, sealed product, or Japanese imports? We help you sort through it all and understand what stands out.' }
-              ].map((item, i) => (
-                <div key={i} style={{
-                  padding: '16px',
-                  borderRadius: '10px',
-                  backgroundColor: '#fafafa',
-                  border: '1px solid #f0f0f0'
-                }}>
-                  <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 4px 0' }}>{item.title}</h5>
-                  <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div style={{
-              backgroundColor: '#fff0f0',
-              borderRadius: '10px',
-              padding: '16px 20px',
-              textAlign: 'center'
-            }}>
-              <p style={{ fontSize: '0.9rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0' }}>
-                Call to schedule your consultation
+              <p style={{ fontSize: '0.85rem', color: '#C8102E', fontWeight: '600', margin: 0 }}>
+                Call to set up pricing and details
               </p>
               <a href="tel:+17149519100" style={{
-                fontSize: '1.1rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
+                fontSize: '0.95rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
               }}>
                 (714) 951-9100
               </a>
             </div>
           </div>
         </div>
+      </div>
+    </PageWrapper>
+  );
+}
 
-        {/* ── GRADING ── */}
-        <div id="grading" style={{ marginBottom: '64px' }}>
-          <SectionHeader title="Grading" subtitle="We help you evaluate and submit cards for professional grading" />
+// ─── Calendar Page ────────────────────────────────────────
+function CalendarPage({ isMobile, staffUser }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ position: 'relative' }}>
+        <SectionHeader title="Calendar" subtitle="Upcoming events and activities" />
+
+        {/* Event type cards */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? (window.innerWidth < 480 ? '1fr' : 'repeat(2, 1fr)') : 'repeat(4, 1fr)',
+          gap: '14px',
+          marginBottom: '28px'
+        }}>
           <div style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            border: '1px solid #eee',
-            padding: isMobile ? '24px 16px' : '40px',
-            maxWidth: '900px',
-            margin: '0 auto'
+            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
+            borderLeft: '4px solid #C8102E', border: '1px solid #eee',
+            borderLeftWidth: '4px', borderLeftColor: '#C8102E'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <div style={{
-                width: '48px', height: '48px', borderRadius: '12px',
-                backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <Award size={24} color="#C8102E" />
-              </div>
-              <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-                PSA Grading Services
-              </h3>
-            </div>
-            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '12px' }}>
-              Grading authenticates your card, seals it in a tamper-proof case, and assigns a condition score from 1 to 10. A high grade can multiply a card's value significantly. We help you decide which cards are worth grading, evaluate their condition, and handle the submission to PSA.
-            </p>
-            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '28px' }}>
-              PSA (Professional Sports Authenticator) is the most recognized grading service in the hobby. Here are their current pricing tiers:
-            </p>
-
-            {/* PSA Pricing Table */}
-            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#1a1a1a' }}>
-                    {['Service', 'Price/Card', 'Turnaround', 'Max Value'].map(h => (
-                      <th key={h} style={{
-                        padding: '12px 16px', textAlign: 'left', color: '#fff',
-                        fontWeight: '700', fontSize: '0.8rem'
-                      }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ['Value Bulk', '$25', '~95 days', '$500'],
-                    ['Value', '$33', '~75 days', '$500'],
-                    ['Value Plus', '$50', '~45 days', '$1,000'],
-                    ['Value Max', '$65', '~35 days', '$1,500'],
-                    ['Regular', '$80', '~25 days', '$1,500'],
-                    ['Express', '$160', '~10 days', '$2,999'],
-                    ['Super Express', '$300', '~5 days', '$4,999'],
-                  ].map(([service, price, time, max], i) => (
-                    <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fafafa' : '#ffffff' }}>
-                      <td style={{ padding: '10px 16px', fontWeight: '600', color: '#1a1a1a', borderBottom: '1px solid #f0f0f0' }}>{service}</td>
-                      <td style={{ padding: '10px 16px', color: '#C8102E', fontWeight: '700', borderBottom: '1px solid #f0f0f0' }}>{price}</td>
-                      <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{time}</td>
-                      <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{max}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '24px', lineHeight: '1.5' }}>
-              Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
-            </p>
-
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
-              gap: '12px'
-            }}>
-              {[
-                { title: 'We Evaluate', desc: 'Bring your cards in and we will assess condition and help you decide if grading is worth the cost.' },
-                { title: 'We Submit', desc: 'We handle the PSA submission process for you. No need to create an account or figure out shipping.' },
-                { title: 'You Profit', desc: 'A PSA 10 Charizard is worth significantly more than a raw one. Grading protects and increases value.' }
-              ].map((item, i) => (
-                <div key={i} style={{
-                  padding: '16px', borderRadius: '10px',
-                  backgroundColor: '#fafafa', border: '1px solid #f0f0f0', textAlign: 'center'
-                }}>
-                  <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 6px 0' }}>{item.title}</h5>
-                  <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
-                </div>
-              ))}
-            </div>
+              width: '10px', height: '10px', borderRadius: '50%',
+              backgroundColor: '#C8102E', marginBottom: '10px'
+            }} />
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
+              Trade Night
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
+              Bring your binders and trade with fellow trainers. All eras welcome.
+            </p>
+          </div>
+
+          <div style={{
+            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
+            borderLeft: '4px solid #2563eb', border: '1px solid #eee',
+            borderLeftWidth: '4px', borderLeftColor: '#2563eb'
+          }}>
+            <div style={{
+              width: '10px', height: '10px', borderRadius: '50%',
+              backgroundColor: '#2563eb', marginBottom: '10px'
+            }} />
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
+              Tournament
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
+              Competitive play with prizes. Standard and expanded formats.
+            </p>
+          </div>
+
+          <div style={{
+            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
+            borderLeft: '4px solid #7c3aed', border: '1px solid #eee',
+            borderLeftWidth: '4px', borderLeftColor: '#7c3aed'
+          }}>
+            <div style={{
+              width: '10px', height: '10px', borderRadius: '50%',
+              backgroundColor: '#7c3aed', marginBottom: '10px'
+            }} />
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
+              Big Event
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
+              Release parties, community days, special celebrations, and more.
+            </p>
+          </div>
+
+          <div style={{
+            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
+            borderLeft: '4px solid #ea580c', border: '1px solid #eee',
+            borderLeftWidth: '4px', borderLeftColor: '#ea580c'
+          }}>
+            <div style={{
+              width: '10px', height: '10px', borderRadius: '50%',
+              backgroundColor: '#ea580c', marginBottom: '10px'
+            }} />
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
+              Other
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
+              Birthday parties, meetups, league nights, and community activities.
+            </p>
           </div>
         </div>
-
-        {/* ── BUY/SELL ── */}
-        <div id="buy/sell" style={{ marginBottom: '64px' }}>
-          <SectionHeader title="Buy / Sell" subtitle="We buy collections and offer consignment for sellers" />
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-            gap: '24px',
-            maxWidth: '900px',
-            margin: '0 auto'
-          }}>
-            {/* Buying */}
-            <div style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #eee',
-              padding: '28px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '10px',
-                  backgroundColor: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <ShoppingBag size={20} color="#2e7d32" />
-                </div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>We Buy</h3>
-              </div>
-              <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
-                We buy Pokemon cards, collections, plushies, figures, sealed product, and collectible inventory. Whether it is a shoebox of old cards or an entire collection you are looking to move, we are interested.
-              </p>
-              <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
-                <li>Single cards and bulk lots</li>
-                <li>Vintage and modern collections</li>
-                <li>Sealed booster boxes, ETBs, and tins</li>
-                <li>Plushies, figures, and merchandise</li>
-                <li>Old collections and estate lots</li>
-              </ul>
-              <div style={{
-                backgroundColor: '#e8f5e9', borderRadius: '8px',
-                padding: '12px 16px', marginTop: '20px', textAlign: 'center'
-              }}>
-                <p style={{ fontSize: '0.85rem', color: '#2e7d32', fontWeight: '600', margin: 0 }}>
-                  Call or visit the store for a quote
-                </p>
-              </div>
-            </div>
-
-            {/* Selling / Consignment */}
-            <div style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #eee',
-              padding: '28px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '10px',
-                  backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <ShoppingBag size={20} color="#C8102E" />
-                </div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Consignment</h3>
-              </div>
-              <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
-                Want to sell your graded cards or qualifying merchandise but do not want to deal with online marketplaces? We offer consignment. You leave your items at the store, we display and sell them, and when they sell you get paid.
-              </p>
-              <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
-                <li>Graded cards (PSA, CGC, BGS)</li>
-                <li>Qualifying merchandise and collectibles</li>
-                <li>Your items displayed in-store</li>
-                <li>You get paid when they sell</li>
-              </ul>
-              <div style={{
-                backgroundColor: '#fff0f0', borderRadius: '8px',
-                padding: '12px 16px', marginTop: '20px', textAlign: 'center'
-              }}>
-                <p style={{ fontSize: '0.85rem', color: '#C8102E', fontWeight: '600', margin: 0 }}>
-                  Call to set up pricing and details
-                </p>
-                <a href="tel:+17149519100" style={{
-                  fontSize: '0.95rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
-                }}>
-                  (714) 951-9100
-                </a>
-              </div>
-            </div>
+        <div style={{
+          position: 'relative',
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          overflow: 'hidden'
+        }}>
+          {/* Layer 1: white bg (handled by container) */}
+          {/* Layer 2: logo watermark */}
+          <img
+            src="/logo-transparent.png"
+            alt=""
+            style={{
+              position: 'absolute',
+              bottom: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '420px',
+              opacity: 0.08,
+              pointerEvents: 'none',
+              zIndex: 1
+            }}
+          />
+          {/* Layer 3: calendar */}
+          <div style={{ position: 'relative', zIndex: 2 }}>
+            <Calendar isStaff={!!staffUser} isMobile={isMobile} />
           </div>
         </div>
+      </div>
+    </PageWrapper>
+  );
+}
 
-        {/* ── CALENDAR ── */}
-        <div id="calendar" style={{ position: 'relative' }}>
-          <SectionHeader title="Calendar" subtitle="Upcoming events and activities" />
+// ─── Nav Link Helper ──────────────────────────────────────
+const NAV_ITEMS = [
+  { label: 'Consultation', to: '/consultation' },
+  { label: 'Grading', to: '/grading' },
+  { label: 'Buy/Sell', to: '/buy-sell' },
+  { label: 'Calendar', to: '/calendar' },
+  { label: 'Visit Us', to: '/#visit-us' }
+];
 
-          {/* Event type cards */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? (window.innerWidth < 480 ? '1fr' : 'repeat(2, 1fr)') : 'repeat(4, 1fr)',
-            gap: '14px',
-            marginBottom: '28px'
-          }}>
-            <div style={{
-              padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-              borderLeft: '4px solid #C8102E', border: '1px solid #eee',
-              borderLeftWidth: '4px', borderLeftColor: '#C8102E'
-            }}>
-              <div style={{
-                width: '10px', height: '10px', borderRadius: '50%',
-                backgroundColor: '#C8102E', marginBottom: '10px'
-              }} />
-              <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-                Trade Night
-              </h4>
-              <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-                Bring your binders and trade with fellow trainers. All eras welcome.
-              </p>
-            </div>
+// ─── Main App ─────────────────────────────────────────────
+function App() {
+  const [navVisible, setNavVisible] = useState(false);
+  const [staffUser, setStaffUser] = useState(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const location = useLocation();
 
-            <div style={{
-              padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-              borderLeft: '4px solid #2563eb', border: '1px solid #eee',
-              borderLeftWidth: '4px', borderLeftColor: '#2563eb'
-            }}>
-              <div style={{
-                width: '10px', height: '10px', borderRadius: '50%',
-                backgroundColor: '#2563eb', marginBottom: '10px'
-              }} />
-              <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-                Tournament
-              </h4>
-              <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-                Competitive play with prizes. Standard and expanded formats.
-              </p>
-            </div>
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-            <div style={{
-              padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-              borderLeft: '4px solid #7c3aed', border: '1px solid #eee',
-              borderLeftWidth: '4px', borderLeftColor: '#7c3aed'
-            }}>
-              <div style={{
-                width: '10px', height: '10px', borderRadius: '50%',
-                backgroundColor: '#7c3aed', marginBottom: '10px'
-              }} />
-              <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-                Big Event
-              </h4>
-              <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-                Release parties, community days, special celebrations, and more.
-              </p>
-            </div>
+  // Show nav immediately on non-home pages, use scroll behavior on home page
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      setNavVisible(true);
+      return;
+    }
+    const handleScroll = () => setNavVisible(window.scrollY > 100);
+    // Reset on home page
+    setNavVisible(window.scrollY > 100);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [location.pathname]);
 
-            <div style={{
-              padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-              borderLeft: '4px solid #ea580c', border: '1px solid #eee',
-              borderLeftWidth: '4px', borderLeftColor: '#ea580c'
-            }}>
-              <div style={{
-                width: '10px', height: '10px', borderRadius: '50%',
-                backgroundColor: '#ea580c', marginBottom: '10px'
-              }} />
-              <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-                Other
-              </h4>
-              <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-                Birthday parties, meetups, league nights, and community activities.
-              </p>
-            </div>
-          </div>
-          <div style={{
-            position: 'relative',
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            overflow: 'hidden'
-          }}>
-            {/* Layer 1: white bg (handled by container) */}
-            {/* Layer 2: logo watermark */}
-            <img
-              src="/logo-transparent.png"
-              alt=""
+  // Handle hash scrolling for /#visit-us
+  useEffect(() => {
+    if (location.hash === '#visit-us') {
+      setTimeout(() => {
+        const el = document.getElementById('visit-us');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  }, [location]);
+
+  // Check for existing staff session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setStaffUser(session?.user || null);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setStaffUser(session?.user || null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setStaffUser(null);
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f8f8f8',
+      color: '#1a1a1a',
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    }}>
+      <ScrollToTop />
+
+      {/* Nav - hidden until scroll on home, always visible on other pages */}
+      <nav style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        backgroundColor: '#ffffff',
+        borderBottom: '1px solid #eee',
+        padding: '0 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        height: '64px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+        transform: navVisible ? 'translateY(0)' : 'translateY(-100%)',
+        transition: 'transform 0.35s ease-in-out'
+      }}>
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
+          <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+          <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', letterSpacing: '-0.02em' }}>
+            Trainer <span style={{ color: '#C8102E' }}>Center</span>
+          </span>
+        </Link>
+        <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
+          {/* Desktop nav links */}
+          {!isMobile && NAV_ITEMS.map(item => (
+            item.label === 'Visit Us' ? (
+              <Link
+                key={item.label}
+                to={item.to}
+                style={{
+                  color: '#555',
+                  textDecoration: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={e => e.target.style.color = '#C8102E'}
+                onMouseLeave={e => e.target.style.color = '#555'}
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <Link
+                key={item.label}
+                to={item.to}
+                style={{
+                  color: location.pathname === item.to ? '#C8102E' : '#555',
+                  textDecoration: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={e => e.target.style.color = '#C8102E'}
+                onMouseLeave={e => { if (location.pathname !== item.to) e.target.style.color = '#555'; }}
+              >
+                {item.label}
+              </Link>
+            )
+          ))}
+          {/* Staff lock icon - always visible */}
+          <button
+            onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              color: staffUser ? '#C8102E' : '#1a1a1a',
+              padding: '4px',
+              transition: 'color 0.2s'
+            }}
+            title={staffUser ? 'Staff: Logged in (click to logout)' : 'Staff Login'}
+          >
+            {staffUser ? <Unlock size={20} /> : <Lock size={20} />}
+          </button>
+          {/* Hamburger menu button - mobile only */}
+          {isMobile && (
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
               style={{
-                position: 'absolute',
-                bottom: '20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '420px',
-                opacity: 0.08,
-                pointerEvents: 'none',
-                zIndex: 1
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#1a1a1a',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
               }}
-            />
-            {/* Layer 3: calendar */}
-            <div style={{ position: 'relative', zIndex: 2 }}>
-              <Calendar isStaff={!!staffUser} isMobile={isMobile} />
-            </div>
-          </div>
+            >
+              {menuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          )}
         </div>
-      </main>
+      </nav>
+
+      {/* Mobile dropdown menu */}
+      {isMobile && menuOpen && navVisible && (
+        <div style={{
+          position: 'fixed',
+          top: '64px',
+          left: 0,
+          right: 0,
+          zIndex: 999,
+          backgroundColor: '#ffffff',
+          borderBottom: '1px solid #eee',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '8px 0'
+        }}>
+          {NAV_ITEMS.map(item => (
+            <Link
+              key={item.label}
+              to={item.to}
+              onClick={() => setMenuOpen(false)}
+              style={{
+                color: location.pathname === item.to ? '#C8102E' : '#555',
+                textDecoration: 'none',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                padding: '14px 24px',
+                borderBottom: '1px solid #f0f0f0',
+                transition: 'background-color 0.2s, color 0.2s'
+              }}
+              onMouseEnter={e => { e.target.style.backgroundColor = '#fff0f0'; e.target.style.color = '#C8102E'; }}
+              onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; if (location.pathname !== item.to) e.target.style.color = '#555'; }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Routes */}
+      <Routes>
+        <Route path="/" element={<HomePage isMobile={isMobile} />} />
+        <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
+        <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
+        <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
+        <Route path="/calendar" element={<CalendarPage isMobile={isMobile} staffUser={staffUser} />} />
+      </Routes>
 
       {/* Staff Login Modal */}
       {showLogin && (
@@ -1356,144 +1613,6 @@ function App() {
           Staff Mode - Click calendar days to add events
         </div>
       )}
-
-      {/* ── VISIT US ── */}
-      <div id="visit-us" style={{
-        padding: isMobile ? '48px 20px' : '64px 48px',
-        maxWidth: '1200px',
-        margin: '0 auto'
-      }}>
-        <SectionHeader title="Visit Us" subtitle="Come check us out at Harbour Landing" />
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-          gap: '24px'
-        }}>
-          {/* Location & Contact */}
-          <div style={{
-            backgroundColor: '#fff',
-            borderRadius: '14px',
-            border: '1px solid #eee',
-            padding: '28px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <MapPin size={20} color="#C8102E" />
-              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Location</h3>
-            </div>
-            <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 4px 0', lineHeight: '1.6' }}>
-              4911 Warner Ave #210
-            </p>
-            <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 16px 0', lineHeight: '1.6' }}>
-              Huntington Beach, CA 92649
-            </p>
-            <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 24px 0' }}>
-              Located in Harbour Landing
-            </p>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <Phone size={20} color="#C8102E" />
-              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Phone</h3>
-            </div>
-            <a
-              href="tel:+17149519100"
-              style={{
-                display: 'inline-block',
-                backgroundColor: '#C8102E',
-                color: '#fff',
-                padding: '12px 28px',
-                borderRadius: '10px',
-                fontSize: '0.95rem',
-                fontWeight: '700',
-                textDecoration: 'none',
-                transition: 'opacity 0.2s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              (714) 951-9100
-            </a>
-          </div>
-
-          {/* Hours */}
-          <div style={{
-            backgroundColor: '#fff',
-            borderRadius: '14px',
-            border: '1px solid #eee',
-            padding: '28px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <Clock size={20} color="#C8102E" />
-              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Hours</h3>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <tbody>
-                {[
-                  ['Monday', 'Closed'],
-                  ['Tuesday', '12 - 8 PM'],
-                  ['Wednesday', '12 - 8 PM'],
-                  ['Thursday', '12 - 8 PM'],
-                  ['Friday', '12 - 10 PM'],
-                  ['Saturday', '10 AM - 8 PM'],
-                  ['Sunday', '10 AM - 5 PM']
-                ].map(([day, hours]) => (
-                  <tr key={day}>
-                    <td style={{
-                      padding: '8px 0',
-                      fontSize: '0.9rem',
-                      fontWeight: '600',
-                      color: hours === 'Closed' ? '#999' : '#1a1a1a',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>{day}</td>
-                    <td style={{
-                      padding: '8px 0',
-                      fontSize: '0.9rem',
-                      color: hours === 'Closed' ? '#ccc' : '#444',
-                      textAlign: 'right',
-                      fontWeight: hours === 'Closed' ? '400' : '600',
-                      borderBottom: '1px solid #f0f0f0'
-                    }}>{hours}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer style={{
-        backgroundColor: '#1a1a1a',
-        color: '#999',
-        padding: '40px 24px',
-        textAlign: 'center'
-      }}>
-        <div style={{
-          width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.92)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 16px', overflow: 'hidden'
-        }}>
-          <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '76px', height: '76px', objectFit: 'contain' }} />
-        </div>
-        <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ccc', margin: '0 0 8px 0' }}>
-          Trainer <span style={{ color: '#C8102E' }}>Center</span>
-        </p>
-        <p style={{ fontSize: '0.75rem', margin: '0 0 20px 0' }}>
-          Pokemon cards, collectibles, and community events
-        </p>
-        <a
-          href="https://appcatalyst.org"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: '#555',
-            textDecoration: 'none',
-            fontSize: '0.65rem',
-            transition: 'color 0.2s'
-          }}
-        >
-          Built by App Catalyst
-        </a>
-      </footer>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');
