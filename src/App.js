@@ -1399,8 +1399,8 @@ function App() {
           to { opacity: 1; transform: translateX(0); }
         }
         @keyframes marquee {
-          0% { transform: translateX(-25%); }
-          100% { transform: translateX(0); }
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-25%); }
         }
         html { scroll-behavior: smooth; }
         * { box-sizing: border-box; }
