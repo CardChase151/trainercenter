@@ -1453,17 +1453,20 @@ function CalendarPage({ isMobile, staffUser }) {
 }
 
 // ─── Blog List Page ──────────────────────────────────────
-function BlogListPage({ isMobile }) {
-  const firstUnpublishedIndex = BLOG_DATA.findIndex(b => !b.published);
+const BLOG_RELEASE_DATES = [
+  'Mar 31', 'Apr 7', 'Apr 14', 'Apr 21', 'Apr 28', 'May 5',
+  'May 12', 'May 19', 'May 26', 'Jun 2', 'Jun 9', 'Jun 16'
+];
 
+function BlogListPage({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title="Blog" subtitle="Tips, guides, and everything Pokemon" />
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           {BLOG_DATA.map((blog, i) => {
-            const isComingSoon = i === firstUnpublishedIndex;
             const isPublished = blog.published;
+            const releaseDate = BLOG_RELEASE_DATES[i] || '';
 
             const card = (
               <div style={{
@@ -1473,11 +1476,12 @@ function BlogListPage({ isMobile }) {
                 padding: '20px 24px',
                 marginBottom: '12px',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
+                alignItems: isMobile ? 'flex-start' : 'center',
+                flexDirection: isMobile ? 'column' : 'row',
+                gap: isMobile ? '8px' : '16px',
                 transition: isPublished ? 'transform 0.2s, box-shadow 0.2s' : 'none',
                 cursor: isPublished ? 'pointer' : 'default',
-                opacity: isPublished ? 1 : isComingSoon ? 0.8 : 0.45
+                opacity: isPublished ? 1 : 0.55
               }}
               onMouseEnter={isPublished ? e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; } : undefined}
               onMouseLeave={isPublished ? e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
@@ -1485,13 +1489,13 @@ function BlogListPage({ isMobile }) {
                 <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: isPublished ? '#1a1a1a' : '#999', margin: 0, flex: 1 }}>
                   {blog.title}
                 </h3>
-                {isComingSoon && (
+                {!isPublished && (
                   <span style={{
                     fontSize: '0.7rem', fontWeight: '700', color: '#C8102E',
                     backgroundColor: '#fff0f0', padding: '4px 10px', borderRadius: '6px',
                     whiteSpace: 'nowrap'
                   }}>
-                    Coming Soon
+                    Coming {releaseDate}
                   </span>
                 )}
               </div>
