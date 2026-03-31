@@ -1454,21 +1454,20 @@ function CalendarPage({ isMobile, staffUser }) {
 
 // ─── Blog List Page ──────────────────────────────────────
 function BlogListPage({ isMobile }) {
-  const publishedBlogs = BLOG_DATA.filter(b => b.published).reverse();
+  const firstUnpublishedIndex = BLOG_DATA.findIndex(b => !b.published);
 
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title="Blog" subtitle="Tips, guides, and everything Pokemon" />
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          {publishedBlogs.map((blog) => (
-            <Link
-              key={blog.slug}
-              to={`/blog/${blog.slug}`}
-              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-            >
+          {BLOG_DATA.map((blog, i) => {
+            const isComingSoon = i === firstUnpublishedIndex;
+            const isPublished = blog.published;
+
+            const card = (
               <div style={{
-                backgroundColor: '#ffffff',
+                backgroundColor: isPublished ? '#ffffff' : '#fafafa',
                 borderRadius: '12px',
                 border: '1px solid #eee',
                 padding: '20px 24px',
@@ -1476,18 +1475,37 @@ function BlogListPage({ isMobile }) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '16px',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                cursor: 'pointer'
+                transition: isPublished ? 'transform 0.2s, box-shadow 0.2s' : 'none',
+                cursor: isPublished ? 'pointer' : 'default',
+                opacity: isPublished ? 1 : isComingSoon ? 0.8 : 0.45
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              onMouseEnter={isPublished ? e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; } : undefined}
+              onMouseLeave={isPublished ? e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; } : undefined}
               >
-                <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1a1a1a', margin: 0 }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: isPublished ? '#1a1a1a' : '#999', margin: 0, flex: 1 }}>
                   {blog.title}
                 </h3>
+                {isComingSoon && (
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: '700', color: '#C8102E',
+                    backgroundColor: '#fff0f0', padding: '4px 10px', borderRadius: '6px',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    Coming Soon
+                  </span>
+                )}
               </div>
-            </Link>
-          ))}
+            );
+
+            if (isPublished) {
+              return (
+                <Link key={blog.slug} to={`/blog/${blog.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                  {card}
+                </Link>
+              );
+            }
+            return <div key={blog.slug}>{card}</div>;
+          })}
         </div>
       </div>
     </PageWrapper>
