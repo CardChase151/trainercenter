@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, Routes, Route, useLocation } from 'react-router-dom';
+import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
+import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
 import './App.css';
@@ -1451,57 +1452,94 @@ function CalendarPage({ isMobile, staffUser }) {
   );
 }
 
-// ─── Blog Page ───────────────────────────────────────────
-function BlogPage({ isMobile }) {
-  const blogs = [
-    { num: 1, title: 'What is CardChase? Meet, Trade, and Collect Safely', file: '01-what-is-cardchase' },
-    { num: 2, title: 'What Do Graders Look For? A PSA Grading Breakdown', file: '02-what-graders-look-for' },
-    { num: 3, title: 'What Should I Collect? Fun vs Value and How to Start', file: '03-what-should-i-collect' },
-    { num: 4, title: 'What Apps Can I Trust for Pokemon Card Pricing?', file: '04-pricing-apps' },
-    { num: 5, title: 'How Consignment Works at Trainer Center', file: '05-how-consignment-works' },
-    { num: 6, title: 'How to Properly Sleeve and Protect Your Cards', file: '06-sleeve-and-protect' },
-    { num: 7, title: 'Is Playing the Pokemon TCG Hard?', file: '07-is-tcg-hard' },
-    { num: 8, title: 'How to Tell if a Pokemon Card is Fake', file: '08-fake-cards' },
-    { num: 9, title: 'What to Look for in a Card Vendor (and What to Avoid)', file: '09-what-to-look-for-in-a-vendor' },
-    { num: 10, title: 'Parents: How to Support Your Kid\'s Pokemon Hobby', file: '10-parents-guide' },
-    { num: 11, title: 'Top Pokemon That Hold Value Over Time', file: '11-pokemon-that-hold-value' },
-    { num: 12, title: 'Are Foreign Language Pokemon Cards Worth More?', file: '12-foreign-language-cards' },
-  ];
+// ─── Blog List Page ──────────────────────────────────────
+function BlogListPage({ isMobile }) {
+  const publishedBlogs = BLOG_DATA.filter(b => b.published).reverse();
 
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title="Blog" subtitle="Tips, guides, and everything Pokemon" />
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          {blogs.map((blog) => (
-            <div key={blog.num} style={{
-              backgroundColor: '#ffffff',
-              borderRadius: '12px',
-              border: '1px solid #eee',
-              padding: '20px 24px',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+          {publishedBlogs.map((blog) => (
+            <Link
+              key={blog.slug}
+              to={`/blog/${blog.slug}`}
+              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
             >
               <div style={{
-                width: '36px', height: '36px', borderRadius: '8px',
-                backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#C8102E' }}>{blog.num}</span>
+                backgroundColor: '#ffffff',
+                borderRadius: '12px',
+                border: '1px solid #eee',
+                padding: '20px 24px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1a1a1a', margin: 0 }}>
+                  {blog.title}
+                </h3>
               </div>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#1a1a1a', margin: 0 }}>
-                {blog.title}
-              </h3>
-            </div>
+            </Link>
           ))}
         </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Blog Post Page ──────────────────────────────────────
+function BlogPostPage({ isMobile }) {
+  const { slug } = useParams();
+  const blog = BLOG_DATA.find(b => b.slug === slug);
+
+  if (!blog || !blog.published) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1a1a1a', marginBottom: '16px' }}>Post not found</h2>
+          <Link to="/blog" style={{ color: '#C8102E', textDecoration: 'none', fontWeight: '600' }}>Back to Blog</Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 20px 64px' }}>
+        <Link to="/blog" style={{ color: '#C8102E', textDecoration: 'none', fontWeight: '600', fontSize: '0.9rem', display: 'inline-block', marginBottom: '24px' }}>
+          &larr; Back to Blog
+        </Link>
+        <h1 style={{ fontSize: isMobile ? '1.5rem' : '2rem', fontWeight: '800', color: '#1a1a1a', lineHeight: 1.3, marginBottom: '32px' }}>
+          {blog.title}
+        </h1>
+        {blog.content.map((block, i) => {
+          if (block.type === 'h2') {
+            return <h2 key={i} style={{ fontSize: '1.3rem', fontWeight: '700', color: '#1a1a1a', marginTop: '32px', marginBottom: '12px', lineHeight: 1.3 }}>{block.text}</h2>;
+          }
+          if (block.type === 'h3') {
+            return <h3 key={i} style={{ fontSize: '1.1rem', fontWeight: '700', color: '#1a1a1a', marginTop: '24px', marginBottom: '8px', lineHeight: 1.3 }}>{block.text}</h3>;
+          }
+          if (block.type === 'p') {
+            return <p key={i} style={{ fontSize: '1rem', color: '#333', lineHeight: 1.75, marginBottom: '16px' }} dangerouslySetInnerHTML={{ __html: block.text }} />;
+          }
+          if (block.type === 'li') {
+            return (
+              <ul key={i} style={{ paddingLeft: '24px', marginBottom: '16px' }}>
+                {block.items.map((item, j) => (
+                  <li key={j} style={{ fontSize: '1rem', color: '#333', lineHeight: 1.75, marginBottom: '8px' }}>{item}</li>
+                ))}
+              </ul>
+            );
+          }
+          return null;
+        })}
       </div>
     </PageWrapper>
   );
@@ -1723,7 +1761,8 @@ function App() {
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} staffUser={staffUser} />} />
-        <Route path="/blog" element={<BlogPage isMobile={isMobile} />} />
+        <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
+        <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
       </Routes>
 
       {/* Staff Login Modal */}
