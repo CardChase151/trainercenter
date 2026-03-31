@@ -820,7 +820,7 @@ function Footer() {
 function PageWrapper({ children, isMobile }) {
   return (
     <>
-      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '100px 16px 40px' : '120px 24px 60px' }}>
         {children}
       </main>
       <VisitUsSection isMobile={isMobile} />
@@ -986,6 +986,79 @@ function HomePage({ isMobile }) {
               We hope you will join us on this journey and let us help you catch them all.
             </p>
           </div>
+        </div>
+
+        {/* ── CARDS ── */}
+        <div id="cards" style={{ marginBottom: '64px' }}>
+          <SectionHeader title="Cards" subtitle="We carry Pokemon cards from every era" />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+            gap: '20px'
+          }}>
+            <div style={{
+              borderRadius: '16px', overflow: 'hidden', backgroundColor: '#ffffff',
+              border: '1px solid #eee', transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+            >
+              <img src="/photos/IMG_5650.jpg" alt="Vintage Cards" style={{ width: '100%', height: '360px', objectFit: 'cover', display: 'block' }} />
+              <div style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Vintage & Classic</h3>
+                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#C8102E', backgroundColor: '#fff0f0', padding: '3px 10px', borderRadius: '6px' }}>1995 - 2017</span>
+                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>Base Set, Jungle, Fossil, Team Rocket, Neo series, Diamond & Pearl through Sun & Moon.</p>
+              </div>
+            </div>
+            <div style={{
+              borderRadius: '16px', overflow: 'hidden', backgroundColor: '#ffffff',
+              border: '1px solid #eee', transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+            >
+              <img src="/photos/IMG_5654.jpg" alt="Modern Cards" style={{ width: '100%', height: '360px', objectFit: 'cover', display: 'block' }} />
+              <div style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Current & Modern</h3>
+                <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#C8102E', backgroundColor: '#fff0f0', padding: '3px 10px', borderRadius: '6px' }}>2018 - Present</span>
+                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>Sword & Shield, Scarlet & Violet. VMAX, VSTAR, ex cards, illustration rares, and sealed product.</p>
+              </div>
+            </div>
+            <div style={{
+              borderRadius: '16px', overflow: 'hidden', backgroundColor: '#ffffff',
+              border: '1px solid #eee', transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+            >
+              <img src="/photos/IMG_5660.jpg" alt="Graded Cards" style={{ width: '100%', height: '360px', objectFit: 'cover', display: 'block' }} />
+              <div style={{ padding: '20px' }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Graded Cards & Slabs</h3>
+                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>PSA, CGC, and BGS graded cards. Authenticated, encapsulated, and ready for your collection.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── MERCHANDISE & COLLECTIBLES ── */}
+        <div id="merchandise" style={{ marginBottom: '64px' }}>
+          <SectionHeader title="Merchandise & Collectibles" subtitle="Beyond the cards - consoles, plushies, figures, and more" />
+          <PhotoGrid isMobile={isMobile} photos={[
+            { src: '/photos/IMG_5668.jpg', alt: 'Retro consoles' },
+            { src: '/photos/IMG_5666.jpg', alt: 'Switch and Game Boy' },
+            { src: '/photos/IMG_5665.jpg', alt: 'Graded games' },
+            { src: '/photos/IMG_5667.jpg', alt: 'Games collection' },
+            { src: '/photos/IMG_5675.jpg', alt: 'Pikachu plushies' },
+            { src: '/photos/IMG_5674.jpg', alt: 'Pokemon plushies' },
+            { src: '/photos/IMG_5676.jpg', alt: 'Plush display' },
+            { src: '/photos/IMG_5652.jpg', alt: 'Plush case' },
+            { src: '/photos/IMG_5679.jpg', alt: 'Plush shelves' },
+            { src: '/photos/IMG_5680.jpg', alt: 'Plush collection' },
+            { src: '/photos/IMG_5670.jpg', alt: 'Select figures' },
+            { src: '/photos/IMG_5671.jpg', alt: 'Funko Pops' },
+            { src: '/photos/IMG_5672.jpg', alt: 'More Pops' },
+            { src: '/photos/IMG_5669.jpg', alt: 'Figure sets' },
+          ]} />
         </div>
       </main>
 
