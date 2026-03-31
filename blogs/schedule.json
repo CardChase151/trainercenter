@@ -1,0 +1,18 @@
+{
+  "next": 1,
+  "total": 12,
+  "blogs": [
+    { "num": 1, "file": "01-what-is-cardchase.md", "title": "What is CardChase? Meet, Trade, and Collect Safely", "status": "queued" },
+    { "num": 2, "file": "02-what-graders-look-for.md", "title": "What Do Graders Look For? A PSA Grading Breakdown", "status": "queued" },
+    { "num": 3, "file": "03-what-should-i-collect.md", "title": "What Should I Collect? Fun vs Value and How to Start", "status": "queued" },
+    { "num": 4, "file": "04-pricing-apps.md", "title": "What Apps Can I Trust for Pokemon Card Pricing?", "status": "queued" },
+    { "num": 5, "file": "05-how-consignment-works.md", "title": "How Consignment Works at Trainer Center", "status": "queued" },
+    { "num": 6, "file": "06-sleeve-and-protect.md", "title": "How to Properly Sleeve and Protect Your Cards", "status": "queued" },
+    { "num": 7, "file": "07-is-tcg-hard.md", "title": "Is Playing the Pokemon TCG Hard?", "status": "queued" },
+    { "num": 8, "file": "08-fake-cards.md", "title": "How to Tell if a Pokemon Card is Fake", "status": "queued" },
+    { "num": 9, "file": "09-what-to-look-for-in-a-vendor.md", "title": "What to Look for in a Card Vendor (and What to Avoid)", "status": "queued" },
+    { "num": 10, "file": "10-parents-guide.md", "title": "Parents: How to Support Your Kid's Pokemon Hobby", "status": "queued" },
+    { "num": 11, "file": "11-pokemon-that-hold-value.md", "title": "Top Pokemon That Hold Value Over Time", "status": "queued" },
+    { "num": 12, "file": "12-foreign-language-cards.md", "title": "Are Foreign Language Pokemon Cards Worth More?", "status": "queued" }
+  ]
+}

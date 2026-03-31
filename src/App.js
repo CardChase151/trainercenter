@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
 import './App.css';
 
 // ─── Photo Grid ───────────────────────────────────────────
@@ -729,7 +729,7 @@ function App() {
         </div>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
           {/* Desktop nav links */}
-          {!isMobile && ['Cards', 'Merchandise', 'Events', 'Visit Us'].map(item => (
+          {!isMobile && ['Consultation', 'Grading', 'Buy/Sell', 'Calendar', 'Visit Us'].map(item => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
@@ -797,7 +797,7 @@ function App() {
           flexDirection: 'column',
           padding: '8px 0'
         }}>
-          {['Cards', 'Merchandise', 'Events', 'Visit Us'].map(item => (
+          {['Consultation', 'Grading', 'Buy/Sell', 'Calendar', 'Visit Us'].map(item => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/\s+/g, '-')}`}
@@ -891,7 +891,7 @@ function App() {
             textAlign: 'center',
             textShadow: '0 1px 8px rgba(0,0,0,0.3)'
           }}>
-            Your destination for Pokemon cards, collectibles, and community events.
+            Huntington Beach's trusted Pokemon only store.
           </p>
           {/* Marquee Banner */}
           <div style={{
@@ -977,157 +977,260 @@ function App() {
           </div>
         </div>
 
-        {/* ── CARDS ── */}
-        <div id="cards" style={{ marginBottom: '64px' }}>
-          <SectionHeader title="Cards" subtitle="We carry Pokemon cards from every era" />
+        {/* ── CONSULTATION ── */}
+        <div id="consultation" style={{ marginBottom: '64px' }}>
+          <SectionHeader title="Consultation" subtitle="Learn before you sell, trade, or grade" />
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            border: '1px solid #eee',
+            padding: isMobile ? '24px 16px' : '40px',
+            maxWidth: '900px',
+            margin: '0 auto'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '12px',
+                backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <GraduationCap size={24} color="#C8102E" />
+              </div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+                Free Collection Consultation
+              </h3>
+            </div>
+            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
+              Whether you found a box of old cards in the attic or you have been collecting for years, our staff will sit down with you and walk through what you have. This is not a sales pitch. The goal is to educate you so you know what your collection is actually worth and you do not get taken advantage of.
+            </p>
+            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
+              We may make you an offer, but the real value of the consultation is the knowledge you walk away with.
+            </p>
+
+            <h4 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>What we cover:</h4>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+              gap: '12px',
+              marginBottom: '28px'
+            }}>
+              {[
+                { title: 'Card Identification', desc: 'We help you identify what you have, from Base Set shadowless to modern illustration rares.' },
+                { title: 'Market Value', desc: 'Learn what apps and tools to use to look up real-time prices so you always know what your cards are worth.' },
+                { title: 'Grading Advice', desc: 'Not every card is worth grading. We show you how to evaluate condition and which cards are worth the investment.' },
+                { title: 'Best Time to Buy or Sell', desc: 'Pokemon card values fluctuate with sets, seasons, and trends. We help you understand timing.' },
+                { title: 'Pokemon History', desc: 'Understand the eras, the rare prints, the errors, and the cards that collectors chase. Knowledge is your best tool.' },
+                { title: 'Vintage Collections', desc: 'Got old cards, sealed product, or Japanese imports? We help you sort through it all and understand what stands out.' }
+              ].map((item, i) => (
+                <div key={i} style={{
+                  padding: '16px',
+                  borderRadius: '10px',
+                  backgroundColor: '#fafafa',
+                  border: '1px solid #f0f0f0'
+                }}>
+                  <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 4px 0' }}>{item.title}</h5>
+                  <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              backgroundColor: '#fff0f0',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              textAlign: 'center'
+            }}>
+              <p style={{ fontSize: '0.9rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0' }}>
+                Call to schedule your consultation
+              </p>
+              <a href="tel:+17149519100" style={{
+                fontSize: '1.1rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
+              }}>
+                (714) 951-9100
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* ── GRADING ── */}
+        <div id="grading" style={{ marginBottom: '64px' }}>
+          <SectionHeader title="Grading" subtitle="We help you evaluate and submit cards for professional grading" />
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            border: '1px solid #eee',
+            padding: isMobile ? '24px 16px' : '40px',
+            maxWidth: '900px',
+            margin: '0 auto'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '12px',
+                backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <Award size={24} color="#C8102E" />
+              </div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+                PSA Grading Services
+              </h3>
+            </div>
+            <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '12px' }}>
+              Grading authenticates your card, seals it in a tamper-proof case, and assigns a condition score from 1 to 10. A high grade can multiply a card's value significantly. We help you decide which cards are worth grading, evaluate their condition, and handle the submission to PSA.
+            </p>
+            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '28px' }}>
+              PSA (Professional Sports Authenticator) is the most recognized grading service in the hobby. Here are their current pricing tiers:
+            </p>
+
+            {/* PSA Pricing Table */}
+            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#1a1a1a' }}>
+                    {['Service', 'Price/Card', 'Turnaround', 'Max Value'].map(h => (
+                      <th key={h} style={{
+                        padding: '12px 16px', textAlign: 'left', color: '#fff',
+                        fontWeight: '700', fontSize: '0.8rem'
+                      }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['Value Bulk', '$25', '~95 days', '$500'],
+                    ['Value', '$33', '~75 days', '$500'],
+                    ['Value Plus', '$50', '~45 days', '$1,000'],
+                    ['Value Max', '$65', '~35 days', '$1,500'],
+                    ['Regular', '$80', '~25 days', '$1,500'],
+                    ['Express', '$160', '~10 days', '$2,999'],
+                    ['Super Express', '$300', '~5 days', '$4,999'],
+                  ].map(([service, price, time, max], i) => (
+                    <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fafafa' : '#ffffff' }}>
+                      <td style={{ padding: '10px 16px', fontWeight: '600', color: '#1a1a1a', borderBottom: '1px solid #f0f0f0' }}>{service}</td>
+                      <td style={{ padding: '10px 16px', color: '#C8102E', fontWeight: '700', borderBottom: '1px solid #f0f0f0' }}>{price}</td>
+                      <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{time}</td>
+                      <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{max}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '24px', lineHeight: '1.5' }}>
+              Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
+              gap: '12px'
+            }}>
+              {[
+                { title: 'We Evaluate', desc: 'Bring your cards in and we will assess condition and help you decide if grading is worth the cost.' },
+                { title: 'We Submit', desc: 'We handle the PSA submission process for you. No need to create an account or figure out shipping.' },
+                { title: 'You Profit', desc: 'A PSA 10 Charizard is worth significantly more than a raw one. Grading protects and increases value.' }
+              ].map((item, i) => (
+                <div key={i} style={{
+                  padding: '16px', borderRadius: '10px',
+                  backgroundColor: '#fafafa', border: '1px solid #f0f0f0', textAlign: 'center'
+                }}>
+                  <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 6px 0' }}>{item.title}</h5>
+                  <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── BUY/SELL ── */}
+        <div id="buy/sell" style={{ marginBottom: '64px' }}>
+          <SectionHeader title="Buy / Sell" subtitle="We buy collections and offer consignment for sellers" />
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-            gap: '20px'
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            gap: '24px',
+            maxWidth: '900px',
+            margin: '0 auto'
           }}>
-            {/* Vintage */}
+            {/* Buying */}
             <div style={{
-              borderRadius: '16px',
-              overflow: 'hidden',
               backgroundColor: '#ffffff',
+              borderRadius: '16px',
               border: '1px solid #eee',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
-              <img src="/photos/IMG_5650.jpg" alt="Vintage Cards" style={{
-                width: '100%',
-                height: '360px',
-                objectFit: 'cover',
-                display: 'block'
-              }} />
-              <div style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Vintage & Classic</h3>
-                <span style={{
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  color: '#C8102E',
-                  backgroundColor: '#fff0f0',
-                  padding: '3px 10px',
-                  borderRadius: '6px'
+              padding: '28px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '10px',
+                  backgroundColor: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                  1995 - 2017
-                </span>
-                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>
-                  Base Set, Jungle, Fossil, Team Rocket, Neo series, Diamond & Pearl through Sun & Moon.
+                  <ShoppingBag size={20} color="#2e7d32" />
+                </div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>We Buy</h3>
+              </div>
+              <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
+                We buy Pokemon cards, collections, plushies, figures, sealed product, and collectible inventory. Whether it is a shoebox of old cards or an entire collection you are looking to move, we are interested.
+              </p>
+              <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
+                <li>Single cards and bulk lots</li>
+                <li>Vintage and modern collections</li>
+                <li>Sealed booster boxes, ETBs, and tins</li>
+                <li>Plushies, figures, and merchandise</li>
+                <li>Old collections and estate lots</li>
+              </ul>
+              <div style={{
+                backgroundColor: '#e8f5e9', borderRadius: '8px',
+                padding: '12px 16px', marginTop: '20px', textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '0.85rem', color: '#2e7d32', fontWeight: '600', margin: 0 }}>
+                  Call or visit the store for a quote
                 </p>
               </div>
             </div>
 
-            {/* Classic */}
+            {/* Selling / Consignment */}
             <div style={{
-              borderRadius: '16px',
-              overflow: 'hidden',
               backgroundColor: '#ffffff',
+              borderRadius: '16px',
               border: '1px solid #eee',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
-              <img src="/photos/IMG_5654.jpg" alt="Classic Cards" style={{
-                width: '100%',
-                height: '360px',
-                objectFit: 'cover',
-                display: 'block'
-              }} />
-              <div style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Current & Modern</h3>
-                <span style={{
-                  fontSize: '0.8rem',
-                  fontWeight: '700',
-                  color: '#C8102E',
-                  backgroundColor: '#fff0f0',
-                  padding: '3px 10px',
-                  borderRadius: '6px'
+              padding: '28px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '10px',
+                  backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                  2018 - Present
-                </span>
-                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>
-                  Sword & Shield, Scarlet & Violet. VMAX, VSTAR, ex cards, illustration rares, and sealed product.
-                </p>
+                  <ShoppingBag size={20} color="#C8102E" />
+                </div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Consignment</h3>
               </div>
-            </div>
-
-            {/* Current */}
-            <div style={{
-              borderRadius: '16px',
-              overflow: 'hidden',
-              backgroundColor: '#ffffff',
-              border: '1px solid #eee',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            >
-              <img src="/photos/IMG_5660.jpg" alt="Current Cards" style={{
-                width: '100%',
-                height: '360px',
-                objectFit: 'cover',
-                display: 'block'
-              }} />
-              <div style={{ padding: '20px' }}>
-                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Graded Cards & Slabs</h3>
-                <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', marginTop: '10px' }}>
-                  PSA, CGC, and BGS graded cards. Authenticated, encapsulated, and ready for your collection.
+              <p style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.7', marginBottom: '16px' }}>
+                Want to sell your graded cards or qualifying merchandise but do not want to deal with online marketplaces? We offer consignment. You leave your items at the store, we display and sell them, and when they sell you get paid.
+              </p>
+              <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: '0.85rem', color: '#555', lineHeight: '2' }}>
+                <li>Graded cards (PSA, CGC, BGS)</li>
+                <li>Qualifying merchandise and collectibles</li>
+                <li>Your items displayed in-store</li>
+                <li>You get paid when they sell</li>
+              </ul>
+              <div style={{
+                backgroundColor: '#fff0f0', borderRadius: '8px',
+                padding: '12px 16px', marginTop: '20px', textAlign: 'center'
+              }}>
+                <p style={{ fontSize: '0.85rem', color: '#C8102E', fontWeight: '600', margin: 0 }}>
+                  Call to set up pricing and details
                 </p>
+                <a href="tel:+17149519100" style={{
+                  fontSize: '0.95rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
+                }}>
+                  (714) 951-9100
+                </a>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── MERCHANDISE & COLLECTIBLES ── */}
-        <div id="merchandise" style={{ marginBottom: '64px' }}>
-          <SectionHeader title="Merchandise & Collectibles" subtitle="Beyond the cards - consoles, plushies, figures, and more" />
-
-          <PhotoGrid isMobile={isMobile} photos={[
-            { src: '/photos/IMG_5668.jpg', alt: 'Retro consoles' },
-            { src: '/photos/IMG_5666.jpg', alt: 'Switch and Game Boy' },
-            { src: '/photos/IMG_5665.jpg', alt: 'Graded games' },
-            { src: '/photos/IMG_5667.jpg', alt: 'Games collection' },
-            { src: '/photos/IMG_5675.jpg', alt: 'Pikachu plushies' },
-            { src: '/photos/IMG_5674.jpg', alt: 'Pokemon plushies' },
-            { src: '/photos/IMG_5676.jpg', alt: 'Plush display' },
-            { src: '/photos/IMG_5652.jpg', alt: 'Plush case' },
-            { src: '/photos/IMG_5679.jpg', alt: 'Plush shelves' },
-            { src: '/photos/IMG_5680.jpg', alt: 'Plush collection' },
-            { src: '/photos/IMG_5670.jpg', alt: 'Select figures' },
-            { src: '/photos/IMG_5671.jpg', alt: 'Funko Pops' },
-            { src: '/photos/IMG_5672.jpg', alt: 'More Pops' },
-            { src: '/photos/IMG_5669.jpg', alt: 'Figure sets' },
-          ]} />
-        </div>
-
-        {/* ── EVENTS ── */}
-        <div id="events" style={{ position: 'relative' }}>
-          <SectionHeader title="Upcoming Events" subtitle="Check out whats next" />
+        {/* ── CALENDAR ── */}
+        <div id="calendar" style={{ position: 'relative' }}>
+          <SectionHeader title="Calendar" subtitle="Upcoming events and activities" />
 
           {/* Event type cards */}
           <div style={{

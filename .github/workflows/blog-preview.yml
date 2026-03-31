@@ -1,0 +1,24 @@
+name: Monday Blog Preview Email
+
+on:
+  schedule:
+    - cron: '0 15 * * 1'  # Monday 8am PST (3pm UTC)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  send-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install markdown
+
+      - name: Send blog preview email
+        env:
+          ZOHO_PASSWORD: ${{ secrets.ZOHO_PASSWORD }}
+        run: python blogs/send-preview.py

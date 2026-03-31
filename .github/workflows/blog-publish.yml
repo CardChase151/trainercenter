@@ -1,0 +1,23 @@
+name: Tuesday Blog Publish
+
+on:
+  schedule:
+    - cron: '0 16 * * 2'  # Tuesday 9am PST (4pm UTC)
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Publish blog and update schedule
+        run: python blogs/publish.py
