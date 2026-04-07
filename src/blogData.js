@@ -25,7 +25,7 @@ const BLOG_DATA = [
   {
     slug: 'what-graders-look-for',
     title: 'What Do Graders Look For? A PSA Grading Breakdown',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'You have a card you think is special. Maybe it is a vintage holographic Charizard or a modern alt art you pulled from a pack. You want to get it graded, but before you spend $25 to $300 on a submission, you should know what PSA is actually looking at.' },
       { type: 'p', text: 'PSA evaluates four things: centering, corners, edges, and surface. Your final grade is based on the weakest of those four areas. A perfect surface will not save you if your centering is off.' },

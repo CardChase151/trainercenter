@@ -1,5 +1,5 @@
 {
-  "next": 2,
+  "next": 3,
   "total": 12,
   "blogs": [
     {
@@ -12,7 +12,7 @@
       "num": 2,
       "file": "02-what-graders-look-for.md",
       "title": "What Do Graders Look For? A PSA Grading Breakdown",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 3,
