@@ -3,7 +3,7 @@ import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap } from 'lucide-react';
 import './App.css';
 
 // ─── Time formatting helper (shared) ──────────────────────
