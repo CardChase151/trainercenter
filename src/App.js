@@ -481,6 +481,7 @@ function Calendar({ isStaff, isMobile, staff }) {
   const [events, setEvents] = useState([]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalDate, setModalDate] = useState(null);
+  const detailPanelRef = useRef(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -503,6 +504,16 @@ function Calendar({ isStaff, isMobile, staff }) {
   }, []);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  // On mobile, when a public visitor (non-staff) selects a day, scroll the
+  // detail panel into view so they don't miss the events that appeared below.
+  // Staff are excluded — they have their own add/edit flow and the auto-scroll
+  // would fight with the modal.
+  useEffect(() => {
+    if (selectedDay !== null && isMobile && !isStaff && detailPanelRef.current) {
+      detailPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedDay, isMobile, isStaff]);
 
   const getEventsForDay = (day) => {
     const dateObj = new Date(year, month, day);
@@ -696,7 +707,7 @@ function Calendar({ isStaff, isMobile, staff }) {
 
         {/* Day detail panel (slides in from right, or below on mobile) */}
         {hasSelection && (
-          <div style={{
+          <div ref={detailPanelRef} style={{
             flex: isMobile ? '1' : '0 0 42%',
             borderLeft: isMobile ? 'none' : '1px solid #eee',
             borderTop: isMobile ? '1px solid #eee' : 'none',
@@ -704,6 +715,7 @@ function Calendar({ isStaff, isMobile, staff }) {
             padding: '0',
             display: 'flex',
             flexDirection: 'column',
+            scrollMarginTop: '80px',
             animation: isMobile ? 'none' : 'slideIn 0.25s ease-out'
           }}>
             {/* Events list */}
