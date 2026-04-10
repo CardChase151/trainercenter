@@ -1,9 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Calendar as CalendarIcon } from 'lucide-react';
 import './App.css';
+
+// ─── Time formatting helper (shared) ──────────────────────
+// Converts "18:00" or "18:00:00" → "6:00 PM"
+const formatTime12h = (t) => {
+  if (!t) return '';
+  const [h, m] = t.slice(0, 5).split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${h12}:${m} ${ampm}`;
+};
+
+// Format an ISO timestamp to a relative-friendly local string
+const formatAuditTime = (ts) => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+};
 
 // ─── Scroll To Top on Route Change ──────────────────────
 function ScrollToTop() {
@@ -176,7 +197,7 @@ const CATEGORIES = {
 };
 
 // ─── Event Modal (Add/Edit) ───────────────────────────────
-function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
+function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile, staff }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('18:00');
@@ -206,6 +227,11 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
     setRecurrenceEndDate(event.recurrence_end_date || '');
   };
 
+  const clearRecurrence = () => {
+    setRecurrence('none');
+    setRecurrenceEndDate('');
+  };
+
   const handleSave = () => {
     if (!title.trim()) return;
     const dateFormatted = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -220,32 +246,96 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
       recurrence,
       recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null
     };
-    if (editingEvent?.id) eventData.id = editingEvent.id;
+    if (editingEvent?.id) {
+      eventData.id = editingEvent.id;
+      eventData.updated_by = staff?.id || null;
+      eventData.updated_by_name = staff?.name || null;
+    } else {
+      eventData.created_by = staff?.id || null;
+      eventData.created_by_name = staff?.name || null;
+    }
     onSave(eventData);
     resetForm();
   };
 
+  // Inputs use 16px font on mobile to prevent iOS Safari's zoom-on-focus.
   const inputStyle = {
-    width: '100%', padding: '10px 12px', fontSize: '0.85rem', border: '1px solid #ddd',
-    borderRadius: '8px', marginBottom: '10px', boxSizing: 'border-box', outline: 'none'
+    width: '100%', padding: '12px 14px', fontSize: '16px', border: '1px solid #ddd',
+    borderRadius: '8px', marginBottom: '10px', boxSizing: 'border-box', outline: 'none',
+    fontFamily: 'inherit'
   };
 
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '24px'
-    }} onClick={onClose}>
-      <div style={{
+  const textareaStyle = {
+    ...inputStyle,
+    minHeight: '90px',
+    resize: 'vertical',
+    lineHeight: '1.4'
+  };
+
+  // On mobile, the modal becomes a full-screen sheet. On desktop it's a centered card.
+  const overlayStyle = {
+    position: 'fixed', inset: 0, zIndex: 9999,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: isMobile ? 'stretch' : 'center',
+    justifyContent: 'center',
+    padding: isMobile ? '0' : '24px'
+  };
+
+  const sheetStyle = isMobile
+    ? {
+        backgroundColor: '#fff',
+        width: '100%',
+        height: '100%',
+        padding: '20px',
+        paddingBottom: '40px',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch'
+      }
+    : {
         backgroundColor: '#fff', borderRadius: '16px', padding: '28px',
-        width: '100%', maxWidth: '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
         maxHeight: '90vh', overflowY: 'auto'
-      }} onClick={e => e.stopPropagation()}>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{dateStr}</h2>
-        <p style={{ fontSize: '0.75rem', color: '#999', margin: '0 0 16px 0' }}>
-          {editingEvent ? 'Editing event' : 'Add a new event'}
-        </p>
+      };
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={sheetStyle} onClick={e => e.stopPropagation()}>
+        {/* Header with close button on mobile */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{dateStr}</h2>
+            <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
+              {editingEvent ? 'Editing event' : 'Add a new event'}
+            </p>
+          </div>
+          {isMobile && (
+            <button onClick={onClose} style={{
+              background: '#f0f0f0', border: 'none', borderRadius: '50%',
+              width: '36px', height: '36px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0
+            }} aria-label="Close">
+              <X size={18} />
+            </button>
+          )}
+        </div>
+
+        {/* Audit info — only when editing */}
+        {editingEvent && (editingEvent.created_by_name || editingEvent.updated_by_name) && (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '8px',
+            padding: '8px 12px', marginBottom: '12px', fontSize: '0.75rem', color: '#666',
+            lineHeight: '1.5'
+          }}>
+            {editingEvent.created_by_name && (
+              <div>Created by <strong>{editingEvent.created_by_name}</strong>{editingEvent.created_at ? ` · ${formatAuditTime(editingEvent.created_at)}` : ''}</div>
+            )}
+            {editingEvent.updated_by_name && (
+              <div>Last edited by <strong>{editingEvent.updated_by_name}</strong>{editingEvent.updated_at ? ` · ${formatAuditTime(editingEvent.updated_at)}` : ''}</div>
+            )}
+          </div>
+        )}
 
         {/* Existing events on this day */}
         {existingEvents.length > 0 && !editingEvent && (
@@ -256,27 +346,27 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
                 padding: '10px 12px', backgroundColor: '#f8f8f8', borderRadius: '8px',
                 marginBottom: '6px', border: '1px solid #eee'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                   <div style={{
                     width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
                     backgroundColor: CATEGORIES[ev.category]?.color || '#ea580c'
                   }} />
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1a1a1a' }}>{ev.title}</div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</div>
                     <div style={{ fontSize: '0.75rem', color: '#888' }}>
-                      {ev.start_time?.slice(0, 5)} - {ev.end_time?.slice(0, 5)}
+                      {formatTime12h(ev.start_time)} - {formatTime12h(ev.end_time)}
                       {ev.recurrence !== 'none' && <span style={{ color: '#C8102E', marginLeft: '8px' }}>{ev.recurrence}</span>}
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                   <button onClick={() => loadEvent(ev)} style={{
                     background: '#eee', border: 'none', borderRadius: '6px', padding: '6px 10px',
-                    fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer'
+                    fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer'
                   }}>Edit</button>
                   <button onClick={() => onDelete(ev.id)} style={{
                     background: '#fee', border: 'none', borderRadius: '6px', padding: '6px 10px',
-                    fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer', color: '#C8102E'
+                    fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', color: '#C8102E'
                   }}>Delete</button>
                 </div>
               </div>
@@ -285,8 +375,20 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
           </div>
         )}
 
+        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Title</label>
         <input placeholder="Event title" value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} />
-        <input placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} style={inputStyle} />
+
+        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Description (optional)</label>
+        <textarea
+          placeholder="Use **bold** or *italic* for emphasis. Press Enter for new lines."
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          style={textareaStyle}
+        />
+        <div style={{ fontSize: '0.7rem', color: '#aaa', margin: '-4px 0 12px 2px' }}>
+          Markdown supported: <strong>**bold**</strong> · <em>*italic*</em>
+        </div>
+
         <div style={{ display: 'flex', gap: '8px' }}>
           <div style={{ flex: 1 }}>
             <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Start</label>
@@ -297,16 +399,32 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
             <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
           </div>
         </div>
-        <input placeholder="Location (optional)" value={location} onChange={e => setLocation(e.target.value)} style={inputStyle} />
+
+        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Location (optional)</label>
+        <input placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} style={inputStyle} />
 
         <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Category</label>
         <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-          {Object.entries(CATEGORIES).map(([key, { label, color }]) => (
+          {Object.entries(CATEGORIES).map(([key, { label }]) => (
             <option key={key} value={key}>{label}</option>
           ))}
         </select>
 
-        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+          <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
+          {recurrence !== 'none' && (
+            <button
+              type="button"
+              onClick={clearRecurrence}
+              style={{
+                background: 'none', border: 'none', color: '#C8102E',
+                fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
+              }}
+            >
+              Clear repeat
+            </button>
+          )}
+        </div>
         <select value={recurrence} onChange={e => setRecurrence(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
           <option value="none">Does not repeat</option>
           <option value="weekly">Every week</option>
@@ -316,22 +434,36 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
 
         {recurrence !== 'none' && (
           <>
-            <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat until (optional)</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat until (optional)</label>
+              {recurrenceEndDate && (
+                <button
+                  type="button"
+                  onClick={() => setRecurrenceEndDate('')}
+                  style={{
+                    background: 'none', border: 'none', color: '#C8102E',
+                    fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
+                  }}
+                >
+                  Clear end date
+                </button>
+              )}
+            </div>
             <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} style={inputStyle} />
           </>
         )}
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
           <button onClick={handleSave} style={{
-            flex: 1, padding: '12px', backgroundColor: '#C8102E', color: '#fff',
-            border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer'
+            flex: 1, padding: '14px', backgroundColor: '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer'
           }}>
             {editingEvent ? 'Update Event' : 'Add Event'}
           </button>
           {editingEvent && (
             <button onClick={resetForm} style={{
-              padding: '12px 16px', backgroundColor: '#f0f0f0', color: '#666',
-              border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer'
+              padding: '14px 18px', backgroundColor: '#f0f0f0', color: '#666',
+              border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer'
             }}>
               Cancel
             </button>
@@ -343,7 +475,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete }) {
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff, isMobile }) {
+function Calendar({ isStaff, isMobile, staff }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [events, setEvents] = useState([]);
@@ -467,14 +599,8 @@ function Calendar({ isStaff, isMobile }) {
   const selectedDayEvents = selectedDay ? getEventsForDay(selectedDay) : [];
   const hasSelection = selectedDay !== null;
 
-  const formatTime = (t) => {
-    if (!t) return '';
-    const [h, m] = t.slice(0, 5).split(':');
-    const hour = parseInt(h);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${h12}:${m} ${ampm}`;
-  };
+  // Use the shared module-level formatTime12h helper
+  const formatTime = formatTime12h;
 
   return (
     <>
@@ -611,8 +737,16 @@ function Calendar({ isStaff, isMobile }) {
                         {event.location && ` | ${event.location}`}
                       </div>
                       {event.description && (
-                        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: '1.4' }}>
-                          {event.description}
+                        <div className="event-md" style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: '1.4' }}>
+                          <ReactMarkdown
+                            components={{
+                              p: ({ node, children, ...props }) => <p style={{ margin: '0 0 6px 0' }} {...props}>{children}</p>,
+                              strong: ({ node, children, ...props }) => <strong style={{ color: '#1a1a1a' }} {...props}>{children}</strong>,
+                              a: ({ node, children, href, ...props }) => <a style={{ color: '#C8102E' }} href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+                            }}
+                          >
+                            {event.description}
+                          </ReactMarkdown>
                         </div>
                       )}
                       {event.recurrence !== 'none' && (
@@ -665,6 +799,8 @@ function Calendar({ isStaff, isMobile }) {
           onClose={() => setShowEventModal(false)}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          isMobile={isMobile}
+          staff={staff}
         />
       )}
     </>
@@ -1339,7 +1475,7 @@ function BuySellPage({ isMobile }) {
 }
 
 // ─── Calendar Page ────────────────────────────────────────
-function CalendarPage({ isMobile, isAdmin }) {
+function CalendarPage({ isMobile, isAdmin, staff }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ position: 'relative' }}>
@@ -1444,7 +1580,7 @@ function CalendarPage({ isMobile, isAdmin }) {
           />
           {/* Layer 3: calendar */}
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={isAdmin} isMobile={isMobile} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} />
           </div>
         </div>
       </div>
@@ -1585,6 +1721,11 @@ function App() {
   const [staffProfile, setStaffProfile] = useState(null);
   const profileFetchRef = useRef(null);
   const isAdmin = !!staffProfile?.is_admin;
+  // Compact "current staff" object passed down to the calendar so the
+  // EventModal can stamp created_by / updated_by on saves.
+  const staff = staffUser?.id && staffProfile
+    ? { id: staffUser.id, name: staffProfile.name, isAdmin }
+    : null;
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1825,7 +1966,7 @@ function App() {
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
-        <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} />} />
+        <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
       </Routes>
