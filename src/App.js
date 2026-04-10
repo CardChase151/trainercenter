@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
@@ -1339,7 +1339,7 @@ function BuySellPage({ isMobile }) {
 }
 
 // ─── Calendar Page ────────────────────────────────────────
-function CalendarPage({ isMobile, staffUser }) {
+function CalendarPage({ isMobile, isAdmin }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ position: 'relative' }}>
@@ -1444,7 +1444,7 @@ function CalendarPage({ isMobile, staffUser }) {
           />
           {/* Layer 3: calendar */}
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={!!staffUser} isMobile={isMobile} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} />
           </div>
         </div>
       </div>
@@ -1582,6 +1582,9 @@ const NAV_ITEMS = [
 function App() {
   const [navVisible, setNavVisible] = useState(false);
   const [staffUser, setStaffUser] = useState(null);
+  const [staffProfile, setStaffProfile] = useState(null);
+  const profileFetchRef = useRef(null);
+  const isAdmin = !!staffProfile?.is_admin;
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1617,19 +1620,59 @@ function App() {
   }, [location]);
 
   // Check for existing staff session
+  // Per AUTH_PLAYBOOK: only set state in here, NO database calls.
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setStaffUser(session?.user || null);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       setStaffUser(session?.user || null);
+      if (!session) setStaffProfile(null);
     });
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch staff profile in a SEPARATE effect, watching staffUser?.id.
+  // Source of truth for is_admin lives in public.profiles, not the JWT,
+  // so admin changes take effect on next fetch with no re-login required.
+  useEffect(() => {
+    if (!staffUser?.id) {
+      setStaffProfile(null);
+      return;
+    }
+
+    if (profileFetchRef.current) profileFetchRef.current.cancelled = true;
+    const fetchState = { cancelled: false };
+    profileFetchRef.current = fetchState;
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+    );
+
+    Promise.race([
+      supabase.from('profiles').select('*').eq('id', staffUser.id).single(),
+      timeoutPromise
+    ])
+      .then(({ data, error } = {}) => {
+        if (fetchState.cancelled) return;
+        if (error) {
+          console.error('Profile fetch error:', error.message);
+          setStaffProfile(null);
+        } else {
+          setStaffProfile(data);
+        }
+      })
+      .catch((err) => {
+        if (!fetchState.cancelled) console.error('Profile fetch failed:', err.message);
+      });
+
+    return () => { fetchState.cancelled = true; };
+  }, [staffUser?.id]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setStaffUser(null);
+    setStaffProfile(null);
   };
 
   return (
@@ -1782,7 +1825,7 @@ function App() {
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
-        <Route path="/calendar" element={<CalendarPage isMobile={isMobile} staffUser={staffUser} />} />
+        <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
       </Routes>
@@ -1791,12 +1834,12 @@ function App() {
       {showLogin && (
         <StaffLogin
           onClose={() => setShowLogin(false)}
-          onLogin={() => setStaffUser(true)}
+          onLogin={() => { /* auth listener handles setStaffUser */ }}
         />
       )}
 
       {/* Staff banner */}
-      {staffUser && (
+      {isAdmin && (
         <div style={{
           position: 'fixed', bottom: '16px', right: '16px', zIndex: 999,
           backgroundColor: '#C8102E', color: '#fff', padding: '8px 16px',
