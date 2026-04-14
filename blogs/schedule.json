@@ -1,5 +1,5 @@
 {
-  "next": 3,
+  "next": 4,
   "total": 12,
   "blogs": [
     {
@@ -18,7 +18,7 @@
       "num": 3,
       "file": "03-what-should-i-collect.md",
       "title": "What Should I Collect? Fun vs Value and How to Start",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 4,

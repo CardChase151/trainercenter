@@ -59,7 +59,7 @@ const BLOG_DATA = [
   {
     slug: 'what-should-i-collect',
     title: 'What Should I Collect? Fun vs Value and How to Start',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'This is one of the most common questions new collectors ask. The honest answer is that it depends on what you want out of the hobby.' },
       { type: 'h2', text: 'Collecting for Fun' },
