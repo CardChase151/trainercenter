@@ -3,8 +3,16 @@ import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail } from 'lucide-react';
 import './App.css';
+
+const IgIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+  </svg>
+);
 
 // ─── Time formatting helper (shared) ──────────────────────
 // Converts "18:00" or "18:00:00" → "6:00 PM"
@@ -475,10 +483,9 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff, isMobile, staff }) {
+function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, events, fetchEvents }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
-  const [events, setEvents] = useState([]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalDate, setModalDate] = useState(null);
   const detailPanelRef = useRef(null);
@@ -495,15 +502,13 @@ function Calendar({ isStaff, isMobile, staff }) {
   const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null); };
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null); };
 
-  const fetchEvents = useCallback(async () => {
-    const { data } = await supabase
-      .from('events')
-      .select('*')
-      .order('start_time', { ascending: true });
-    setEvents(data || []);
-  }, []);
-
-  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+  // Expose current year/month on the calendarRef for the print function
+  useEffect(() => {
+    if (calendarRef?.current) {
+      calendarRef.current.dataset.year = year;
+      calendarRef.current.dataset.month = month;
+    }
+  }, [year, month, calendarRef]);
 
   // On mobile, when a public visitor (non-staff) selects a day, scroll the
   // detail panel into view so they don't miss the events that appeared below.
@@ -532,7 +537,7 @@ function Calendar({ isStaff, isMobile, staff }) {
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    });
+    }).filter(ev => !categoryFilter || ev.category === categoryFilter);
   };
 
   const handleDayClick = (day) => {
@@ -869,13 +874,29 @@ function VisitUsSection({ isMobile }) {
               fontSize: '0.95rem',
               fontWeight: '700',
               textDecoration: 'none',
-              transition: 'opacity 0.2s'
+              transition: 'opacity 0.2s',
+              marginBottom: '24px'
             }}
             onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
             (714) 951-9100
           </a>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <a href="mailto:Trainercenter.pokemon@gmail.com" style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              fontSize: '0.85rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none'
+            }}>
+              <Mail size={16} /> Trainercenter.pokemon@gmail.com
+            </a>
+            <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              fontSize: '0.85rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none'
+            }}>
+              <IgIcon size={16} /> @trainercenter.pokemon
+            </a>
+          </div>
         </div>
 
         {/* Hours */}
@@ -892,13 +913,13 @@ function VisitUsSection({ isMobile }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               {[
+                ['Sunday', '10 AM - 5 PM'],
                 ['Monday', 'Closed'],
-                ['Tuesday', '12 - 8 PM'],
-                ['Wednesday', '12 - 8 PM'],
-                ['Thursday', '12 - 8 PM'],
-                ['Friday', '12 - 10 PM'],
-                ['Saturday', '10 AM - 8 PM'],
-                ['Sunday', '10 AM - 5 PM']
+                ['Tuesday', 'Noon - 8 PM'],
+                ['Wednesday', 'Noon - 8 PM'],
+                ['Thursday', 'Noon - 8 PM'],
+                ['Friday', 'Noon - 10 PM'],
+                ['Saturday', '10 AM - 8 PM']
               ].map(([day, hours]) => (
                 <tr key={day}>
                   <td style={{
@@ -945,9 +966,14 @@ function Footer() {
       <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ccc', margin: '0 0 8px 0' }}>
         Trainer <span style={{ color: '#C8102E' }}>Center</span>
       </p>
-      <p style={{ fontSize: '0.75rem', margin: '0 0 20px 0' }}>
+      <p style={{ fontSize: '0.75rem', margin: '0 0 12px 0' }}>
         Pokemon cards, collectibles, and community events
       </p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' }}>
+        <a href="tel:+17149519100" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600' }}>(714) 951-9100</a>
+        <a href="mailto:Trainercenter.pokemon@gmail.com" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={13} /> Trainercenter.pokemon@gmail.com</a>
+        <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><IgIcon size={13} /> @trainercenter.pokemon</a>
+      </div>
       <a
         href="https://appcatalyst.org"
         target="_blank"
@@ -979,6 +1005,117 @@ function PageWrapper({ children, isMobile }) {
 }
 
 // ─── Home Page ────────────────────────────────────────────
+function OpenNowBanner({ isMobile }) {
+  const STORE_HOURS = {
+    0: [10, 17], // Sunday 10 AM - 5 PM
+    1: null,     // Monday closed
+    2: [12, 20], // Tuesday Noon - 8 PM
+    3: [12, 20], // Wednesday
+    4: [12, 20], // Thursday
+    5: [12, 22], // Friday Noon - 10 PM
+    6: [10, 20], // Saturday 10 AM - 8 PM
+  };
+
+  const DAY_THEMES = {
+    0: 'Painting Day',
+    2: 'Masterset with Larry',
+    3: 'Game Day with Seth',
+    4: 'Consultation with Chef',
+    5: 'Trade Night',
+    6: 'Community Day',
+  };
+
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const now = new Date();
+  const dow = now.getDay();
+  const hours = STORE_HOURS[dow];
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const isOpen = hours && currentHour >= hours[0] && currentHour < hours[1];
+
+  // Find next open day with an event
+  let nextDayName = '';
+  let nextTheme = '';
+  if (!isOpen) {
+    for (let offset = 1; offset <= 7; offset++) {
+      const checkDow = (dow + offset) % 7;
+      if (STORE_HOURS[checkDow] && DAY_THEMES[checkDow]) {
+        nextDayName = DAY_NAMES[checkDow];
+        nextTheme = DAY_THEMES[checkDow];
+        break;
+      }
+    }
+  }
+
+  if (isOpen) {
+    return (
+      <Link to="/calendar" style={{ textDecoration: 'none' }}>
+        <div style={{
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: '12px',
+          padding: '14px 20px',
+          margin: isMobile ? '0 16px 24px' : '0 auto 32px',
+          maxWidth: '1100px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e',
+              boxShadow: '0 0 6px rgba(34,197,94,0.5)',
+            }} />
+            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#166534' }}>
+              We're open right now
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#15803d' }}>
+              See what's happening today
+            </span>
+          </div>
+          <span style={{ fontSize: '1.1rem', color: '#22c55e', fontWeight: '700' }}>&#8250;</span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Closed -- show next event
+  return (
+    <Link to="/calendar" style={{ textDecoration: 'none' }}>
+      <div style={{
+        backgroundColor: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: '12px',
+        padding: '14px 20px',
+        margin: isMobile ? '0 16px 24px' : '0 auto 32px',
+        maxWidth: '1100px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94a3b8',
+          }} />
+          <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#475569' }}>
+            Currently closed
+          </span>
+          {nextTheme && (
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+              Up next: {nextTheme} on {nextDayName}
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: '1.1rem', color: '#94a3b8', fontWeight: '700' }}>&#8250;</span>
+      </div>
+    </Link>
+  );
+}
+
 function HomePage({ isMobile }) {
   return (
     <>
@@ -1094,6 +1231,8 @@ function HomePage({ isMobile }) {
           </div>
         </div>
       </header>
+
+      <OpenNowBanner isMobile={isMobile} />
 
       {/* Mission section + Visit Us + Footer */}
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
@@ -1239,11 +1378,25 @@ function ConsultationPage({ isMobile }) {
               <GraduationCap size={24} color="#C8102E" />
             </div>
             <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-              Free Collection Consultation
+              Private Consultation with Chef
             </h3>
           </div>
+          <div style={{
+            backgroundColor: '#fff0f0',
+            borderRadius: '10px',
+            padding: '16px 20px',
+            marginBottom: '24px',
+            border: '1px solid #fecaca'
+          }}>
+            <p style={{ fontSize: '0.95rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0' }}>
+              Thursdays - By Appointment
+            </p>
+            <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+              Chef dedicates Thursdays to private one-on-one consultations. Schedule anytime during store hours.
+            </p>
+          </div>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
-            Whether you found a box of old cards in the attic or you have been collecting for years, our staff will sit down with you and walk through what you have. This is not a sales pitch. The goal is to educate you so you know what your collection is actually worth and you do not get taken advantage of.
+            Whether you found a box of old cards in the attic or you have been collecting for years, Chef will sit down with you and walk through what you have. This is not a sales pitch. The goal is to educate you so you know what your collection is actually worth and you do not get taken advantage of.
           </p>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
             We may make you an offer, but the real value of the consultation is the knowledge you walk away with.
@@ -1279,17 +1432,28 @@ function ConsultationPage({ isMobile }) {
           <div style={{
             backgroundColor: '#fff0f0',
             borderRadius: '10px',
-            padding: '16px 20px',
-            textAlign: 'center'
+            padding: '20px',
           }}>
-            <p style={{ fontSize: '0.9rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0' }}>
-              Call to schedule your consultation
+            <p style={{ fontSize: '0.95rem', color: '#C8102E', fontWeight: '700', margin: '0 0 12px 0', textAlign: 'center' }}>
+              Contact Chef to schedule your consultation
             </p>
-            <a href="tel:+17149519100" style={{
-              fontSize: '1.1rem', fontWeight: '800', color: '#C8102E', textDecoration: 'none'
-            }}>
-              (714) 951-9100
-            </a>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+              <a href="tel:+17149519100" style={{
+                fontSize: '1rem', fontWeight: '700', color: '#C8102E', textDecoration: 'none'
+              }}>
+                (714) 951-9100
+              </a>
+              <a href="mailto:Trainercenter.pokemon@gmail.com" style={{
+                fontSize: '0.9rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center'
+              }}>
+                <Mail size={15} /> Trainercenter.pokemon@gmail.com
+              </a>
+              <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{
+                fontSize: '0.9rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center'
+              }}>
+                <IgIcon size={15} /> @trainercenter.pokemon
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -1299,10 +1463,98 @@ function ConsultationPage({ isMobile }) {
 
 // ─── Grading Page ─────────────────────────────────────────
 function GradingPage({ isMobile }) {
+  const steps = [
+    { num: '1', title: 'We Evaluate', desc: 'Bring your cards in and we assess condition, help you decide which ones are worth grading.' },
+    { num: '2', title: 'We Submit', desc: 'We handle the entire PSA submission. No account needed, no shipping headaches.' },
+    { num: '3', title: 'You Profit', desc: 'A graded card is worth significantly more. Grading protects and increases your collection value.' },
+  ];
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Grading" subtitle="We help you evaluate and submit cards for professional grading" />
+        <SectionHeader title="Grading" subtitle="PSA Grading Services" />
+
+        {/* YES hero */}
+        <div style={{
+          backgroundColor: '#1a1a1a',
+          borderRadius: '16px',
+          padding: isMobile ? '32px 20px' : '48px 40px',
+          textAlign: 'center',
+          marginBottom: '32px',
+          maxWidth: '900px',
+          margin: '0 auto 32px'
+        }}>
+          <p style={{ fontSize: isMobile ? '0.9rem' : '1.1rem', color: '#999', fontWeight: '600', margin: '0 0 8px 0' }}>
+            Do you guys help grade cards?
+          </p>
+          <h2 style={{ fontSize: isMobile ? '3rem' : '4.5rem', fontWeight: '900', color: '#C8102E', margin: '0 0 12px 0', letterSpacing: '-0.03em' }}>
+            YES
+          </h2>
+          <p style={{ fontSize: isMobile ? '0.85rem' : '1rem', color: '#ccc', margin: 0, maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto', lineHeight: '1.6' }}>
+            We evaluate your cards, handle the PSA submission, and get them back to you graded and protected.
+          </p>
+        </div>
+
+        {/* 3 Steps with arrows */}
+        <div style={{
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: isMobile ? '0' : '0',
+          marginBottom: '40px',
+          maxWidth: '900px',
+          margin: '0 auto 40px'
+        }}>
+          {steps.map((step, i) => (
+            <React.Fragment key={i}>
+              <div style={{
+                flex: 1,
+                padding: isMobile ? '24px 20px' : '32px 24px',
+                borderRadius: '14px',
+                backgroundColor: '#ffffff',
+                border: '2px solid #eee',
+                textAlign: 'center',
+                minWidth: 0,
+              }}>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '50%',
+                  backgroundColor: '#C8102E', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.3rem', fontWeight: '900',
+                  margin: '0 auto 14px',
+                }}>
+                  {step.num}
+                </div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 8px 0' }}>
+                  {step.title}
+                </h3>
+                <p style={{ fontSize: '0.85rem', color: '#666', margin: 0, lineHeight: '1.5' }}>
+                  {step.desc}
+                </p>
+              </div>
+              {i < 2 && (
+                <div style={{
+                  padding: isMobile ? '8px 0' : '0 8px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#C8102E', fontSize: '1.8rem', fontWeight: '900', flexShrink: 0,
+                }}>
+                  {isMobile ? (
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#C8102E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14" /><path d="m19 12-7 7-7-7" />
+                    </svg>
+                  ) : (
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#C8102E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Details + Pricing */}
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
@@ -1319,17 +1571,13 @@ function GradingPage({ isMobile }) {
               <Award size={24} color="#C8102E" />
             </div>
             <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-              PSA Grading Services
+              PSA Pricing Tiers
             </h3>
           </div>
-          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '12px' }}>
-            Grading authenticates your card, seals it in a tamper-proof case, and assigns a condition score from 1 to 10. A high grade can multiply a card's value significantly. We help you decide which cards are worth grading, evaluate their condition, and handle the submission to PSA.
-          </p>
-          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '28px' }}>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '20px' }}>
             PSA (Professional Sports Authenticator) is the most recognized grading service in the hobby. Here are their current pricing tiers:
           </p>
 
-          {/* PSA Pricing Table */}
           <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
@@ -1363,29 +1611,9 @@ function GradingPage({ isMobile }) {
             </table>
           </div>
 
-          <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '24px', lineHeight: '1.5' }}>
+          <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '0', lineHeight: '1.5' }}>
             Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
           </p>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr',
-            gap: '12px'
-          }}>
-            {[
-              { title: 'We Evaluate', desc: 'Bring your cards in and we will assess condition and help you decide if grading is worth the cost.' },
-              { title: 'We Submit', desc: 'We handle the PSA submission process for you. No need to create an account or figure out shipping.' },
-              { title: 'You Profit', desc: 'A PSA 10 Charizard is worth significantly more than a raw one. Grading protects and increases value.' }
-            ].map((item, i) => (
-              <div key={i} style={{
-                padding: '16px', borderRadius: '10px',
-                backgroundColor: '#fafafa', border: '1px solid #f0f0f0', textAlign: 'center'
-              }}>
-                <h5 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#C8102E', margin: '0 0 6px 0' }}>{item.title}</h5>
-                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </PageWrapper>
@@ -1488,94 +1716,333 @@ function BuySellPage({ isMobile }) {
 
 // ─── Calendar Page ────────────────────────────────────────
 function CalendarPage({ isMobile, isAdmin, staff }) {
+  const [activeFilter, setActiveFilter] = useState(null);
+  const [events, setEvents] = useState([]);
+  const calendarRef = useRef(null);
+
+  const fetchEvents = useCallback(async () => {
+    const { data } = await supabase
+      .from('events')
+      .select('*')
+      .order('start_time', { ascending: true });
+    setEvents(data || []);
+  }, []);
+
+  useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  // Derive weekly schedule from recurring weekly events
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const DAY_ORDER = [0, 2, 3, 4, 5, 6]; // Sun, Tue, Wed, Thu, Fri, Sat (skip Mon)
+  const weeklyEvents = events
+    .filter(ev => ev.recurrence === 'weekly')
+    .map(ev => {
+      const evDate = new Date(ev.event_date + 'T00:00:00');
+      const dow = evDate.getDay();
+      return { ...ev, dow, dayName: DAY_NAMES[dow] };
+    })
+    .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
+
+  // Derive special events (vendor days, big events)
+  const specialEvents = events.filter(ev => ev.category === 'big_event' && ev.recurrence === 'none');
+
+  // Get today's events
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todayEvents = events.filter(ev => {
+    if (ev.event_date === todayStr) return true;
+    if (ev.recurrence === 'none') return false;
+    const evDate = new Date(ev.event_date + 'T00:00:00');
+    if (today < evDate) return false;
+    if (ev.recurrence_end_date && today > new Date(ev.recurrence_end_date + 'T00:00:00')) return false;
+    const diffDays = Math.floor((today - evDate) / (1000 * 60 * 60 * 24));
+    if (ev.recurrence === 'weekly') return diffDays % 7 === 0;
+    if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
+    if (ev.recurrence === 'monthly') return evDate.getDate() === today.getDate();
+    return false;
+  });
+
+  // If nothing today, find next day with events (up to 7 days ahead)
+  let nextDayEvents = [];
+  let nextDayLabel = '';
+  if (todayEvents.length === 0) {
+    for (let offset = 1; offset <= 7; offset++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() + offset);
+      const checkStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+      const found = events.filter(ev => {
+        if (ev.event_date === checkStr) return true;
+        if (ev.recurrence === 'none') return false;
+        const evDate = new Date(ev.event_date + 'T00:00:00');
+        if (checkDate < evDate) return false;
+        if (ev.recurrence_end_date && checkDate > new Date(ev.recurrence_end_date + 'T00:00:00')) return false;
+        const diffDays = Math.floor((checkDate - evDate) / (1000 * 60 * 60 * 24));
+        if (ev.recurrence === 'weekly') return diffDays % 7 === 0;
+        if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
+        if (ev.recurrence === 'monthly') return evDate.getDate() === checkDate.getDate();
+        return false;
+      });
+      if (found.length > 0) {
+        nextDayEvents = found;
+        nextDayLabel = offset === 1 ? 'Tomorrow' : DAY_NAMES[checkDate.getDay()];
+        break;
+      }
+    }
+  }
+
+  const formatTime = formatTime12h;
+
+  const FILTER_OPTIONS = [
+    { key: null, label: 'All Events' },
+    { key: 'trade_night', label: 'Trade Night', color: '#C8102E' },
+    { key: 'big_event', label: 'Vendor Day', color: '#7c3aed' },
+    { key: 'tournament', label: 'Tournament', color: '#2563eb' },
+    { key: 'other', label: 'Weekly Events', color: '#ea580c' },
+  ];
+
+  const handlePrint = () => {
+    if (!calendarRef.current) return;
+    const printWin = window.open('', '_blank');
+    const calEl = calendarRef.current;
+    const calDate = calEl.dataset.year && calEl.dataset.month
+      ? new Date(parseInt(calEl.dataset.year), parseInt(calEl.dataset.month))
+      : new Date();
+    const yr = calDate.getFullYear();
+    const mo = calDate.getMonth();
+    const moName = calDate.toLocaleString('default', { month: 'long' });
+    const firstDay = new Date(yr, mo, 1).getDay();
+    const daysInMo = new Date(yr, mo + 1, 0).getDate();
+
+    // Build day-to-events map from actual data
+    const getEventsForPrintDay = (d) => {
+      const dateObj = new Date(yr, mo, d);
+      const dateStr = `${yr}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return events.filter(ev => {
+        if (ev.event_date === dateStr) return true;
+        if (ev.recurrence === 'none') return false;
+        const evDate = new Date(ev.event_date + 'T00:00:00');
+        if (dateObj < evDate) return false;
+        if (ev.recurrence_end_date && dateObj > new Date(ev.recurrence_end_date + 'T00:00:00')) return false;
+        const diffDays = Math.floor((dateObj - evDate) / (1000 * 60 * 60 * 24));
+        if (ev.recurrence === 'weekly') return diffDays % 7 === 0;
+        if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
+        if (ev.recurrence === 'monthly') return evDate.getDate() === d;
+        return false;
+      });
+    };
+
+    printWin.document.write(`
+      <html><head><title>Trainer Center - ${moName} ${yr}</title>
+      <style>
+        @page { size: landscape; margin: 0.5in; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
+        .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C8102E; }
+        .header img { width: 50px; height: 50px; border-radius: 10px; }
+        .header h1 { margin: 0; font-size: 22px; color: #1a1a1a; }
+        .header span { color: #888; font-size: 14px; }
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; border: 1px solid #ddd; }
+        .day-header { background: #1a1a1a; color: #fff; padding: 8px; text-align: center; font-weight: 700; font-size: 12px; }
+        .day-cell { border: 1px solid #eee; padding: 8px; min-height: 80px; font-size: 11px; vertical-align: top; }
+        .day-num { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+        .event-title { background: #f5f5f5; border-radius: 4px; padding: 2px 6px; margin: 2px 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .event-title.trade_night { border-left: 3px solid #C8102E; }
+        .event-title.big_event { border-left: 3px solid #7c3aed; }
+        .event-title.tournament { border-left: 3px solid #2563eb; }
+        .event-title.other { border-left: 3px solid #ea580c; }
+        .empty { background: #fafafa; }
+        .weekly { margin-top: 20px; display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #666; }
+        .weekly strong { color: #1a1a1a; }
+      </style></head><body>
+      <div class="header">
+        <img src="/logo-square.png" alt="Trainer Center" />
+        <div><h1>Trainer Center - ${moName} ${yr}</h1><span>4911 Warner Ave #210, Huntington Beach, CA 92649 | (714) 951-9100</span></div>
+      </div>
+    `);
+
+    printWin.document.write('<div class="grid">');
+    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
+      printWin.document.write('<div class="day-header">' + d + '</div>');
+    });
+    for (let i = 0; i < firstDay; i++) printWin.document.write('<div class="day-cell empty"></div>');
+
+    for (let d = 1; d <= daysInMo; d++) {
+      const dayEvts = getEventsForPrintDay(d);
+      const evHtml = dayEvts.map(ev => '<div class="event-title ' + (ev.category || 'other') + '">' + ev.title + '</div>').join('');
+      printWin.document.write('<div class="day-cell"><div class="day-num">' + d + '</div>' + evHtml + '</div>');
+    }
+    const totalCells = firstDay + daysInMo;
+    const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for (let i = 0; i < remaining; i++) printWin.document.write('<div class="day-cell empty"></div>');
+    printWin.document.write('</div>');
+
+    // Dynamic weekly legend from DB
+    printWin.document.write('<div class="weekly">');
+    weeklyEvents.forEach(ev => {
+      const shortDay = ev.dayName.slice(0, 3);
+      printWin.document.write('<span><strong>' + shortDay + ':</strong> ' + ev.title + '</span>');
+    });
+    if (specialEvents.length > 0) {
+      printWin.document.write('<span><strong>Special:</strong> ' + specialEvents[0].title + ' (see calendar)</span>');
+    }
+    printWin.document.write('</div>');
+
+    printWin.document.write('</body></html>');
+    printWin.document.close();
+    setTimeout(() => printWin.print(), 300);
+  };
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ position: 'relative' }}>
         <SectionHeader title="Calendar" subtitle="Upcoming events and activities" />
 
-        {/* Event type cards */}
+        {/* What's Happening Today / Next Up */}
+        {(todayEvents.length > 0 || nextDayEvents.length > 0) && (() => {
+          const STORE_HOURS_CAL = { 0: [10, 17], 1: null, 2: [12, 20], 3: [12, 20], 4: [12, 20], 5: [12, 22], 6: [10, 20] };
+          const nowH = STORE_HOURS_CAL[today.getDay()];
+          const currentHour = today.getHours() + today.getMinutes() / 60;
+          const isOpen = nowH && currentHour >= nowH[0] && currentHour < nowH[1];
+          const hasToday = todayEvents.length > 0;
+          const headerLabel = hasToday ? "What's Happening Today" : `Next Up: ${nextDayLabel}`;
+          const headerColor = hasToday ? '#C8102E' : '#2563eb';
+          const bgColor = hasToday ? '#fff0f0' : '#f0f7ff';
+          const borderColor = hasToday ? '1px solid #fecaca' : '1px solid #dbeafe';
+          return (
+          <div style={{
+            backgroundColor: bgColor,
+            border: borderColor,
+            borderRadius: '12px',
+            padding: '16px 20px',
+            marginBottom: '20px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <p style={{
+                fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px',
+                color: headerColor, margin: 0
+              }}>
+                {headerLabel}
+              </p>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '3px 10px', borderRadius: '20px',
+                backgroundColor: isOpen ? '#f0fdf4' : '#fef2f2',
+                border: isOpen ? '1px solid #bbf7d0' : '1px solid #fecaca',
+              }}>
+                <div style={{
+                  width: '7px', height: '7px', borderRadius: '50%',
+                  backgroundColor: isOpen ? '#22c55e' : '#ef4444',
+                  boxShadow: isOpen ? '0 0 4px rgba(34,197,94,0.5)' : 'none',
+                }} />
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: '700',
+                  color: isOpen ? '#166534' : '#991b1b',
+                }}>
+                  {isOpen ? 'Open Now' : 'Currently Closed'}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {(todayEvents.length > 0 ? todayEvents : nextDayEvents).map((ev, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                }}>
+                  <div style={{
+                    width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                    backgroundColor: CATEGORIES[ev.category]?.color || '#ea580c'
+                  }} />
+                  <div>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1a1a1a' }}>{ev.title}</span>
+                    {ev.start_time && (
+                      <span style={{ fontSize: '0.8rem', color: '#888', marginLeft: '8px' }}>
+                        {formatTime(ev.start_time)}{ev.end_time ? ` - ${formatTime(ev.end_time)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          );
+        })()}
+
+        {/* Weekly Schedule Cards (dynamic from DB) */}
+        {weeklyEvents.length > 0 && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+            gap: '10px',
+            marginBottom: '20px'
+          }}>
+            {weeklyEvents.map(ev => (
+              <div key={ev.id} style={{
+                padding: '14px 16px', borderRadius: '10px', backgroundColor: '#ffffff',
+                border: '1px solid #eee',
+                borderLeft: '3px solid ' + (CATEGORIES[ev.category]?.color || '#ea580c'),
+              }}>
+                <p style={{ fontSize: '0.7rem', color: '#999', fontWeight: '700', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{ev.dayName}</p>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{ev.title}</h4>
+                {ev.description && (
+                  <p style={{ fontSize: '0.7rem', color: '#888', margin: 0, lineHeight: '1.3' }}>
+                    {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Special Events callout (dynamic) */}
+        {specialEvents.length > 0 && (
+          <div style={{
+            padding: '14px 20px', borderRadius: '10px', backgroundColor: '#f5f3ff',
+            border: '1px solid #e9e5ff', marginBottom: '20px',
+            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
+          }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#7c3aed' }}>{specialEvents[0].title}</span>
+            {specialEvents[0].description && (
+              <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                {specialEvents[0].description.length > 100 ? specialEvents[0].description.slice(0, 100) + '...' : specialEvents[0].description}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Filter pills + Print button */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? (window.innerWidth < 480 ? '1fr' : 'repeat(2, 1fr)') : 'repeat(4, 1fr)',
-          gap: '14px',
-          marginBottom: '28px'
+          display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'
         }}>
-          <div style={{
-            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-            borderLeft: '4px solid #C8102E', border: '1px solid #eee',
-            borderLeftWidth: '4px', borderLeftColor: '#C8102E'
-          }}>
-            <div style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              backgroundColor: '#C8102E', marginBottom: '10px'
-            }} />
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-              Trade Night
-            </h4>
-            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-              Bring your binders and trade with fellow trainers. All eras welcome.
-            </p>
-          </div>
-
-          <div style={{
-            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-            borderLeft: '4px solid #2563eb', border: '1px solid #eee',
-            borderLeftWidth: '4px', borderLeftColor: '#2563eb'
-          }}>
-            <div style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              backgroundColor: '#2563eb', marginBottom: '10px'
-            }} />
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-              Tournament
-            </h4>
-            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-              Competitive play with prizes. Standard and expanded formats.
-            </p>
-          </div>
-
-          <div style={{
-            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-            borderLeft: '4px solid #7c3aed', border: '1px solid #eee',
-            borderLeftWidth: '4px', borderLeftColor: '#7c3aed'
-          }}>
-            <div style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              backgroundColor: '#7c3aed', marginBottom: '10px'
-            }} />
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-              Big Event
-            </h4>
-            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-              Release parties, community days, special celebrations, and more.
-            </p>
-          </div>
-
-          <div style={{
-            padding: '20px', borderRadius: '12px', backgroundColor: '#ffffff',
-            borderLeft: '4px solid #ea580c', border: '1px solid #eee',
-            borderLeftWidth: '4px', borderLeftColor: '#ea580c'
-          }}>
-            <div style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              backgroundColor: '#ea580c', marginBottom: '10px'
-            }} />
-            <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-              Other
-            </h4>
-            <p style={{ fontSize: '0.75rem', color: '#888', margin: 0, lineHeight: '1.4' }}>
-              Birthday parties, meetups, league nights, and community activities.
-            </p>
-          </div>
+          {FILTER_OPTIONS.map(opt => (
+            <button
+              key={opt.key || 'all'}
+              onClick={() => setActiveFilter(activeFilter === opt.key ? null : opt.key)}
+              style={{
+                padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700',
+                cursor: 'pointer', transition: 'all 0.15s',
+                border: activeFilter === opt.key ? '2px solid ' + (opt.color || '#1a1a1a') : '2px solid #e0e0e0',
+                backgroundColor: activeFilter === opt.key ? (opt.color || '#1a1a1a') : '#fff',
+                color: activeFilter === opt.key ? '#fff' : '#666',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={handlePrint}
+            style={{
+              padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700',
+              cursor: 'pointer', border: '2px solid #e0e0e0', backgroundColor: '#fff', color: '#666',
+            }}
+          >
+            Print Month
+          </button>
         </div>
-        <div style={{
+
+        <div ref={calendarRef} data-year="" data-month="" style={{
           position: 'relative',
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           overflow: 'hidden'
         }}>
-          {/* Layer 1: white bg (handled by container) */}
-          {/* Layer 2: logo watermark */}
           <img
             src="/logo-transparent.png"
             alt=""
@@ -1590,9 +2057,8 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
               zIndex: 1
             }}
           />
-          {/* Layer 3: calendar */}
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} categoryFilter={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
           </div>
         </div>
       </div>

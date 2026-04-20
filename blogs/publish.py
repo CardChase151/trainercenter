@@ -54,13 +54,91 @@ schedule['next'] = next_num + 1
 with open(SCHEDULE_FILE, 'w') as f:
     json.dump(schedule, f, indent=2)
 
-# Commit and push both files
+# Update sitemap with new blog post
+SITEMAP_FILE = os.path.join(REPO_DIR, 'public', 'sitemap.xml')
+if os.path.exists(SITEMAP_FILE):
+    with open(SITEMAP_FILE, 'r') as f:
+        sitemap = f.read()
+    blog_url = f'https://pokemontrainercenter.com/blog/{slug}'
+    if blog_url not in sitemap:
+        new_entry = f'''  <url>
+    <loc>{blog_url}</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>'''
+        sitemap = sitemap.replace('</urlset>', f'{new_entry}\n</urlset>')
+        with open(SITEMAP_FILE, 'w') as f:
+            f.write(sitemap)
+        print(f'Updated sitemap with {blog_url}')
+
+# Commit and push
 os.chdir(REPO_DIR)
 subprocess.run(['git', 'config', 'user.email', 'chase@appcatalyst.org'], check=True)
 subprocess.run(['git', 'config', 'user.name', 'Chase Kellis'], check=True)
-subprocess.run(['git', 'add', 'blogs/schedule.json', 'src/blogData.js'], check=True)
+subprocess.run(['git', 'add', 'blogs/schedule.json', 'src/blogData.js', 'public/sitemap.xml'], check=True)
 subprocess.run(['git', 'commit', '-m', f'Publish blog {next_num}: {blog["title"]}'], check=True)
 subprocess.run(['git', 'push'], check=True)
 
 print(f'Published blog {next_num}: {blog["title"]}')
 print(f'Next blog: {schedule["next"]}')
+
+# Ping Google Search Console to index the new blog URL
+gsc_key = os.environ.get('GSC_SERVICE_ACCOUNT_JSON')
+if gsc_key:
+    try:
+        import tempfile
+        key_file = os.path.join(tempfile.gettempdir(), 'gsc-key.json')
+        with open(key_file, 'w') as f:
+            f.write(gsc_key)
+
+        # Use subprocess to call the indexing API via curl with OAuth token
+        import urllib.request, urllib.parse
+        from json import loads as jloads
+
+        # Get access token using service account
+        import time, hashlib, hmac, base64
+        sa = json.loads(gsc_key)
+        # Build JWT
+        header = base64.urlsafe_b64encode(json.dumps({"alg":"RS256","typ":"JWT"}).encode()).rstrip(b'=')
+        now = int(time.time())
+        claim = base64.urlsafe_b64encode(json.dumps({
+            "iss": sa["client_email"],
+            "scope": "https://www.googleapis.com/auth/indexing",
+            "aud": "https://oauth2.googleapis.com/token",
+            "iat": now, "exp": now + 3600
+        }).encode()).rstrip(b'=')
+
+        # Sign with RSA
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        private_key = serialization.load_pem_private_key(sa["private_key"].encode(), password=None)
+        signature = private_key.sign(header + b'.' + claim, padding.PKCS1v15(), hashes.SHA256())
+        sig_b64 = base64.urlsafe_b64encode(signature).rstrip(b'=')
+        jwt_token = (header + b'.' + claim + b'.' + sig_b64).decode()
+
+        # Exchange JWT for access token
+        token_data = urllib.parse.urlencode({
+            'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion': jwt_token
+        }).encode()
+        token_req = urllib.request.Request('https://oauth2.googleapis.com/token', data=token_data)
+        token_resp = json.loads(urllib.request.urlopen(token_req).read())
+        access_token = token_resp['access_token']
+
+        # Request indexing
+        blog_url = f'https://pokemontrainercenter.com/blog/{slug}'
+        idx_data = json.dumps({"url": blog_url, "type": "URL_UPDATED"}).encode()
+        idx_req = urllib.request.Request(
+            'https://indexing.googleapis.com/v3/urlNotifications:publish',
+            data=idx_data,
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {access_token}'}
+        )
+        urllib.request.urlopen(idx_req)
+        print(f'[GSC] Indexing requested for {blog_url}')
+
+        os.remove(key_file)
+    except Exception as e:
+        print(f'[GSC] Indexing ping failed (non-fatal): {e}')
+else:
+    print('[GSC] No GSC_SERVICE_ACCOUNT_JSON env var, skipping indexing ping')
