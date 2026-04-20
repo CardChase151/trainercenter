@@ -2,6 +2,9 @@
   command = "npm run build"
   publish = "build"
 
+[build.environment]
+  NODE_VERSION = "20"
+
 # Serve prerendered HTML files for SEO before the SPA catch-all
 [[headers]]
   for = "/*.html"

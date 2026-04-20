@@ -1085,32 +1085,44 @@ function OpenNowBanner({ isMobile }) {
   return (
     <Link to="/calendar" style={{ textDecoration: 'none' }}>
       <div style={{
-        backgroundColor: '#f8fafc',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
-        padding: '14px 20px',
-        margin: isMobile ? '0 16px 24px' : '0 auto 32px',
+        background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
+        borderRadius: '16px',
+        padding: isMobile ? '20px' : '24px 32px',
+        margin: isMobile ? '24px 16px 32px' : '40px auto 48px',
         maxWidth: '1100px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         cursor: 'pointer',
-        transition: 'all 0.15s',
+        transition: 'all 0.2s',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94a3b8',
-          }} />
-          <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#475569' }}>
-            Currently closed
-          </span>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444',
+            }} />
+            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Currently closed
+            </span>
+          </div>
           {nextTheme && (
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              Up next: {nextTheme} on {nextDayName}
+            <span style={{ fontSize: isMobile ? '1rem' : '1.1rem', fontWeight: '700', color: '#fff' }}>
+              Up next: <span style={{ color: '#C8102E' }}>{nextTheme}</span> on {nextDayName}
             </span>
           )}
         </div>
-        <span style={{ fontSize: '1.1rem', color: '#94a3b8', fontWeight: '700' }}>&#8250;</span>
+        <div style={{
+          backgroundColor: '#C8102E',
+          borderRadius: '8px',
+          padding: isMobile ? '6px 12px' : '8px 16px',
+          color: '#fff',
+          fontSize: '0.75rem',
+          fontWeight: '700',
+          flexShrink: 0,
+        }}>
+          See Calendar
+        </div>
       </div>
     </Link>
   );
