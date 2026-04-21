@@ -1,5 +1,5 @@
 {
-  "next": 4,
+  "next": 5,
   "total": 12,
   "blogs": [
     {
@@ -24,7 +24,7 @@
       "num": 4,
       "file": "04-pricing-apps.md",
       "title": "What Apps Can I Trust for Pokemon Card Pricing?",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 5,

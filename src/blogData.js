@@ -81,7 +81,7 @@ const BLOG_DATA = [
   {
     slug: 'pricing-apps',
     title: 'What Apps Can I Trust for Pokemon Card Pricing?',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'You found an old card and you want to know what it is worth. You open an app, type in the name, and get a number. But is that number accurate? It depends on the card, the app, and how you use it.' },
       { type: 'h2', text: 'The Problem With Pricing Apps' },
