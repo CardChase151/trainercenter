@@ -1468,6 +1468,96 @@ function ConsultationPage({ isMobile }) {
             </div>
           </div>
         </div>
+
+        {/* What to bring */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            What to bring to your consultation
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            The short answer is bring everything. We have had people walk in with a single childhood binder and walk out realizing they had a Base Set Charizard worth more than their car. We have also had people bring five storage bins thinking they had a fortune and leave with a realistic plan for what to actually keep, what to sell, and what to let go. Either outcome is useful, and neither is embarrassing. The whole point of the consultation is to give you the truth.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            If you can, bring your cards in something that protects them. Toploaders, sleeves, or even a closed shoe box beats a loose pile in a grocery bag. If the cards are old, leave them as they are. Do not wipe, polish, or try to straighten corners before the appointment. Well-meaning cleaning almost always reduces the value of a vintage card. Let us look at them in their original state first.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            If you have sealed product, bring that too. Booster boxes, ETBs, and tins from older sets can be worth significantly more sealed than their individual cards. Japanese product in particular is often undervalued by casual sellers. If you have any paperwork, receipts, or original packaging, bring that as well. Provenance matters, especially for vintage and Japanese market cards.
+          </p>
+        </div>
+
+        {/* What you walk away with */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            What you walk away with
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            By the end of an hour you will know which of your cards are valuable, which are not, and which are in the gray zone where condition determines everything. You will know how to use pricing tools like TCGplayer, eBay sold listings, and PSA population reports so you never have to trust anyone else blindly again. You will understand why the same Charizard can be worth fifty dollars or five thousand depending on the variant, print, and grade.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            You will also get honest advice on timing. Pokemon values rise and fall with new set releases, anniversary reprints, and market momentum on specific cards. If now is not the right moment to sell, we will tell you. If grading a specific card will pay for itself several times over, we will tell you that too. The point of the session is not to buy cards from you. It is to make sure that when you do decide to sell, grade, or hold, you are making the decision with the same information we would use.
+          </p>
+        </div>
+
+        {/* FAQ */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 20px 0' }}>
+            Frequently asked questions
+          </h3>
+          {[
+            {
+              q: 'Is the consultation free?',
+              a: 'Yes. Chef offers consultations at no cost because the goal is long-term relationships with collectors, not a one-time transaction. If we happen to buy cards from you that same visit, that is fine, but there is no pressure and no fee either way.'
+            },
+            {
+              q: 'How long does it take?',
+              a: 'Most consultations run between thirty and sixty minutes. If you bring a very large collection or a lot of vintage, we may schedule a second session so nothing gets rushed.'
+            },
+            {
+              q: 'What if I just inherited cards and know nothing about Pokemon?',
+              a: 'That is the most common consultation we do. You do not need to know anything. Chef will start from zero and explain what you have in plain language. The harder part for us is when someone partially knows and has already decided what everything is worth from TikTok videos.'
+            },
+            {
+              q: 'Are my cards safe during the appointment?',
+              a: 'Yes. Everything stays on the counter in front of you the entire time. We never take cards into a back room, and you are free to photograph or video the evaluation if you want a record.'
+            },
+            {
+              q: 'Do I have to sell to you afterward?',
+              a: 'No. The consultation exists to educate you. We may make an offer on specific cards if you want to sell, but you are free to take what you learned, go home, and sell anywhere else. Many people do exactly that, and we are fine with it.'
+            }
+          ].map((item, i) => (
+            <div key={i} style={{
+              padding: i === 0 ? '0 0 16px' : '16px 0',
+              borderTop: i === 0 ? 'none' : '1px solid #f0f0f0'
+            }}>
+              <p style={{ fontSize: '1rem', fontWeight: '700', color: '#1a1a1a', margin: '0 0 8px 0' }}>{item.q}</p>
+              <p style={{ fontSize: '0.95rem', color: '#555', margin: 0, lineHeight: '1.7' }}>{item.a}</p>
+            </div>
+          ))}
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', marginTop: '24px', marginBottom: 0 }}>
+            Ready to sit down with Chef? See what we do on the <Link to="/grading" style={{ color: '#C8102E', fontWeight: '700' }}>grading side</Link>, check <Link to="/buy-sell" style={{ color: '#C8102E', fontWeight: '700' }}>buy and sell</Link> if you already know what you want to do with your cards, or call the shop at (714) 951-9100 to book your session.
+          </p>
+        </div>
       </div>
     </PageWrapper>
   );
@@ -1627,6 +1717,112 @@ function GradingPage({ isMobile }) {
             Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
           </p>
         </div>
+
+        {/* Which cards are worth grading */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            Which Pokemon cards are actually worth grading?
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            The honest answer is: not most of them. Grading a card costs between twenty-five dollars on the cheapest PSA tier and several hundred on the express tiers, and those fees do not include shipping or the time the card spends out of your hands. If the raw ungraded card is worth ten dollars, a PSA 9 might bring it to twenty-five and a PSA 10 to seventy. That math works on a few cards. It does not work on a binder full of bulk.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            Cards that tend to make sense for grading fall into a few buckets. Vintage holographics from Base Set, Jungle, Fossil, and Neo era cards are almost always candidates because the population is fixed and demand is steady. Modern chase cards like alt arts, special illustration rares, and secret rares from newer sets are candidates when the raw market price is already meaningfully above the grading fee. Error cards, first editions, and cards with strong centering and clean surfaces are almost always worth at least an evaluation.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            Cards that usually should not get graded include non-holo commons, recent mass-produced promos, cards with visible whitening on the edges or print lines on the surface, and anything where the raw price is under about fifteen dollars. Before you spend money on a submission, bring the card in so we can look at it under a light and give you a real read on whether the fee makes sense.
+          </p>
+        </div>
+
+        {/* Understanding the 1-10 scale */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            What do the grades 1 through 10 actually mean?
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
+            PSA grades four things on every Pokemon card: centering, corners, edges, and surface. Your final grade is capped by the weakest of those four. A perfect surface cannot save a card with off-center borders, and sharp corners cannot save a card with a print line on the holo. Here is a plain-English breakdown of where each grade lands.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '0' }}>
+            {[
+              { grade: 'PSA 10', label: 'Gem Mint', desc: 'Essentially perfect to the naked eye. Centering is 55/45 or better on both axes, corners are sharp, edges are clean, and surface shows no print defects or whitening.' },
+              { grade: 'PSA 9', label: 'Mint', desc: 'One minor flaw. Maybe slight off-centering or a single soft corner. Still a collectible, investable grade.' },
+              { grade: 'PSA 8', label: 'Near Mint-Mint', desc: 'Light wear visible on close inspection. Edges or corners show handling. Most raw pack-fresh cards that have been played or sleeved casually land here.' },
+              { grade: 'PSA 7', label: 'Near Mint', desc: 'Obvious flaws on one or two of the four criteria but still clean overall. Good choice for vintage cards where a 7 is still meaningful.' },
+              { grade: 'PSA 5-6', label: 'Excellent', desc: 'Visible wear but no creases, no holes. Vintage collectors still value these for rare cards.' },
+              { grade: 'PSA 1-4', label: 'Poor to Very Good', desc: 'Heavier wear, creases, surface damage, or alignment issues. Mostly valuable only on rare vintage where any graded example matters.' }
+            ].map((row, i) => (
+              <div key={i} style={{ padding: '16px', borderRadius: '10px', backgroundColor: '#fafafa', border: '1px solid #f0f0f0' }}>
+                <p style={{ fontSize: '0.9rem', fontWeight: '800', color: '#C8102E', margin: '0 0 2px 0' }}>{row.grade} <span style={{ color: '#1a1a1a', fontWeight: '700' }}>— {row.label}</span></p>
+                <p style={{ fontSize: '0.85rem', color: '#666', margin: 0, lineHeight: '1.5' }}>{row.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 20px 0' }}>
+            Common questions about grading through Trainer Center
+          </h3>
+          {[
+            {
+              q: 'Do I need a PSA account to submit through you?',
+              a: 'No. We submit on our shop account, so you skip the signup, the bulk requirements, the shipping supplies, and the hassle of insuring your own package. You hand the cards to us over the counter, we track everything, and you get them back graded and encapsulated.'
+            },
+            {
+              q: 'How long does the whole process take?',
+              a: 'It depends on which PSA tier we use. Value Bulk runs around 95 business days, Regular runs about 25, and Express is typically back in 10. These are PSA turnaround estimates, not promises, and they move based on their internal queue. We update you when PSA receives the order, when grading is complete, and when the cards ship back.'
+            },
+            {
+              q: 'Can I watch you sleeve and package the submission?',
+              a: 'Yes. We prep every submission in front of you at the counter if you want. Each card gets a penny sleeve, a semi-rigid holder, and its own line on the order form. Nothing gets mixed up and you see exactly what goes in the box.'
+            },
+            {
+              q: 'What if the card comes back a lower grade than expected?',
+              a: 'We tell you what we think before we submit. If we say we think a card is borderline 9, we will tell you honestly. PSA grades strictly and small flaws matter. The only way to guarantee a grade is to never submit, so we only recommend sending in cards where we believe the expected grade outweighs the fee.'
+            },
+            {
+              q: 'Do you grade anything other than PSA?',
+              a: 'We primarily use PSA because it is the most recognized grader in the Pokemon market and resale prices reflect that. We can walk you through CGC and BGS if a specific card benefits from their slab style or rules, but for most Pokemon cards PSA is the right call.'
+            },
+            {
+              q: 'Can you grade Japanese Pokemon cards?',
+              a: 'Yes. PSA grades Japanese cards on the same scale as English. Japanese vintage and modern alt arts are a growing segment of the hobby, and we submit them regularly. Bring them in and we will evaluate them the same way.'
+            }
+          ].map((item, i) => (
+            <div key={i} style={{
+              padding: i === 0 ? '0 0 16px' : '16px 0',
+              borderTop: i === 0 ? 'none' : '1px solid #f0f0f0'
+            }}>
+              <p style={{ fontSize: '1rem', fontWeight: '700', color: '#1a1a1a', margin: '0 0 8px 0' }}>{item.q}</p>
+              <p style={{ fontSize: '0.95rem', color: '#555', margin: 0, lineHeight: '1.7' }}>{item.a}</p>
+            </div>
+          ))}
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', marginTop: '24px', marginBottom: 0 }}>
+            Have a card or a whole collection you are not sure about? Book a <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>private consultation with Chef</Link> and we will walk through everything before you spend a dollar on grading fees.
+          </p>
+        </div>
       </div>
     </PageWrapper>
   );
@@ -1720,6 +1916,72 @@ function BuySellPage({ isMobile }) {
               </a>
             </div>
           </div>
+        </div>
+
+        {/* How buying works */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            How selling cards to Trainer Center works
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            You walk in with your cards. We sit at the counter together. Chef looks through the collection card by card for anything meaningful and bulks the rest into obvious lots. You watch the entire process. Nothing goes into a back room. Once we have a picture of what is there, we price each meaningful card or lot using live TCGplayer market data, eBay sold listings, and our own read on current Pokemon market movement.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            The offer is a single number you can take or leave. We will tell you how we got there and which cards drove the bulk of the value. If you want to think about it, take the list home. If you want to sell only a portion of the collection, we are happy to break it up. If our offer is lower than something you saw online, we will explain why our number is what it is and you can decide what makes sense for you.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            We pay in cash or Zelle the same visit, not on some future payment schedule. There are no processing fees, no shipping risk, and no waiting two weeks for a check. If your collection is large enough that the evaluation takes more than an hour, we can schedule a dedicated session so nothing gets rushed.
+          </p>
+        </div>
+
+        {/* What we buy and what we pass on */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            What we buy and what we tell you to hold
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            We actively buy vintage cards from Base Set through Neo, especially holographics and first editions. We buy sealed product from any era, including booster boxes, Elite Trainer Boxes, Japanese promos, and older tins. We buy modern chase cards like alt arts, special illustration rares, secret rares, and any card that has meaningful aftermarket demand. We also buy graded cards outright and on consignment depending on the grade and the card.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            Plushies, figures, vintage Japanese merchandise, and unopened promotional items are all worth bringing in. The Pokemon merchandise market has grown significantly in recent years and some items people assume are worthless turn out to be in demand. When in doubt, bring it in and let us look.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            If we see something in your collection where we think you are better off holding, we will tell you. The resale market for certain cards is in a clear upswing and selling into a rising market is usually the wrong move. Our job during a buy is not to extract every dollar from you. It is to give you a fair offer on what you want to part with and honest guidance on what you should keep.
+          </p>
+        </div>
+
+        {/* Consignment details */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '32px auto 0'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            When consignment makes more sense than selling outright
+          </h3>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            If you have graded cards or high-end singles, consignment usually pays better than selling to us outright. We list your items in the shop and online where collectors see them, and when they sell you get paid the agreed amount minus a small consignment fee. You skip eBay fees, shipping hassles, and the risk of dealing with dishonest buyers. The tradeoff is time. Outright buys put cash in your hand today. Consignment gets you a higher number but takes days, weeks, or sometimes months depending on the card.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '0' }}>
+            We talk through both paths with every seller so you pick the one that matches what you actually need. Call the shop at (714) 951-9100 to set up a consignment agreement, or if you are just exploring, book a <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>free consultation</Link> first so you know exactly what you have before deciding how to move it.
+          </p>
         </div>
       </div>
     </PageWrapper>
