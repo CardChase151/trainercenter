@@ -1,16 +1,15 @@
-import json, os, smtplib, ssl, markdown
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import json, os, urllib.request, urllib.error, markdown
 
 BLOG_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEDULE_FILE = os.path.join(BLOG_DIR, 'schedule.json')
 
-SENDER = 'chase@appcatalyst.org'
-PASSWORD = os.environ.get('ZOHO_PASSWORD')
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+FROM_ADDRESS = 'Trainer Center <noreply@mysendz.com>'
+REPLY_TO = 'chase@appcatalyst.org'
 RECIPIENTS = [
     'thek2way17@gmail.com',
     'trainercenter.pokemon@gmail.com',
-    'mr.chef68@gmail.com'
+    'mr.chef68@gmail.com',
 ]
 
 with open(SCHEDULE_FILE) as f:
@@ -87,14 +86,33 @@ html = f'''\
 </html>
 '''
 
-msg = MIMEMultipart('mixed')
-msg['From'] = 'Chase Kellis <chase@appcatalyst.org>'
-msg['To'] = ', '.join(RECIPIENTS)
-msg['Subject'] = subject
-msg.attach(MIMEText(html, 'html'))
+if not RESEND_API_KEY:
+    print('ERROR: RESEND_API_KEY env var is not set.')
+    exit(1)
 
-context = ssl.create_default_context()
-with smtplib.SMTP_SSL('smtp.zoho.com', 465, context=context) as server:
-    server.login(SENDER, PASSWORD)
-    server.sendmail(SENDER, RECIPIENTS, msg.as_string())
-    print(f'Preview email sent for blog {next_num}: {blog["title"]}')
+payload = json.dumps({
+    'from': FROM_ADDRESS,
+    'to': RECIPIENTS,
+    'reply_to': REPLY_TO,
+    'subject': subject,
+    'html': html,
+}).encode('utf-8')
+
+req = urllib.request.Request(
+    'https://api.resend.com/emails',
+    data=payload,
+    headers={
+        'Authorization': f'Bearer {RESEND_API_KEY}',
+        'Content-Type': 'application/json',
+    },
+    method='POST',
+)
+
+try:
+    with urllib.request.urlopen(req) as resp:
+        body = resp.read().decode('utf-8')
+        print(f'Preview email sent for blog {next_num}: {blog["title"]}')
+        print(body)
+except urllib.error.HTTPError as e:
+    print(f'Resend API error {e.code}: {e.read().decode("utf-8")}')
+    exit(1)

@@ -20,5 +20,5 @@ jobs:
 
       - name: Send blog preview email
         env:
-          ZOHO_PASSWORD: ${{ secrets.ZOHO_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: python blogs/send-preview.py
