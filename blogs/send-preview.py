@@ -104,6 +104,7 @@ req = urllib.request.Request(
     headers={
         'Authorization': f'Bearer {RESEND_API_KEY}',
         'Content-Type': 'application/json',
+        'User-Agent': 'TrainerCenter-BlogPreview/1.0',
     },
     method='POST',
 )
