@@ -101,8 +101,21 @@ for (const blog of publishedBlogs) {
   });
 }
 
+// Build a site-wide nav block of every route. Injected into <noscript> on
+// every prerendered page so crawlers can walk from any page to any other.
+// Without this, a low-authority new site's homepage looks like an empty
+// shell to Googlebot and inner pages stay "Discovered, not indexed."
+function buildSiteNav() {
+  const links = ROUTES.map((r) => {
+    const url = r.slug ? `${BASE_URL}/${r.slug}` : `${BASE_URL}/`;
+    return `<a href="${url}">${r.h1}</a>`;
+  });
+  return `<nav aria-label="Site map">${links.join(' · ')}</nav>`;
+}
+
 function prerender() {
   const template = fs.readFileSync(path.join(BUILD_DIR, 'index.html'), 'utf-8');
+  const siteNav = buildSiteNav();
   let count = 0;
 
   for (const route of ROUTES) {
@@ -154,10 +167,11 @@ function prerender() {
       `<meta name="twitter:description" content="${route.description}"`
     );
 
-    // Replace noscript content
+    // Replace noscript content (includes site nav so crawlers can discover
+    // every page from every page)
     html = html.replace(
       /<noscript>[\s\S]*?<\/noscript>/,
-      `<noscript>\n      <h1>${route.h1}</h1>\n      <p>${route.body}</p>\n    </noscript>`
+      `<noscript>\n      <h1>${route.h1}</h1>\n      <p>${route.body}</p>\n      ${siteNav}\n    </noscript>`
     );
 
     // Write file
