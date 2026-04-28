@@ -1,5 +1,5 @@
 {
-  "next": 5,
+  "next": 6,
   "total": 12,
   "blogs": [
     {
@@ -30,7 +30,7 @@
       "num": 5,
       "file": "05-how-consignment-works.md",
       "title": "How Consignment Works at Trainer Center",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 6,

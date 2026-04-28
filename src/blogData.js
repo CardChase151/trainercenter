@@ -106,7 +106,7 @@ const BLOG_DATA = [
   {
     slug: 'how-consignment-works',
     title: 'How Consignment Works at Trainer Center',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'You have graded cards or collectibles you want to sell, but you do not want to deal with eBay listings, shipping, buyer disputes, or marketplace fees. That is exactly what consignment is for.' },
       { type: 'h2', text: 'What is Consignment?' },
