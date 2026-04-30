@@ -3278,7 +3278,8 @@ function VendorEventCard({ event, application, attendance, vendorId, isFirstAppl
 // ─── Onboarding form (first-time vendor only) ─────────────
 function VendorOnboardingForm({ isMobile, session, onComplete }) {
   const [form, setForm] = useState({
-    name: '',
+    first_name: '',
+    last_name: '',
     phone: '',
     ig_handle: '',
     tiktok_handle: '',
@@ -3297,18 +3298,21 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) {
-      setError('Name is required');
+    if (!form.first_name.trim() || !form.last_name.trim()) {
+      setError('First and last name both required.');
       return;
     }
     setSubmitting(true);
     setError('');
+    const fullName = `${form.first_name.trim()} ${form.last_name.trim()}`;
     const { data, error: insertError } = await supabase
       .from('vendors')
       .insert({
         user_id: session.user.id,
         email: session.user.email,
-        name: form.name.trim(),
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        name: fullName,
         phone: form.phone.trim() || null,
         ig_handle: cleanHandle(form.ig_handle),
         tiktok_handle: cleanHandle(form.tiktok_handle),
@@ -3351,8 +3355,11 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
             All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.
           </p>
 
-          <label style={labelCss}>Your name *</label>
-          <input required value={form.name} onChange={setField('name')} placeholder="First and last" style={inputCss} />
+          <label style={labelCss}>First name *</label>
+          <input required value={form.first_name} onChange={setField('first_name')} style={inputCss} />
+
+          <label style={labelCss}>Last name *</label>
+          <input required value={form.last_name} onChange={setField('last_name')} style={inputCss} />
 
           <label style={labelCss}>Phone</label>
           <input type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
