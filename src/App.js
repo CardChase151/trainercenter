@@ -2685,7 +2685,12 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
   // Derive special events (vendor days, big events)
-  const specialEvents = events.filter(ev => (ev.categories || []).includes('big_event') && ev.recurrence === 'none');
+  // Pull non-recurring "headline" events for the top-of-calendar callout.
+  // Anything tagged either `vendor_day` or `big_event` qualifies, sorted by
+  // soonest first so the upcoming Vendor Day surfaces ahead of older callouts.
+  const specialEvents = events
+    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.categories || []).some(c => c === 'vendor_day' || c === 'big_event'))
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Get today's events
   const today = new Date();
@@ -2733,12 +2738,17 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
   const formatTime = formatTime12h;
 
+  // Driven directly off the CATEGORIES dict so the chips and the actual
+  // category data can never drift out of sync. Order is intentional: the
+  // top three are the user-facing big rocks, "other" stays last as the
+  // catch-all for weekly recurring events.
   const FILTER_OPTIONS = [
     { key: null, label: 'All Events' },
-    { key: 'trade_night', label: 'Trade Night', color: '#C8102E' },
-    { key: 'big_event', label: 'Vendor Day', color: '#7c3aed' },
-    { key: 'tournament', label: 'Tournament', color: '#2563eb' },
-    { key: 'other', label: 'Weekly Events', color: '#ea580c' },
+    { key: 'vendor_day', label: CATEGORIES.vendor_day.label, color: CATEGORIES.vendor_day.color },
+    { key: 'trade_night', label: CATEGORIES.trade_night.label, color: CATEGORIES.trade_night.color },
+    { key: 'tournament', label: CATEGORIES.tournament.label, color: CATEGORIES.tournament.color },
+    { key: 'big_event', label: CATEGORIES.big_event.label, color: CATEGORIES.big_event.color },
+    { key: 'other', label: 'Weekly Events', color: CATEGORIES.other.color },
   ];
 
   const handlePrint = () => {
@@ -2788,6 +2798,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .day-num { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
         .event-title { background: #f5f5f5; border-radius: 4px; padding: 2px 6px; margin: 2px 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-title.trade_night { border-left: 3px solid #C8102E; }
+        .event-title.vendor_day { border-left: 3px solid #16a34a; }
         .event-title.big_event { border-left: 3px solid #7c3aed; }
         .event-title.tournament { border-left: 3px solid #2563eb; }
         .event-title.other { border-left: 3px solid #ea580c; }
@@ -2933,21 +2944,42 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
           </div>
         )}
 
-        {/* Special Events callout (dynamic) */}
-        {specialEvents.length > 0 && (
-          <div style={{
-            padding: '14px 20px', borderRadius: '10px', backgroundColor: '#f5f3ff',
-            border: '1px solid #e9e5ff', marginBottom: '20px',
-            display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
-          }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#7c3aed' }}>{specialEvents[0].title}</span>
-            {specialEvents[0].description && (
-              <span style={{ fontSize: '0.75rem', color: '#888' }}>
-                {specialEvents[0].description.length > 100 ? specialEvents[0].description.slice(0, 100) + '...' : specialEvents[0].description}
+        {/* Special Events callout (dynamic, color matches primary category) */}
+        {specialEvents.length > 0 && (() => {
+          const ev = specialEvents[0];
+          const primaryKey = (ev.categories || []).find(c => c === 'vendor_day') || (ev.categories || [])[0] || 'big_event';
+          const tone = CATEGORIES[primaryKey] || CATEGORIES.big_event;
+          // Tint the bg with a transparent overlay of the category color so red,
+          // green, blue, purple, etc. all read like soft callouts in their hue.
+          const bg = tone.color + '12';
+          const border = tone.color + '44';
+          return (
+            <div style={{
+              padding: '14px 20px', borderRadius: '10px', backgroundColor: bg,
+              border: `1px solid ${border}`, marginBottom: '20px',
+              display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
+            }}>
+              <span style={{
+                fontSize: '0.65rem', fontWeight: '800', color: tone.color,
+                backgroundColor: tone.color + '1f', padding: '2px 8px',
+                borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em'
+              }}>
+                {(ev.categories || []).map(c => CATEGORIES[c]?.label || c).join(' · ')}
               </span>
-            )}
-          </div>
-        )}
+              <span style={{ fontSize: '0.8rem', fontWeight: '800', color: tone.color }}>
+                {ev.title}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                {new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+              {ev.description && (
+                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                  · {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
+                </span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Filter pills + Print button */}
         <div style={{
