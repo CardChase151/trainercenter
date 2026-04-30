@@ -3588,6 +3588,7 @@ function VendorDashboardPage({ isMobile }) {
                     application={applications[ev.id]}
                     attendance={attendance[ev.id]}
                     vendorId={vendor.id}
+                    vendorStatus={vendor.status}
                     isFirstApplication={Object.keys(applications).length === 0}
                     onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
                     onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
@@ -3622,7 +3623,7 @@ function VendorStatusBadge({ status }) {
 }
 
 // ─── Per-event card on vendor dashboard ───────────────────
-function VendorEventCard({ event, application, attendance, vendorId, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
+function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState('');
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -3660,16 +3661,28 @@ function VendorEventCard({ event, application, attendance, vendorId, isFirstAppl
   // attendance, and whether the event is today / past / future.
   let actionEl = null;
   if (!application) {
-    actionEl = (
-      <button onClick={handleApply} disabled={applying} style={{
-        backgroundColor: '#C8102E', color: '#fff',
-        padding: '10px 18px', borderRadius: '8px',
-        fontSize: '0.9rem', fontWeight: '700',
-        border: 'none', cursor: applying ? 'wait' : 'pointer'
-      }}>
-        {applying ? 'Applying...' : 'Apply for this date'}
-      </button>
-    );
+    if (vendorStatus !== 'approved') {
+      // Profile gate — until the vendor's profile is approved, hide the
+      // apply button on every event card and show why.
+      actionEl = (
+        <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic', maxWidth: '240px', textAlign: 'right' }}>
+          {vendorStatus === 'suspended'
+            ? 'Account suspended — contact Chef.'
+            : "Profile pending Chef's review. You'll be able to apply once approved."}
+        </span>
+      );
+    } else {
+      actionEl = (
+        <button onClick={handleApply} disabled={applying} style={{
+          backgroundColor: '#C8102E', color: '#fff',
+          padding: '10px 18px', borderRadius: '8px',
+          fontSize: '0.9rem', fontWeight: '700',
+          border: 'none', cursor: applying ? 'wait' : 'pointer'
+        }}>
+          {applying ? 'Applying...' : 'Apply for this date'}
+        </button>
+      );
+    }
   } else if (application.status === 'pending') {
     actionEl = <span style={{ fontSize: '0.85rem', color: '#c2410c', fontWeight: '700' }}>Pending Chef's approval</span>;
   } else if (application.status === 'declined') {
@@ -5482,6 +5495,9 @@ function StaffVendorsPage({ isMobile, staff }) {
   const refresh = () => setRefreshKey(k => k + 1);
 
   const decideApplication = async (appId, status, note) => {
+    // Per-event decision only. Profile approval lives in the All Vendors tab
+    // and is the prerequisite — admin UI prevents approving an event app for
+    // a non-approved vendor.
     const { error } = await supabase
       .from('vendor_applications')
       .update({ status, decision_note: note || null, decided_at: new Date().toISOString(), decided_by: staff.id })
@@ -5490,15 +5506,6 @@ function StaffVendorsPage({ isMobile, staff }) {
       alert('Error: ' + error.message);
       return;
     }
-    // If approved on a first-time application, also flip the vendor profile
-    // status to 'approved' so they show on the public feed and can keep applying.
-    if (status === 'approved') {
-      const app = pending.find(p => p.id === appId);
-      if (app?.vendor?.id && app.vendor.status === 'pending') {
-        await supabase.from('vendors').update({ status: 'approved' }).eq('id', app.vendor.id);
-      }
-    }
-    // Notify the vendor of the decision
     sendVendorEmail({ type: 'application_decided', application_id: appId });
     refresh();
   };
@@ -5508,6 +5515,27 @@ function StaffVendorsPage({ isMobile, staff }) {
     if (error) {
       alert('Error: ' + error.message);
       return;
+    }
+    // Suspending cascades — cancel this vendor's approved applications on
+    // any FUTURE events. Past attendance records are left alone.
+    if (status === 'suspended') {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: futureEvents } = await supabase
+        .from('events').select('id').gte('event_date', today);
+      const futureIds = (futureEvents || []).map(e => e.id);
+      if (futureIds.length > 0) {
+        await supabase
+          .from('vendor_applications')
+          .update({
+            status: 'cancelled',
+            decision_note: 'Vendor profile suspended',
+            decided_at: new Date().toISOString(),
+            decided_by: staff.id,
+          })
+          .eq('vendor_id', vendorId)
+          .eq('status', 'approved')
+          .in('event_id', futureIds);
+      }
     }
     refresh();
   };
@@ -5533,7 +5561,7 @@ function StaffVendorsPage({ isMobile, staff }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Vendor Admin" subtitle="Approve applications, see who is coming" />
+        <SectionHeader title="Vendor Admin" subtitle="Approve vendor profiles, then schedule them per Vendor Day" />
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', maxWidth: '1100px', margin: '0 auto 24px', flexWrap: 'wrap' }}>
@@ -5563,7 +5591,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} onDecide={decideApplication} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} onDecide={decideApplication} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
@@ -5752,7 +5780,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
   const v = app.vendor || {};
   const ev = app.event || {};
   const eventDate = ev.event_date ? new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
-  const isFirstApp = v.status === 'pending';
+  const profilePending = v.status !== 'approved';
 
   const handle = async (status) => {
     setBusy(true);
@@ -5780,12 +5808,12 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>
               {v.name || '(no name)'}
-              {isFirstApp && (
+              {profilePending && (
                 <span style={{
-                  marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fff7ed', color: '#c2410c',
+                  marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fef2f2', color: '#dc2626',
                   padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px'
                 }}>
-                  First-time applicant
+                  Profile pending
                 </span>
               )}
             </div>
@@ -5799,8 +5827,18 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
         </div>
       </div>
 
+      {profilePending && (
+        <div style={{
+          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+          borderRadius: '8px', padding: '10px 12px', marginBottom: '10px',
+          fontSize: '0.82rem', color: '#991b1b', lineHeight: '1.5'
+        }}>
+          Approve this vendor's profile in the <strong>All vendors</strong> tab first. You can't add a vendor to a Vendor Day until they're a recognized Trainer Center vendor.
+        </div>
+      )}
+
       {/* Vendor profile preview (when first-time) */}
-      {isFirstApp && (
+      {profilePending && (
         <div style={{
           backgroundColor: '#f9fafb', borderRadius: '8px', padding: '12px 14px',
           marginBottom: '12px', fontSize: '0.85rem', color: '#444', lineHeight: '1.6'
@@ -5840,12 +5878,12 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
         }}
       />
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <button onClick={() => handle('approved')} disabled={busy} style={{
-          backgroundColor: '#16a34a', color: '#fff', padding: '8px 16px',
+        <button onClick={() => handle('approved')} disabled={busy || profilePending} title={profilePending ? "Approve their profile first" : ''} style={{
+          backgroundColor: profilePending ? '#ccc' : '#16a34a', color: '#fff', padding: '8px 16px',
           border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
-          cursor: busy ? 'wait' : 'pointer'
+          cursor: profilePending ? 'not-allowed' : (busy ? 'wait' : 'pointer')
         }}>
-          {isFirstApp ? 'Approve vendor + event' : 'Approve'}
+          Approve for this date
         </button>
         <button onClick={() => handle('declined')} disabled={busy} style={{
           backgroundColor: '#fff', color: '#dc2626', padding: '8px 16px',
@@ -5860,7 +5898,9 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
-function EventRosterList({ events, attendance, onDecide, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, onDecide, onChange, staff, isMobile }) {
+  const [addingTo, setAddingTo] = useState(null); // event row when adding
+
   if (events.length === 0) {
     return (
       <div style={{
@@ -5889,8 +5929,18 @@ function EventRosterList({ events, attendance, onDecide, isMobile }) {
                 <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
                 <div style={{ fontSize: '0.85rem', color: '#666' }}>{dateStr}</div>
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                {approved.length} approved · {pending.length} pending
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                  {approved.length} approved · {pending.length} pending
+                </div>
+                <button onClick={() => setAddingTo(ev)} style={{
+                  backgroundColor: '#16a34a', color: '#fff', border: 'none',
+                  padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                  fontSize: '0.78rem', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px'
+                }}>
+                  <Plus size={13} /> Add vendor
+                </button>
               </div>
             </div>
             {apps.length === 0 ? (
@@ -5945,6 +5995,126 @@ function EventRosterList({ events, attendance, onDecide, isMobile }) {
           </div>
         );
       })}
+
+      {addingTo && (
+        <AddVendorToEventModal
+          event={addingTo}
+          allVendors={allVendors}
+          existingApps={addingTo.vendor_applications || []}
+          staff={staff}
+          onClose={() => setAddingTo(null)}
+          onSaved={() => { setAddingTo(null); onChange(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal for adding approved vendors directly to an event roster.
+// Inserts vendor_applications rows with status='approved' for picked vendors
+// (skipping any that already have a row on this event).
+function AddVendorToEventModal({ event, allVendors, existingApps, staff, onClose, onSaved }) {
+  const existingIds = new Set((existingApps || []).map(a => a.vendor_id));
+  const candidates = (allVendors || [])
+    .filter(v => v.status === 'approved' && !existingIds.has(v.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const [selected, setSelected] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const toggle = (vid) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(vid) ? next.delete(vid) : next.add(vid);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    if (selected.size === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    setError('');
+    const rows = [...selected].map(vid => ({
+      vendor_id: vid,
+      event_id: event.id,
+      status: 'approved',
+      decision_note: 'Added directly by staff',
+      decided_at: new Date().toISOString(),
+      decided_by: staff?.id || null,
+    }));
+    const { error: insertErr } = await supabase
+      .from('vendor_applications')
+      .upsert(rows, { onConflict: 'vendor_id,event_id' });
+    setSaving(false);
+    if (insertErr) {
+      setError(insertErr.message);
+      return;
+    }
+    onSaved();
+  };
+
+  const dateStr = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={{ ...modalCardStyle, maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0' }}>
+          Add vendors to {event.title || 'Vendor Day'}
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 16px 0' }}>{dateStr}</p>
+
+        {candidates.length === 0 ? (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '8px',
+            padding: '20px', textAlign: 'center', color: '#888', fontSize: '0.85rem'
+          }}>
+            All approved vendors are already on this event's roster. Approve more vendors in the All vendors tab to expand the pool.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '320px', overflowY: 'auto', marginBottom: '14px' }}>
+            {candidates.map(v => {
+              const checked = selected.has(v.id);
+              return (
+                <label key={v.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 12px',
+                  backgroundColor: checked ? '#f0fdf4' : '#fafafa',
+                  border: `1px solid ${checked ? '#bbf7d0' : '#eee'}`,
+                  borderRadius: '8px', cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggle(v.id)} />
+                  {v.avatar_url && (
+                    <img src={v.avatar_url} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: '700', color: '#1a1a1a' }}>{v.name}</div>
+                    {v.specialty && <div style={{ fontSize: '0.75rem', color: '#888' }}>{v.specialty}</div>}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleSave} disabled={saving || candidates.length === 0} style={{
+            flex: 1, padding: '12px',
+            backgroundColor: (saving || candidates.length === 0) ? '#999' : '#16a34a',
+            color: '#fff', border: 'none', borderRadius: '8px',
+            fontWeight: '700', fontSize: '0.95rem',
+            cursor: (saving || candidates.length === 0) ? 'not-allowed' : 'pointer'
+          }}>
+            {saving ? 'Adding...' : selected.size === 0 ? 'Pick vendors' : `Add ${selected.size} to roster`}
+          </button>
+          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+        </div>
+      </div>
     </div>
   );
 }
