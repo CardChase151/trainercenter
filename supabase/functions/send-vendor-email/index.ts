@@ -2,9 +2,10 @@
 // Resend-backed transactional emails for the vendor + member system.
 //
 // Types:
+//   - vendor_welcome        (vendor finishes onboarding)
+//   - member_welcome        (member finishes onboarding)
 //   - application_received  (vendor applies for an event)
 //   - application_decided   (staff approves/declines an application)
-//   - member_welcome        (new member signs up to vote)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
@@ -25,9 +26,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'application_received' | 'application_decided' | 'member_welcome'
-  application_id?: string
+  type: 'vendor_welcome' | 'member_welcome' | 'application_received' | 'application_decided'
+  vendor_id?: string
   member_id?: string
+  application_id?: string
   is_first_time?: boolean
 }
 
@@ -98,61 +100,23 @@ Deno.serve(async (req: Request) => {
   if (!type) return json({ error: 'type required' }, 400)
 
   try {
-    if (type === 'application_received' || type === 'application_decided') {
-      if (!payload.application_id) return json({ error: 'application_id required' }, 400)
-      const { data: app, error: aErr } = await supabase
-        .from('vendor_applications')
-        .select('*, vendor:vendors(*), event:events(*)')
-        .eq('id', payload.application_id)
+    if (type === 'vendor_welcome') {
+      if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
+      const { data: v, error: vErr } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('id', payload.vendor_id)
         .single()
-      if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
+      if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
 
-      const v = app.vendor
-      const e = app.event
-      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'an upcoming Vendor Day'
-      const eventTitle = e?.title || 'Vendor Day'
-
-      if (type === 'application_received') {
-        const isFirst = !!payload.is_first_time
-        const vendorSubject = isFirst
-          ? "Thanks for applying — we'll be in touch"
-          : `Got your application for ${dateStr}`
-        const vendorBody = isFirst
-          ? `<p>Hi ${v.name},</p><p>Thanks for applying to vend at Trainer Center. Chef will personally review your application and email you back, usually within a few days. We are excited you want to be part of Vendor Day.</p><p>While you wait, drop by the shop or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>`
-          : `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Chef will confirm your spot soon.</p>`
-        await sendResendEmail([v.email], vendorSubject,
-          wrapHtml(vendorBody + `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`),
-          `${vendorSubject}\n\nDashboard: ${SITE_URL}/vendors/dashboard`
-        )
-        const staffSubject = isFirst ? `New vendor: ${v.name}` : `${v.name} wants to vend on ${dateStr}`
-        const staffBody = `<p><strong>${v.name}</strong> ${isFirst ? 'just applied as a new vendor' : `applied for ${eventTitle} on ${dateStr}`}.</p>` +
-          `<p style="font-size:13px;color:#444">${v.email}${v.phone ? ' · ' + v.phone : ''}<br/>` +
-          `${v.specialty ? 'Specialty: ' + v.specialty + '<br/>' : ''}` +
-          `${v.ig_handle ? 'IG: @' + v.ig_handle + '<br/>' : ''}` +
-          `${v.heard_from ? 'Heard from: ' + v.heard_from.replace(/_/g, ' ') + '<br/>' : ''}` +
-          `${v.referred_by_name ? 'Referred by: ' + v.referred_by_name + (v.referred_by_handle ? ' (@' + v.referred_by_handle + ')' : '') : ''}</p>` +
-          `<p>${v.bio ? `"${v.bio}"` : ''}</p>` +
-          `<p style="margin-top:24px"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Review in admin</a></p>`
-        await sendResendEmail(STAFF_EMAILS, staffSubject, wrapHtml(staffBody),
-          `${staffSubject}\n\nName: ${v.name}\nEmail: ${v.email}\nReview: ${SITE_URL}/staff/vendors`)
-        return json({ ok: true, sent: ['vendor', 'staff'] })
-      }
-
-      // application_decided
-      const status = app.status
-      if (status === 'approved') {
-        const subject = `You're in for ${dateStr}`
-        const body = `<p>Hi ${v.name},</p><p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p><p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : ''}<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
-        await sendResendEmail([v.email], subject, wrapHtml(body),
-          `Approved for ${eventTitle} on ${dateStr}.\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
-      } else if (status === 'declined') {
-        const subject = `About your Vendor Day application`
-        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center.</p>`
-        await sendResendEmail([v.email], subject, wrapHtml(body),
-          `About your Vendor Day application: not approved this time.`)
-      } else {
-        return json({ ok: true, skipped: 'not a notify-worthy status' })
-      }
+      const subject = 'Welcome to Trainer Center vendors'
+      const body = `<p>Hi ${v.name},</p>` +
+        `<p>Your vendor profile is in. Chef will personally review it before approving you. Once approved, you can apply for any upcoming Vendor Day in two clicks from your dashboard.</p>` +
+        `<p><strong>Vendor Day cadence:</strong> last Friday of every month at the shop.</p>` +
+        `<p>While you wait, drop by Trainer Center or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
+        `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`
+      await sendResendEmail([v.email], subject, wrapHtml(body),
+        `Welcome to Trainer Center vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
@@ -174,6 +138,59 @@ Deno.serve(async (req: Request) => {
       await sendResendEmail([m.email], subject, wrapHtml(body),
         `Welcome to Trainer Center, ${m.first_name || ''}!\n\nVendor Day = last Friday of every month. Vote at the shop on event day.\n\n${SITE_URL}/vendors`)
       return json({ ok: true, sent: ['member'] })
+    }
+
+    if (type === 'application_received' || type === 'application_decided') {
+      if (!payload.application_id) return json({ error: 'application_id required' }, 400)
+      const { data: app, error: aErr } = await supabase
+        .from('vendor_applications')
+        .select('*, vendor:vendors(*), event:events(*)')
+        .eq('id', payload.application_id)
+        .single()
+      if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
+
+      const v = app.vendor
+      const e = app.event
+      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'an upcoming Vendor Day'
+      const eventTitle = e?.title || 'Vendor Day'
+
+      if (type === 'application_received') {
+        const vendorSubject = `Got your application for ${dateStr}`
+        const vendorBody = `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Chef will confirm your spot soon.</p>`
+        await sendResendEmail([v.email], vendorSubject,
+          wrapHtml(vendorBody + `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`),
+          `${vendorSubject}\n\nDashboard: ${SITE_URL}/vendors/dashboard`
+        )
+        const isFirst = !!payload.is_first_time
+        const staffSubject = isFirst ? `New vendor: ${v.name}` : `${v.name} wants to vend on ${dateStr}`
+        const staffBody = `<p><strong>${v.name}</strong> ${isFirst ? 'just applied as a new vendor' : `applied for ${eventTitle} on ${dateStr}`}.</p>` +
+          `<p style="font-size:13px;color:#444">${v.email}${v.phone ? ' · ' + v.phone : ''}<br/>` +
+          `${v.specialty ? 'Specialty: ' + v.specialty + '<br/>' : ''}` +
+          `${v.ig_handle ? 'IG: @' + v.ig_handle + '<br/>' : ''}` +
+          `${v.heard_from ? 'Heard from: ' + v.heard_from.replace(/_/g, ' ') + '<br/>' : ''}` +
+          `${v.referred_by_name ? 'Referred by: ' + v.referred_by_name + (v.referred_by_handle ? ' (@' + v.referred_by_handle + ')' : '') : ''}</p>` +
+          `<p>${v.bio ? `"${v.bio}"` : ''}</p>` +
+          `<p style="margin-top:24px"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Review in admin</a></p>`
+        await sendResendEmail(STAFF_EMAILS, staffSubject, wrapHtml(staffBody),
+          `${staffSubject}\n\nName: ${v.name}\nEmail: ${v.email}\nReview: ${SITE_URL}/staff/vendors`)
+        return json({ ok: true, sent: ['vendor', 'staff'] })
+      }
+
+      const status = app.status
+      if (status === 'approved') {
+        const subject = `You're in for ${dateStr}`
+        const body = `<p>Hi ${v.name},</p><p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p><p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : ''}<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
+        await sendResendEmail([v.email], subject, wrapHtml(body),
+          `Approved for ${eventTitle} on ${dateStr}.\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
+      } else if (status === 'declined') {
+        const subject = `About your Vendor Day application`
+        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center.</p>`
+        await sendResendEmail([v.email], subject, wrapHtml(body),
+          `About your Vendor Day application: not approved this time.`)
+      } else {
+        return json({ ok: true, skipped: 'not a notify-worthy status' })
+      }
+      return json({ ok: true, sent: ['vendor'] })
     }
 
     return json({ error: `unknown type: ${type}` }, 400)

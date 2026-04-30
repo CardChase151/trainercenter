@@ -2746,113 +2746,155 @@ function photoUrl(path) {
   return `${base}/storage/v1/object/public/vendor-media/${path}`;
 }
 
-// ─── Vendor Apply Page ────────────────────────────────────
-// Email-only entry point. Sends a magic link; user lands on /vendors/dashboard
-// where the onboarding form fires for first-time vendors.
-function VendorApplyPage({ isMobile }) {
+// ─── Password Auth Card (shared by vendor + member flows) ─
+// Standard email + password signup or login. Uses Supabase auth with email
+// confirmation disabled in project settings, so signUp returns a session
+// immediately. Toggle between Create account / Log in modes.
+function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess }) {
+  const [mode, setMode] = useState('signup'); // 'signup' | 'login'
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email.trim()) return;
-    setLoading(true);
+    if (!email.trim() || !password) return;
+    setSubmitting(true);
     setError('');
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/vendors/dashboard`,
-        shouldCreateUser: true,
-      },
-    });
-    setLoading(false);
-    if (authError) {
-      setError(authError.message);
+    const cleanEmail = email.trim().toLowerCase();
+    let result;
+    if (mode === 'signup') {
+      result = await supabase.auth.signUp({ email: cleanEmail, password });
+    } else {
+      result = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+    }
+    setSubmitting(false);
+    if (result.error) {
+      setError(result.error.message);
       return;
     }
-    setSent(true);
+    if (!result.data.session) {
+      // signUp without a session usually means the email already exists.
+      setError('Email already has an account. Try logging in instead.');
+      setMode('login');
+      return;
+    }
+    onSuccess({ isNew: mode === 'signup', user: result.data.user });
   };
 
+  const accentColor = accent === 'green' ? '#16a34a' : '#C8102E';
+  const inputCss = {
+    width: '100%', padding: '12px 14px', fontSize: '1rem',
+    border: '1px solid #ddd', borderRadius: '10px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <button type="button" onClick={() => { setMode('signup'); setError(''); }} style={{
+          flex: 1, padding: '10px', borderRadius: '8px',
+          backgroundColor: mode === 'signup' ? accentColor : '#fff',
+          color: mode === 'signup' ? '#fff' : '#666',
+          border: mode === 'signup' ? 'none' : '1px solid #ddd',
+          fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer'
+        }}>Create account</button>
+        <button type="button" onClick={() => { setMode('login'); setError(''); }} style={{
+          flex: 1, padding: '10px', borderRadius: '8px',
+          backgroundColor: mode === 'login' ? accentColor : '#fff',
+          color: mode === 'login' ? '#fff' : '#666',
+          border: mode === 'login' ? 'none' : '1px solid #ddd',
+          fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer'
+        }}>Log in</button>
+      </div>
+
+      <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 18px 0' }}>
+        {mode === 'signup' ? signupCopy : loginCopy}
+      </p>
+
+      <label style={labelCss}>Email</label>
+      <input type="email" required placeholder="you@example.com"
+        value={email} onChange={e => setEmail(e.target.value)} style={inputCss} />
+
+      <label style={labelCss}>Password</label>
+      <div style={{ position: 'relative', marginBottom: '18px' }}>
+        <input type={showPw ? 'text' : 'password'} required
+          placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
+          minLength={6}
+          value={password} onChange={e => setPassword(e.target.value)}
+          style={{ ...inputCss, marginBottom: 0, paddingRight: '70px' }}
+        />
+        <button type="button" onClick={() => setShowPw(s => !s)} style={{
+          position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#888', fontSize: '0.8rem', fontWeight: '600', padding: '4px 10px'
+        }}>{showPw ? 'Hide' : 'Show'}</button>
+      </div>
+
+      {error && (
+        <div style={{
+          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+          borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
+          fontSize: '0.85rem', color: '#dc2626',
+          display: 'flex', alignItems: 'center', gap: '8px'
+        }}>
+          <AlertCircle size={16} />
+          <span style={{ flex: 1 }}>{error}</span>
+        </div>
+      )}
+
+      <button type="submit" disabled={submitting} style={{
+        width: '100%', padding: '14px',
+        backgroundColor: submitting ? '#999' : accentColor, color: '#fff',
+        border: 'none', borderRadius: '10px',
+        fontSize: '1rem', fontWeight: '700',
+        cursor: submitting ? 'wait' : 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+      }}>
+        {submitting
+          ? <><Loader2 size={18} className="spin" /> {mode === 'signup' ? 'Creating account...' : 'Logging in...'}</>
+          : <>{mode === 'signup' ? 'Create account' : 'Log in'} <ArrowRight size={18} /></>
+        }
+      </button>
+    </form>
+  );
+}
+
+// ─── Vendor Apply Page ────────────────────────────────────
+// Email + password signup. After auth, user lands on /vendors/dashboard
+// where the onboarding form fires for first-time vendors.
+function VendorApplyPage({ isMobile }) {
+  const navigate = useNavigateInternal();
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title="Apply to Vend" subtitle="Enter your email to get started or log back in" />
+        <SectionHeader title="Apply to Vend" subtitle="Create an account or log back in" />
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '36px',
         }}>
-          {sent ? (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: '56px', height: '56px', borderRadius: '14px',
-                backgroundColor: '#f0fdf4', display: 'inline-flex',
-                alignItems: 'center', justifyContent: 'center', marginBottom: '16px'
-              }}>
-                <CheckCircle2 size={28} color="#16a34a" />
-              </div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 8px 0' }}>
-                Check your email
-              </h3>
-              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
-                We sent a link to <strong>{email}</strong>. Click it to continue. The link expires in an hour.
-              </p>
-              <p style={{ fontSize: '0.85rem', color: '#999', marginTop: '20px' }}>
-                Did not get it? Check spam, or <button onClick={() => setSent(false)} style={{ background: 'none', border: 'none', color: '#C8102E', cursor: 'pointer', padding: 0, fontWeight: '600', textDecoration: 'underline', fontSize: 'inherit' }}>try a different email</button>.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: '0 0 20px 0' }}>
-                First time? You will fill out the full application after you click the email link. Returning vendor? Same email gets you straight back to your dashboard.
-              </p>
-              <label style={{ fontSize: '0.75rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</label>
-              <input
-                type="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                style={{
-                  width: '100%', padding: '12px 14px', fontSize: '1rem',
-                  border: '1px solid #ddd', borderRadius: '10px',
-                  marginTop: '6px', marginBottom: '20px', boxSizing: 'border-box'
-                }}
-              />
-              {error && (
-                <div style={{
-                  backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-                  borderRadius: '8px', padding: '10px 12px', marginBottom: '16px',
-                  fontSize: '0.85rem', color: '#dc2626',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}>
-                  <AlertCircle size={16} />
-                  {error}
-                </div>
-              )}
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: '100%', padding: '14px',
-                  backgroundColor: loading ? '#999' : '#C8102E', color: '#fff',
-                  border: 'none', borderRadius: '10px',
-                  fontSize: '1rem', fontWeight: '700',
-                  cursor: loading ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                }}
-              >
-                {loading ? <><Loader2 size={18} className="spin" /> Sending...</> : <>Send magic link <ArrowRight size={18} /></>}
-              </button>
-            </form>
-          )}
+          <PasswordAuthCard
+            accent="red"
+            signupCopy="New here? Create your vendor account in seconds. Right after, you'll fill out a one-time application Chef will review."
+            loginCopy="Already a vendor? Log back in to apply for upcoming Vendor Days."
+            onSuccess={() => navigate('/vendors/dashboard')}
+          />
         </div>
       </div>
     </PageWrapper>
   );
+}
+
+// Tiny helper so we can navigate after auth without dragging useNavigate
+// imports through (avoids changing the existing react-router imports).
+function useNavigateInternal() {
+  return (path) => { window.location.href = path; };
 }
 
 // ─── Vendor Dashboard Page ────────────────────────────────
@@ -3286,6 +3328,8 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
       return;
     }
     onComplete(data);
+    // Welcome email (fire-and-forget)
+    sendVendorEmail({ type: 'vendor_welcome', vendor_id: data.id });
   };
 
   const inputCss = {
@@ -3814,90 +3858,39 @@ function VendorReviewPage({ isMobile }) {
   );
 }
 
-// Stage 1: magic-link signup gate
+// Stage 1: password signup gate (for members)
 function ReviewSignupGate({ isMobile }) {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setLoading(true);
-    setError('');
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/vendors/review`,
-        shouldCreateUser: true,
-      },
-    });
-    setLoading(false);
-    if (authError) {
-      setError(authError.message);
-      return;
-    }
-    setSent(true);
-  };
-
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title="Vote for Your Favorite Vendors" subtitle="Quick signup — used only to log your vote" />
+        <SectionHeader title="Vote for Your Favorite Vendors" subtitle="Create a quick account — used only to log your vote" />
         <div style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '32px',
         }}>
-          {sent ? (
-            <div style={{ textAlign: 'center' }}>
-              <CheckCircle2 size={28} color="#16a34a" />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '12px 0 6px 0' }}>Check your email</h3>
-              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
-                Sent a link to <strong>{email}</strong>. Click it to come back here and vote.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit}>
-              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: '0 0 18px 0' }}>
-                Drop your email — we send a one-tap login link. Voting is open at Trainer Center during today's Vendor Day.
-              </p>
-              <input
-                type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                style={{
-                  width: '100%', padding: '12px 14px', fontSize: '1rem',
-                  border: '1px solid #ddd', borderRadius: '10px',
-                  marginBottom: '16px', boxSizing: 'border-box'
-                }}
-              />
-              {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
-              <button type="submit" disabled={loading} style={{
-                width: '100%', padding: '14px',
-                backgroundColor: loading ? '#999' : '#16a34a', color: '#fff',
-                border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700',
-                cursor: loading ? 'wait' : 'pointer'
-              }}>
-                {loading ? 'Sending...' : 'Send magic link'}
-              </button>
-            </form>
-          )}
+          <PasswordAuthCard
+            accent="green"
+            signupCopy="New here? Make a quick account so we can record your vote. Voting opens at the shop during today's Vendor Day."
+            loginCopy="Coming back to vote? Log in with the email and password you used before."
+            onSuccess={() => { /* parent VendorReviewPage detects new session and advances */ }}
+          />
         </div>
       </div>
     </PageWrapper>
   );
 }
 
-// Stage 2: minimal member onboarding (just first name)
+// Stage 2: minimal member onboarding (first name, last name, email is implicit)
 function MemberOnboardingForm({ isMobile, session, onComplete }) {
   const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!firstName.trim()) {
-      setError('A first name helps Chef recognize you at the shop.');
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('First and last name both required.');
       return;
     }
     setSubmitting(true);
@@ -3908,6 +3901,7 @@ function MemberOnboardingForm({ isMobile, session, onComplete }) {
         user_id: session.user.id,
         email: session.user.email,
         first_name: firstName.trim(),
+        last_name: lastName.trim(),
       })
       .select()
       .single();
@@ -3921,24 +3915,38 @@ function MemberOnboardingForm({ isMobile, session, onComplete }) {
     sendVendorEmail({ type: 'member_welcome', member_id: data.id });
   };
 
+  const inputCss = {
+    width: '100%', padding: '12px 14px', fontSize: '1rem',
+    border: '1px solid #ddd', borderRadius: '10px',
+    marginBottom: '12px', boxSizing: 'border-box'
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '480px', margin: '0 auto' }}>
-        <SectionHeader title="One quick thing" subtitle="What should we call you?" />
+        <SectionHeader title="One quick thing" subtitle="Set up your Trainer Center account" />
         <form onSubmit={handleSubmit} style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '32px',
         }}>
+          <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+            Signed in as <strong>{session.user.email}</strong>. We just need your name to finish.
+          </p>
+          <label style={labelCss}>First name</label>
           <input
             value={firstName}
             onChange={e => setFirstName(e.target.value)}
             placeholder="First name"
             autoFocus
-            style={{
-              width: '100%', padding: '12px 14px', fontSize: '1rem',
-              border: '1px solid #ddd', borderRadius: '10px',
-              marginBottom: '16px', boxSizing: 'border-box'
-            }}
+            style={{ ...inputCss, marginTop: '6px' }}
+          />
+          <label style={labelCss}>Last name</label>
+          <input
+            value={lastName}
+            onChange={e => setLastName(e.target.value)}
+            placeholder="Last name"
+            style={{ ...inputCss, marginTop: '6px', marginBottom: '16px' }}
           />
           {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
           <button type="submit" disabled={submitting} style={{
@@ -4840,7 +4848,7 @@ function StaffVendorsPage({ isMobile, staff }) {
       supabase.from('vendor_attendance').select('*'),
       // Member visits joined with member + attributed vendor
       supabase.from('member_event_visits')
-        .select('*, member:members(id, first_name, email), attributed_vendor:vendors(id, name), event:events(id, title, event_date)')
+        .select('*, member:members(id, first_name, last_name, email), attributed_vendor:vendors(id, name), event:events(id, title, event_date)')
         .order('checked_in_at', { ascending: false })
         .limit(200),
     ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes]) => {
@@ -5078,7 +5086,7 @@ function MembersAndFeedbackTab({ visits, voteCounts, events, isMobile }) {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
                           <div>
-                            <strong>{v.member?.first_name || 'Member'}</strong>
+                            <strong>{[v.member?.first_name, v.member?.last_name].filter(Boolean).join(' ') || 'Member'}</strong>
                             {v.member?.email && <span style={{ color: '#888' }}> · {v.member.email}</span>}
                             {!v.geo_verified && (
                               <span style={{
