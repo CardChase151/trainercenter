@@ -209,6 +209,34 @@ const SiteContext = createContext({
 });
 const useSite = () => useContext(SiteContext);
 
+// ─── Auth Context ─────────────────────────────────────────
+// Single source of truth for "who is this person and what roles do they
+// have right now." App subscribes to supabase.auth.onAuthStateChange ONCE
+// at root and fetches profile + vendor + member rows in parallel on every
+// session change. Dashboards (VendorDashboardPage, VendorReviewPage) and
+// the lock icon all consume this instead of running their own listeners,
+// so navigation between routes is instant (no per-page session refetch).
+//
+// Roles layer on top of one auth.users account:
+//   profiles.is_admin = true → Staff (can edit)
+//   row in vendors            → Vendor
+//   row in members            → Guest (UI term; DB stays "members")
+// The same person can be all three.
+const AuthContext = createContext({
+  session: null,
+  user: null,
+  profile: null,
+  vendor: null,
+  member: null,
+  isAdmin: false,
+  isVendor: false,
+  isGuest: false,
+  isLoading: true,
+  signOut: async () => {},
+  refresh: async () => {},
+});
+const useAuth = () => useContext(AuthContext);
+
 // Resolve which special_hours entry (if any) covers a given YYYY-MM-DD.
 // Returns the row, or null if no override applies.
 function specialHoursForDate(specialHours, isoDate) {
@@ -2674,7 +2702,9 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
   // Derive weekly schedule from recurring weekly events
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const DAY_ORDER = [0, 2, 3, 4, 5, 6]; // Sun, Tue, Wed, Thu, Fri, Sat (skip Mon)
+  // Weekly themes run Tue → Sun (Mon is closed; Sun goes last so the row
+  // doesn't have a visual gap where Monday would sit).
+  const DAY_ORDER = [2, 3, 4, 5, 6, 0]; // Tue, Wed, Thu, Fri, Sat, Sun
   const weeklyEvents = events
     .filter(ev => ev.recurrence === 'weekly')
     .map(ev => {
@@ -3632,42 +3662,15 @@ function useNavigateInternal() {
 //   2. Logged in but no vendor row → onboarding form (collect full profile)
 //   3. Logged in with vendor row → normal dashboard with event apply/check-in
 function VendorDashboardPage({ isMobile }) {
-  const { isAdmin } = useSite();
-  const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [vendor, setVendor] = useState(null);
-  const [vendorLoading, setVendorLoading] = useState(true);
+  // Single source of truth for auth + roles. No local session/vendor
+  // listeners -- they live at App root via AuthContext now, so navigating
+  // away and back is instant (no per-page session refetch).
+  const { user, vendor, isAdmin, isLoading: authRolesLoading, signOut, refresh: refreshAuth } = useAuth();
+  const session = user ? { user } : null; // shape compatibility with downstream forms
+  const authReady = !authRolesLoading;
+  const vendorLoading = authRolesLoading;
   const [events, setEvents] = useState([]);
   const [applications, setApplications] = useState({}); // keyed by event_id
-
-  // Watch auth state
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setAuthReady(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
-      setSession(s);
-      setAuthReady(true);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch vendor row when session changes
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setVendor(null);
-      setVendorLoading(false);
-      return;
-    }
-    setVendorLoading(true);
-    supabase.from('vendors').select('*').eq('user_id', session.user.id).maybeSingle()
-      .then(({ data, error }) => {
-        if (error) console.error('[VendorDashboard] vendor fetch error', error);
-        setVendor(data);
-        setVendorLoading(false);
-      });
-  }, [session?.user?.id]);
 
   // Fetch Vendor Day events (recent + upcoming) + applications + attendance
   // Past 14 days included so vendors can upload content after the event.
@@ -3705,8 +3708,7 @@ function VendorDashboardPage({ isMobile }) {
   }, [vendor?.id]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setVendor(null);
+    await signOut();
   };
 
   // ─── State 1: not logged in ───────────────────
@@ -3743,7 +3745,7 @@ function VendorDashboardPage({ isMobile }) {
 
   // ─── State 2: logged in but no vendor row → onboarding ───
   if (authReady && session && !vendorLoading && !vendor) {
-    return <VendorOnboardingForm isMobile={isMobile} session={session} onComplete={(v) => setVendor(v)} />;
+    return <VendorOnboardingForm isMobile={isMobile} session={session} onComplete={() => refreshAuth()} />;
   }
 
   // ─── State 3 (or loading): vendor dashboard ──────────────
@@ -4597,40 +4599,17 @@ const VOTE_CATEGORIES = [
 ];
 
 function VendorReviewPage({ isMobile }) {
-  const { isAdmin } = useSite();
-  const [session, setSession] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [member, setMember] = useState(null);
-  const [memberLoading, setMemberLoading] = useState(true);
+  // Single source of truth for auth + roles via AuthContext (no per-page
+  // session listener -- navigating between routes stays instant).
+  const { user, member, isAdmin, isLoading: authRolesLoading, refresh: refreshAuth } = useAuth();
+  const session = user ? { user } : null;
+  const authReady = !authRolesLoading;
+  const memberLoading = authRolesLoading;
   const [todayEvent, setTodayEvent] = useState(null);
   const [eventLoading, setEventLoading] = useState(true);
   const [visit, setVisit] = useState(null);
   const [vendorsForEvent, setVendorsForEvent] = useState([]);
   const [existingVotes, setExistingVotes] = useState({}); // keyed by category
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setAuthReady(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch member row
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setMember(null);
-      setMemberLoading(false);
-      return;
-    }
-    setMemberLoading(true);
-    supabase.from('members').select('*').eq('user_id', session.user.id).maybeSingle()
-      .then(({ data }) => {
-        setMember(data);
-        setMemberLoading(false);
-      });
-  }, [session?.user?.id]);
 
   // Fetch today's Vendor Day event (if any)
   useEffect(() => {
@@ -4681,7 +4660,7 @@ function VendorReviewPage({ isMobile }) {
 
   // ─── Stage 2: logged in but no member row ────
   if (authReady && session && !memberLoading && !member) {
-    return <MemberOnboardingForm isMobile={isMobile} session={session} onComplete={(m) => setMember(m)} />;
+    return <MemberOnboardingForm isMobile={isMobile} session={session} onComplete={() => refreshAuth()} />;
   }
 
   // ─── Loading state ───────────────────────────
@@ -6854,8 +6833,13 @@ function App() {
   const [navVisible, setNavVisible] = useState(false);
   const [staffUser, setStaffUser] = useState(null);
   const [staffProfile, setStaffProfile] = useState(null);
+  const [vendor, setVendor] = useState(null);
+  const [member, setMember] = useState(null);
+  const [authRolesLoading, setAuthRolesLoading] = useState(true);
   const profileFetchRef = useRef(null);
   const isAdmin = !!staffProfile?.is_admin;
+  const isVendor = !!vendor;
+  const isGuest = !!member;
   // Compact "current staff" object passed down to the calendar so the
   // EventModal can stamp created_by / updated_by on saves.
   const staff = staffUser?.id && staffProfile
@@ -6922,40 +6906,64 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch staff profile in a SEPARATE effect, watching staffUser?.id.
-  // Source of truth for is_admin lives in public.profiles, not the JWT,
-  // so admin changes take effect on next fetch with no re-login required.
+  // Fetch profile + vendor + member rows in a SEPARATE effect, watching
+  // staffUser?.id. Runs in parallel so a single login surfaces all three
+  // role rows at once. Source of truth for is_admin lives in public.profiles,
+  // not the JWT, so admin changes take effect on next fetch with no re-login.
+  const refreshAuthRoles = useCallback(async () => {
+    if (!staffUser?.id) {
+      setStaffProfile(null);
+      setVendor(null);
+      setMember(null);
+      setAuthRolesLoading(false);
+      return;
+    }
+    setAuthRolesLoading(true);
+    const [pRes, vRes, mRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', staffUser.id).maybeSingle(),
+      supabase.from('vendors').select('*').eq('user_id', staffUser.id).maybeSingle(),
+      supabase.from('members').select('*').eq('user_id', staffUser.id).maybeSingle(),
+    ]);
+    if (pRes.error) console.error('Profile fetch error:', pRes.error.message);
+    if (vRes.error) console.error('Vendor fetch error:', vRes.error.message);
+    if (mRes.error) console.error('Member fetch error:', mRes.error.message);
+    setStaffProfile(pRes.data || null);
+    setVendor(vRes.data || null);
+    setMember(mRes.data || null);
+    setAuthRolesLoading(false);
+  }, [staffUser?.id]);
+
   useEffect(() => {
     if (!staffUser?.id) {
       setStaffProfile(null);
+      setVendor(null);
+      setMember(null);
+      setAuthRolesLoading(false);
       return;
     }
-
     if (profileFetchRef.current) profileFetchRef.current.cancelled = true;
     const fetchState = { cancelled: false };
     profileFetchRef.current = fetchState;
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-    );
-
-    Promise.race([
-      supabase.from('profiles').select('*').eq('id', staffUser.id).single(),
-      timeoutPromise
-    ])
-      .then(({ data, error } = {}) => {
-        if (fetchState.cancelled) return;
-        if (error) {
-          console.error('Profile fetch error:', error.message);
-          setStaffProfile(null);
-        } else {
-          setStaffProfile(data);
-        }
-      })
-      .catch((err) => {
-        if (!fetchState.cancelled) console.error('Profile fetch failed:', err.message);
-      });
-
+    setAuthRolesLoading(true);
+    Promise.all([
+      supabase.from('profiles').select('*').eq('id', staffUser.id).maybeSingle(),
+      supabase.from('vendors').select('*').eq('user_id', staffUser.id).maybeSingle(),
+      supabase.from('members').select('*').eq('user_id', staffUser.id).maybeSingle(),
+    ]).then(([pRes, vRes, mRes]) => {
+      if (fetchState.cancelled) return;
+      if (pRes.error) console.error('Profile fetch error:', pRes.error.message);
+      if (vRes.error) console.error('Vendor fetch error:', vRes.error.message);
+      if (mRes.error) console.error('Member fetch error:', mRes.error.message);
+      setStaffProfile(pRes.data || null);
+      setVendor(vRes.data || null);
+      setMember(mRes.data || null);
+      setAuthRolesLoading(false);
+    }).catch((err) => {
+      if (!fetchState.cancelled) {
+        console.error('Auth role fetch failed:', err.message);
+        setAuthRolesLoading(false);
+      }
+    });
     return () => { fetchState.cancelled = true; };
   }, [staffUser?.id]);
 
@@ -6963,10 +6971,27 @@ function App() {
     await supabase.auth.signOut();
     setStaffUser(null);
     setStaffProfile(null);
+    setVendor(null);
+    setMember(null);
+  };
+
+  const authValue = {
+    session: staffUser ? { user: staffUser } : null,
+    user: staffUser,
+    profile: staffProfile,
+    vendor,
+    member,
+    isAdmin,
+    isVendor,
+    isGuest,
+    isLoading: authRolesLoading,
+    signOut: handleLogout,
+    refresh: refreshAuthRoles,
   };
 
   return (
     <SiteContext.Provider value={{ siteSettings, specialHours, isAdmin, refresh: fetchSiteData }}>
+    <AuthContext.Provider value={authValue}>
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#f8f8f8',
@@ -7166,6 +7191,7 @@ function App() {
         }
       `}</style>
     </div>
+    </AuthContext.Provider>
     </SiteContext.Provider>
   );
 }
