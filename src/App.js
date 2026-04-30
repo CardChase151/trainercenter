@@ -141,20 +141,38 @@ function StaffLogin({ onClose, onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showVendorLink, setShowVendorLink] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setError(error.message);
+    setShowVendorLink(false);
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      setError(authError.message);
       setLoading(false);
-    } else {
-      onLogin();
-      onClose();
+      return;
     }
+    // Auth succeeded -- now gate on is_admin. Non-admins are signed back
+    // out so they don't end up in a half-authenticated state.
+    const userId = data?.user?.id;
+    let isAdmin = false;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles').select('is_admin').eq('id', userId).maybeSingle();
+      isAdmin = !!profile?.is_admin;
+    }
+    if (!isAdmin) {
+      await supabase.auth.signOut();
+      setError("That email isn't on the staff list.");
+      setShowVendorLink(true);
+      setLoading(false);
+      return;
+    }
+    onLogin();
+    onClose();
   };
 
   return (
@@ -183,7 +201,23 @@ function StaffLogin({ onClose, onLogin }) {
               borderRadius: '8px', marginBottom: '16px', boxSizing: 'border-box', outline: 'none'
             }}
           />
-          {error && <p style={{ color: '#C8102E', fontSize: '0.8rem', margin: '0 0 12px 0' }}>{error}</p>}
+          {error && (
+            <div style={{ margin: '0 0 12px 0' }}>
+              <p style={{ color: '#C8102E', fontSize: '0.8rem', margin: '0 0 4px 0' }}>{error}</p>
+              {showVendorLink && (
+                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
+                  Are you a vendor?{' '}
+                  <Link
+                    to="/vendors/dashboard"
+                    onClick={onClose}
+                    style={{ color: '#C8102E', fontWeight: 700, textDecoration: 'none' }}
+                  >
+                    Vendor sign-in →
+                  </Link>
+                </p>
+              )}
+            </div>
+          )}
           <button type="submit" disabled={loading} style={{
             width: '100%', padding: '12px', backgroundColor: '#C8102E', color: '#fff',
             border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem',
@@ -3280,7 +3314,7 @@ function VendorsPage({ isMobile, staff }) {
               padding: '12px 24px', borderRadius: '10px',
               fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
             }}>
-              Review Vendors
+              Sign in as Guest to Review
             </Link>
             <Link to="/vendors/dashboard" style={{
               display: 'inline-flex', alignItems: 'center', gap: '8px',
@@ -4733,19 +4767,21 @@ function VendorReviewPage({ isMobile }) {
   );
 }
 
-// Stage 1: password signup gate (for members)
+// Stage 1: password signup gate for guests (members in DB).
+// "Guest" is the public-facing term for someone signing up to attend a
+// Vendor Day and review the vendors. The DB still uses `members`.
 function ReviewSignupGate({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title="Vote for Your Favorite Vendors" subtitle="Create a quick account — used only to log your vote" />
+        <SectionHeader title="Sign in as a Guest" subtitle="Create a quick account so you can review vendors at today's Vendor Day" />
         <div style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '32px',
         }}>
           <PasswordAuthCard
             accent="green"
-            signupCopy="New here? Make a quick account so we can record your vote. Voting opens at the shop during today's Vendor Day."
+            signupCopy="New here? Make a quick guest account so we can record your votes. Voting opens at the shop during today's Vendor Day."
             loginCopy="Coming back to vote? Log in with the email and password you used before."
             onSuccess={() => { /* parent VendorReviewPage detects new session and advances */ }}
           />
@@ -4812,13 +4848,13 @@ function MemberOnboardingForm({ isMobile, session, onComplete }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '480px', margin: '0 auto' }}>
-        <SectionHeader title="One quick thing" subtitle="Set up your Trainer Center HB account" />
+        <SectionHeader title="One quick thing" subtitle="Set up your Trainer Center HB guest account" />
         <form onSubmit={handleSubmit} style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '32px',
         }}>
           <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
-            Signed in as <strong>{session.user.email}</strong>. We just need your name to finish.
+            Signed in as <strong>{session.user.email}</strong>. We just need your name to finish setting up your guest profile.
           </p>
           <label style={labelCss}>First name</label>
           <input
@@ -7150,6 +7186,9 @@ function App() {
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
         <Route path="/vendors/upload/:eventId" element={<VendorUploadPage isMobile={isMobile} />} />
         <Route path="/vendors/review" element={<VendorReviewPage isMobile={isMobile} />} />
+        {/* Guest-facing alias for the same review/voting flow. DB still uses members. */}
+        <Route path="/guest/dashboard" element={<VendorReviewPage isMobile={isMobile} />} />
+        <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
