@@ -74,6 +74,14 @@ const ROUTES = [
     keywords: "Pokemon card blog, Pokemon collecting tips, Pokemon grading guide, Pokemon card value, Pokemon TCG tips",
     h1: "Trainer Center Blog - Pokemon Card Tips & Guides",
     body: "Expert Pokemon card content from California's only Pokemon-exclusive store. Guides on grading, collecting, pricing, fake card detection, and more."
+  },
+  {
+    slug: 'vendors',
+    title: "Vendor Day | Trainer Center | Apply to Vend Pokemon Cards in Huntington Beach",
+    description: "Set up a table at Trainer Center's monthly Vendor Day. Last Friday of every month. Apply online to vend Pokemon singles, sealed, slabs, vintage, and Japanese imports. Huntington Beach, CA.",
+    keywords: "Pokemon vendor, vendor day Pokemon, sell Pokemon cards Orange County, Pokemon swap meet California, vendor application Pokemon shop, Pokemon table vendor Huntington Beach",
+    h1: "Vendor Day at Trainer Center",
+    body: "Vendor Day at Trainer Center in Huntington Beach happens the last Friday of every month. Pokemon vendors set up tables and bring their singles, sealed product, slabs, vintage cards, and Japanese imports to trade and sell with collectors and walk-in customers. Apply once and return every month with a quick re-apply. After each event, attending vendors share photos and short clips from their tables, featured directly on this page. Approved vendors check in on event day and the community sees who is bringing what. Located at 4911 Warner Ave #210, Huntington Beach, CA 92649. Call (714) 951-9100 to ask about Vendor Day, or apply to vend through this page."
   }
 ];
 

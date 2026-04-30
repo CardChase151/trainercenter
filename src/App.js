@@ -3,7 +3,8 @@ import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon } from 'lucide-react';
+import * as tus from 'tus-js-client';
 import './App.css';
 
 const IgIcon = ({ size = 16 }) => (
@@ -201,6 +202,7 @@ const CATEGORIES = {
   trade_night: { label: 'Trade Night', color: '#C8102E' },
   tournament: { label: 'Tournament', color: '#2563eb' },
   big_event: { label: 'Big Event', color: '#7c3aed' },
+  vendor_day: { label: 'Vendor Day', color: '#16a34a' },
   other: { label: 'Other', color: '#ea580c' }
 };
 
@@ -2455,10 +2457,2948 @@ function BlogPostPage({ isMobile }) {
   );
 }
 
+// ─── Vendors Page ─────────────────────────────────────────
+function VendorsPage({ isMobile, staff }) {
+  const isAdmin = !!staff?.isAdmin;
+  const [submissions, setSubmissions] = useState([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [winners, setWinners] = useState(null);
+
+  useEffect(() => {
+    supabase
+      .from('vendor_submissions')
+      .select('*, vendor:vendors(id, name, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
+      .eq('visible', true)
+      .order('submitted_at', { ascending: false })
+      .limit(24)
+      .then(({ data, error }) => {
+        if (error) console.error('[VendorsPage] feed fetch', error);
+        setSubmissions(data || []);
+        setFeedLoading(false);
+      });
+
+    // Fetch last Vendor Day winners (most recent past event with at least one vote)
+    supabase.rpc('get_last_voted_vendor_day').then(async ({ data }) => {
+      if (!data || data.length === 0) return;
+      const ev = data[0];
+      const { data: w } = await supabase.rpc('get_event_winners', { p_event_id: ev.event_id });
+      if (w && w.length > 0) setWinners({ event: ev, winners: w });
+    });
+  }, []);
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Vendors" subtitle="Last-Friday Vendor Day at Trainer Center" />
+
+        {/* Intro + Apply CTA */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '40px',
+          maxWidth: '900px',
+          margin: '0 auto 32px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '12px',
+              backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Users size={24} color="#16a34a" />
+            </div>
+            <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+              Vendor Day at Trainer Center
+            </h3>
+          </div>
+
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
+            Every last Friday of the month, Pokemon vendors set up tables at Trainer Center, Huntington Beach. Bring your singles, sealed product, slabs, vintage, Japanese imports - whatever you specialize in. Trade with collectors, sell to walk-ins, and connect with the community.
+          </p>
+          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
+            Apply once, return every month with two clicks. After each event, share photos and a short clip from your table - we feature recent vendor posts right here on the page.
+          </p>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            <Link to="/vendors/apply" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              backgroundColor: '#C8102E', color: '#fff',
+              padding: '12px 24px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+            }}>
+              Apply to Vend
+            </Link>
+            <Link to="/vendors/review" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              backgroundColor: '#16a34a', color: '#fff',
+              padding: '12px 24px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+            }}>
+              Review Vendors
+            </Link>
+            <Link to="/vendors/dashboard" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              backgroundColor: '#fff', color: '#1a1a1a',
+              padding: '12px 24px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
+              border: '1px solid #ddd'
+            }}>
+              Vendor Login
+            </Link>
+            {isAdmin && (
+              <Link to="/staff/vendors" style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#1a1a1a', color: '#fff',
+                padding: '12px 24px', borderRadius: '10px',
+                fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+              }}>
+                Manage Vendors
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* Last Vendor Day winners */}
+        {winners && (
+          <div style={{ maxWidth: '1100px', margin: '0 auto 36px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
+              Last Vendor Day Winners
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: '#888', margin: '0 0 16px 0' }}>
+              {winners.event.event_title || 'Vendor Day'} · {new Date(winners.event.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            </p>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+              gap: '14px'
+            }}>
+              {VOTE_CATEGORIES.map(c => {
+                const w = winners.winners.find(x => x.category === c.key);
+                return (
+                  <div key={c.key} style={{
+                    backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+                    padding: '20px', textAlign: 'center'
+                  }}>
+                    <div style={{
+                      fontSize: '0.7rem', color: '#16a34a', fontWeight: '800',
+                      textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px'
+                    }}>
+                      {c.label}
+                    </div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '4px' }}>
+                      {w ? w.vendor_name : '—'}
+                    </div>
+                    {w && (
+                      <div style={{ fontSize: '0.78rem', color: '#888' }}>
+                        {w.vote_count} {w.vote_count === 1 ? 'vote' : 'votes'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Recent vendor submissions feed */}
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            Recent Vendor Posts
+          </h3>
+          {feedLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#999' }}>
+              <Loader2 size={20} className="spin" />
+            </div>
+          ) : submissions.length === 0 ? (
+            <div style={{
+              backgroundColor: '#fafafa',
+              border: '1px dashed #ddd',
+              borderRadius: '12px',
+              padding: '40px 24px',
+              textAlign: 'center',
+              color: '#888',
+              fontSize: '0.9rem'
+            }}>
+              Vendor posts from past Vendor Days will appear here once vendors start uploading after events.
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '16px'
+            }}>
+              {submissions.map(sub => (
+                <VendorSubmissionCard key={sub.id} submission={sub} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor submission card on public feed ────────────────
+function VendorSubmissionCard({ submission }) {
+  const v = submission.vendor || {};
+  const ev = submission.event || {};
+  const media = (submission.media || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const photos = media.filter(m => m.kind === 'photo');
+  const video = media.find(m => m.kind === 'video');
+  const dateStr = ev.event_date
+    ? new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+      overflow: 'hidden', display: 'flex', flexDirection: 'column'
+    }}>
+      {/* Media area */}
+      {video ? (
+        <div style={{ position: 'relative', paddingTop: '56.25%', backgroundColor: '#000' }}>
+          <iframe
+            src={`https://iframe.mediadelivery.net/embed/${process.env.REACT_APP_BUNNY_LIBRARY_ID}/${video.bunny_video_id}?autoplay=true&loop=true&muted=true&preload=true&responsive=true`}
+            loading="lazy"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            title={`Video by ${v.name}`}
+          />
+        </div>
+      ) : photos.length > 0 ? (
+        <div style={{
+          aspectRatio: '16 / 9',
+          backgroundColor: '#000',
+          backgroundImage: `url(${photoUrl(photos[0].supabase_path)})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }} />
+      ) : null}
+
+      {/* Photo strip if multiple */}
+      {photos.length > 1 && (
+        <div style={{ display: 'flex', gap: '4px', padding: '4px', backgroundColor: '#fafafa' }}>
+          {photos.slice(0, 4).map(p => (
+            <div key={p.id} style={{
+              flex: 1,
+              aspectRatio: '1 / 1',
+              backgroundImage: `url(${photoUrl(p.supabase_path)})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              borderRadius: '4px',
+              minWidth: 0
+            }} />
+          ))}
+        </div>
+      )}
+
+      {/* Body */}
+      <div style={{ padding: '14px 16px', flex: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '6px' }}>
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name}</div>
+            {v.specialty && (
+              <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
+                {v.specialty}
+              </div>
+            )}
+          </div>
+          {dateStr && (
+            <div style={{ fontSize: '0.75rem', color: '#999', whiteSpace: 'nowrap' }}>
+              {dateStr}
+            </div>
+          )}
+        </div>
+        {submission.caption && (
+          <p style={{ fontSize: '0.9rem', color: '#444', lineHeight: '1.6', margin: '8px 0 10px 0' }}>
+            {submission.caption}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
+          {v.ig_handle && (
+            <a href={`https://instagram.com/${v.ig_handle}`} target="_blank" rel="noopener noreferrer" style={socialLinkStyle}>
+              IG @{v.ig_handle}
+            </a>
+          )}
+          {v.tiktok_handle && (
+            <a href={`https://tiktok.com/@${v.tiktok_handle}`} target="_blank" rel="noopener noreferrer" style={socialLinkStyle}>
+              TikTok @{v.tiktok_handle}
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const socialLinkStyle = {
+  fontSize: '0.78rem',
+  color: '#C8102E',
+  fontWeight: '700',
+  textDecoration: 'none'
+};
+
+// Build a Supabase Storage public URL for a photo path in the vendor-media bucket.
+function photoUrl(path) {
+  if (!path) return '';
+  const base = process.env.REACT_APP_SUPABASE_URL;
+  return `${base}/storage/v1/object/public/vendor-media/${path}`;
+}
+
+// ─── Vendor Apply Page ────────────────────────────────────
+// Email-only entry point. Sends a magic link; user lands on /vendors/dashboard
+// where the onboarding form fires for first-time vendors.
+function VendorApplyPage({ isMobile }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true);
+    setError('');
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/vendors/dashboard`,
+        shouldCreateUser: true,
+      },
+    });
+    setLoading(false);
+    if (authError) {
+      setError(authError.message);
+      return;
+    }
+    setSent(true);
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
+        <SectionHeader title="Apply to Vend" subtitle="Enter your email to get started or log back in" />
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '36px',
+        }}>
+          {sent ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '14px',
+                backgroundColor: '#f0fdf4', display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center', marginBottom: '16px'
+              }}>
+                <CheckCircle2 size={28} color="#16a34a" />
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 8px 0' }}>
+                Check your email
+              </h3>
+              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
+                We sent a link to <strong>{email}</strong>. Click it to continue. The link expires in an hour.
+              </p>
+              <p style={{ fontSize: '0.85rem', color: '#999', marginTop: '20px' }}>
+                Did not get it? Check spam, or <button onClick={() => setSent(false)} style={{ background: 'none', border: 'none', color: '#C8102E', cursor: 'pointer', padding: 0, fontWeight: '600', textDecoration: 'underline', fontSize: 'inherit' }}>try a different email</button>.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: '0 0 20px 0' }}>
+                First time? You will fill out the full application after you click the email link. Returning vendor? Same email gets you straight back to your dashboard.
+              </p>
+              <label style={{ fontSize: '0.75rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</label>
+              <input
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                style={{
+                  width: '100%', padding: '12px 14px', fontSize: '1rem',
+                  border: '1px solid #ddd', borderRadius: '10px',
+                  marginTop: '6px', marginBottom: '20px', boxSizing: 'border-box'
+                }}
+              />
+              {error && (
+                <div style={{
+                  backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                  borderRadius: '8px', padding: '10px 12px', marginBottom: '16px',
+                  fontSize: '0.85rem', color: '#dc2626',
+                  display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                  <AlertCircle size={16} />
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '14px',
+                  backgroundColor: loading ? '#999' : '#C8102E', color: '#fff',
+                  border: 'none', borderRadius: '10px',
+                  fontSize: '1rem', fontWeight: '700',
+                  cursor: loading ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}
+              >
+                {loading ? <><Loader2 size={18} className="spin" /> Sending...</> : <>Send magic link <ArrowRight size={18} /></>}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor Dashboard Page ────────────────────────────────
+// Logged-in vendor home. Three states:
+//   1. Not logged in → prompt to go to /vendors/apply
+//   2. Logged in but no vendor row → onboarding form (collect full profile)
+//   3. Logged in with vendor row → normal dashboard with event apply/check-in
+function VendorDashboardPage({ isMobile }) {
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [vendor, setVendor] = useState(null);
+  const [vendorLoading, setVendorLoading] = useState(true);
+  const [events, setEvents] = useState([]);
+  const [applications, setApplications] = useState({}); // keyed by event_id
+
+  // Watch auth state
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
+      setSession(s);
+      setAuthReady(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch vendor row when session changes
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setVendor(null);
+      setVendorLoading(false);
+      return;
+    }
+    setVendorLoading(true);
+    supabase.from('vendors').select('*').eq('user_id', session.user.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error('[VendorDashboard] vendor fetch error', error);
+        setVendor(data);
+        setVendorLoading(false);
+      });
+  }, [session?.user?.id]);
+
+  // Fetch Vendor Day events (recent + upcoming) + applications + attendance
+  // Past 14 days included so vendors can upload content after the event.
+  const [attendance, setAttendance] = useState({});
+  useEffect(() => {
+    if (!vendor?.id) return;
+    const today = new Date();
+    const fourteenDaysAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const fromISO = fourteenDaysAgo.toISOString().slice(0, 10);
+    Promise.all([
+      supabase.from('events')
+        .select('*')
+        .eq('category', 'vendor_day')
+        .gte('event_date', fromISO)
+        .order('event_date', { ascending: true })
+        .limit(20),
+      supabase.from('vendor_applications')
+        .select('*')
+        .eq('vendor_id', vendor.id),
+      supabase.from('vendor_attendance')
+        .select('*')
+        .eq('vendor_id', vendor.id),
+    ]).then(([eventsRes, appsRes, attRes]) => {
+      if (eventsRes.error) console.error('[VendorDashboard] events fetch', eventsRes.error);
+      if (appsRes.error)   console.error('[VendorDashboard] applications fetch', appsRes.error);
+      if (attRes.error)    console.error('[VendorDashboard] attendance fetch', attRes.error);
+      setEvents(eventsRes.data || []);
+      const appsByEvent = {};
+      (appsRes.data || []).forEach(a => { appsByEvent[a.event_id] = a; });
+      setApplications(appsByEvent);
+      const attByEvent = {};
+      (attRes.data || []).forEach(a => { attByEvent[a.event_id] = a; });
+      setAttendance(attByEvent);
+    });
+  }, [vendor?.id]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setVendor(null);
+  };
+
+  // ─── State 1: not logged in ───────────────────
+  if (authReady && !session) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="Vendor Dashboard" subtitle="Log in to apply for upcoming Vendor Days" />
+          <div style={{
+            backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eee',
+            padding: isMobile ? '24px 20px' : '36px'
+          }}>
+            <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', marginBottom: '20px' }}>
+              You need to be logged in to see your dashboard.
+            </p>
+            <Link to="/vendors/apply" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              backgroundColor: '#C8102E', color: '#fff',
+              padding: '12px 24px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+            }}>
+              Log in / Apply
+            </Link>
+          </div>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // ─── State 2: logged in but no vendor row → onboarding ───
+  if (authReady && session && !vendorLoading && !vendor) {
+    return <VendorOnboardingForm isMobile={isMobile} session={session} onComplete={(v) => setVendor(v)} />;
+  }
+
+  // ─── State 3 (or loading): vendor dashboard ──────────────
+  if (vendorLoading || !vendor) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+          <Loader2 size={24} className="spin" /> Loading your dashboard...
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
+
+        {/* Profile summary */}
+        <div style={{
+          backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eee',
+          padding: isMobile ? '20px 16px' : '24px 28px',
+          maxWidth: '900px', margin: '0 auto 24px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap'
+        }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+              Status
+            </div>
+            <VendorStatusBadge status={vendor.status} />
+          </div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <button onClick={handleLogout} style={{
+              backgroundColor: '#fff', color: '#666',
+              padding: '10px 16px', borderRadius: '8px',
+              fontSize: '0.85rem', fontWeight: '600',
+              border: '1px solid #ddd', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: '6px'
+            }}>
+              <LogOut size={14} /> Log out
+            </button>
+          </div>
+        </div>
+
+        {/* Upcoming Vendor Days */}
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
+            Upcoming Vendor Days
+          </h3>
+          {events.filter(ev => {
+            // Hide past events the vendor never applied to
+            return !(ev.event_date < todayISO() && !applications[ev.id]);
+          }).length === 0 ? (
+            <div style={{
+              backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+              padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+            }}>
+              No Vendor Days scheduled yet. Check back soon — they happen the last Friday of every month.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {events
+                .filter(ev => !(ev.event_date < todayISO() && !applications[ev.id]))
+                .map(ev => (
+                  <VendorEventCard
+                    key={ev.id}
+                    event={ev}
+                    application={applications[ev.id]}
+                    attendance={attendance[ev.id]}
+                    vendorId={vendor.id}
+                    isFirstApplication={Object.keys(applications).length === 0}
+                    onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
+                    onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
+                    isMobile={isMobile}
+                  />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor status badge ──────────────────────────────────
+function VendorStatusBadge({ status }) {
+  const styles = {
+    pending: { bg: '#fff7ed', text: '#c2410c', label: 'Pending review' },
+    approved: { bg: '#f0fdf4', text: '#15803d', label: 'Approved vendor' },
+    suspended: { bg: '#fef2f2', text: '#991b1b', label: 'Suspended' },
+  }[status] || { bg: '#f3f4f6', text: '#374151', label: status };
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '6px',
+      backgroundColor: styles.bg, color: styles.text,
+      padding: '6px 12px', borderRadius: '20px',
+      fontSize: '0.8rem', fontWeight: '700'
+    }}>
+      {styles.label}
+    </span>
+  );
+}
+
+// ─── Per-event card on vendor dashboard ───────────────────
+function VendorEventCard({ event, application, attendance, vendorId, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState('');
+  const [showCheckIn, setShowCheckIn] = useState(false);
+
+  const eventDate = new Date(event.event_date + 'T12:00:00');
+  const dateStr = eventDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const today = todayISO();
+  const isToday = event.event_date === today;
+  const isPast = event.event_date < today;
+
+  const handleApply = async () => {
+    setApplying(true);
+    setError('');
+    const { data, error: insertError } = await supabase
+      .from('vendor_applications')
+      .insert({ vendor_id: vendorId, event_id: event.id })
+      .select()
+      .single();
+    setApplying(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    onApplied(data);
+    // Fire-and-forget: email vendor + notify staff
+    sendVendorEmail({
+      type: 'application_received',
+      application_id: data.id,
+      is_first_time: !!isFirstApplication,
+    });
+  };
+
+  // Determine the action area content for this event card based on status,
+  // attendance, and whether the event is today / past / future.
+  let actionEl = null;
+  if (!application) {
+    actionEl = (
+      <button onClick={handleApply} disabled={applying} style={{
+        backgroundColor: '#C8102E', color: '#fff',
+        padding: '10px 18px', borderRadius: '8px',
+        fontSize: '0.9rem', fontWeight: '700',
+        border: 'none', cursor: applying ? 'wait' : 'pointer'
+      }}>
+        {applying ? 'Applying...' : 'Apply for this date'}
+      </button>
+    );
+  } else if (application.status === 'pending') {
+    actionEl = <span style={{ fontSize: '0.85rem', color: '#c2410c', fontWeight: '700' }}>Pending Chef's approval</span>;
+  } else if (application.status === 'declined') {
+    actionEl = <span style={{ fontSize: '0.85rem', color: '#991b1b', fontWeight: '700' }}>Not approved this time</span>;
+  } else if (application.status === 'cancelled') {
+    actionEl = <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: '700' }}>Cancelled</span>;
+  } else if (application.status === 'approved') {
+    if (isToday && !attendance) {
+      // Event day with no check-in yet
+      actionEl = (
+        <button onClick={() => setShowCheckIn(true)} style={{
+          backgroundColor: '#16a34a', color: '#fff',
+          padding: '10px 18px', borderRadius: '8px',
+          fontSize: '0.9rem', fontWeight: '700',
+          border: 'none', cursor: 'pointer'
+        }}>
+          Check in
+        </button>
+      );
+    } else if (attendance) {
+      // Already checked in (today or past)
+      actionEl = (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+          <span style={{
+            fontSize: '0.78rem', backgroundColor: '#f0fdf4', color: '#15803d',
+            padding: '4px 10px', borderRadius: '20px', fontWeight: '700',
+            display: 'inline-flex', alignItems: 'center', gap: '4px'
+          }}>
+            <CheckCircle2 size={12} /> {attendance.geo_verified ? 'Checked in (verified)' : 'Checked in'}
+          </span>
+          <Link to={`/vendors/upload/${event.id}`} style={{
+            backgroundColor: '#1a1a1a', color: '#fff',
+            padding: '8px 14px', borderRadius: '8px',
+            fontSize: '0.8rem', fontWeight: '700',
+            textDecoration: 'none'
+          }}>
+            Upload content
+          </Link>
+        </div>
+      );
+    } else if (isPast) {
+      // Approved but didn't check in
+      actionEl = (
+        <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic' }}>
+          Did not check in
+        </span>
+      );
+    } else {
+      // Future approved
+      actionEl = <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700' }}>Approved — see you there</span>;
+    }
+  }
+
+  return (
+    <>
+      <div style={{
+        backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+        padding: isMobile ? '16px' : '20px 24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center',
+        gap: '16px', flexDirection: isMobile ? 'column' : 'row'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '40px', height: '40px', borderRadius: '10px',
+            backgroundColor: '#f0fdf4', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0
+          }}>
+            <CalendarIcon size={20} color="#16a34a" />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>
+              {event.title || 'Vendor Day'}
+              {isToday && (
+                <span style={{
+                  marginLeft: '8px', fontSize: '0.65rem', backgroundColor: '#fef2f2', color: '#dc2626',
+                  padding: '2px 8px', borderRadius: '10px', fontWeight: '800', textTransform: 'uppercase'
+                }}>
+                  Today
+                </span>
+              )}
+              {isPast && !isToday && (
+                <span style={{
+                  marginLeft: '8px', fontSize: '0.65rem', backgroundColor: '#f3f4f6', color: '#6b7280',
+                  padding: '2px 8px', borderRadius: '10px', fontWeight: '800', textTransform: 'uppercase'
+                }}>
+                  Past
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+              {dateStr}
+            </div>
+          </div>
+        </div>
+        <div>
+          {actionEl}
+          {error && <div style={{ fontSize: '0.8rem', color: '#dc2626', marginTop: '4px' }}>{error}</div>}
+        </div>
+      </div>
+      {showCheckIn && (
+        <VendorCheckInModal
+          vendorId={vendorId}
+          eventId={event.id}
+          onClose={() => setShowCheckIn(false)}
+          onCheckedIn={() => {
+            setShowCheckIn(false);
+            onCheckedIn();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Onboarding form (first-time vendor only) ─────────────
+function VendorOnboardingForm({ isMobile, session, onComplete }) {
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    ig_handle: '',
+    tiktok_handle: '',
+    fb_handle: '',
+    specialty: '',
+    bio: '',
+    heard_from: '',
+    referred_by_name: '',
+    referred_by_contact: '',
+    referred_by_handle: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    const { data, error: insertError } = await supabase
+      .from('vendors')
+      .insert({
+        user_id: session.user.id,
+        email: session.user.email,
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        ig_handle: cleanHandle(form.ig_handle),
+        tiktok_handle: cleanHandle(form.tiktok_handle),
+        fb_handle: cleanHandle(form.fb_handle),
+        specialty: form.specialty.trim() || null,
+        bio: form.bio.trim() || null,
+        heard_from: form.heard_from.trim() || null,
+        referred_by_name: form.referred_by_name.trim() || null,
+        referred_by_contact: form.referred_by_contact.trim() || null,
+        referred_by_handle: cleanHandle(form.referred_by_handle),
+      })
+      .select()
+      .single();
+    setSubmitting(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    onComplete(data);
+  };
+
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
+        <SectionHeader title="Complete Your Application" subtitle="Tell us about you so Chef can approve you" />
+        <form onSubmit={handleSubmit} style={{
+          backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '36px',
+        }}>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 24px 0' }}>
+            All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.
+          </p>
+
+          <label style={labelCss}>Your name *</label>
+          <input required value={form.name} onChange={setField('name')} placeholder="First and last" style={inputCss} />
+
+          <label style={labelCss}>Phone</label>
+          <input type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
+
+          <div style={{ height: '8px' }} />
+          <label style={labelCss}>Instagram handle</label>
+          <input value={form.ig_handle} onChange={setField('ig_handle')} placeholder="@yourhandle" style={inputCss} />
+
+          <label style={labelCss}>TikTok handle</label>
+          <input value={form.tiktok_handle} onChange={setField('tiktok_handle')} placeholder="@yourhandle" style={inputCss} />
+
+          <label style={labelCss}>Facebook page</label>
+          <input value={form.fb_handle} onChange={setField('fb_handle')} placeholder="Your page name or handle" style={inputCss} />
+
+          <div style={{ height: '8px' }} />
+          <label style={labelCss}>What you specialize in</label>
+          <select value={form.specialty} onChange={setField('specialty')} style={{ ...inputCss, cursor: 'pointer' }}>
+            <option value="">Pick one</option>
+            <option value="Singles">Singles</option>
+            <option value="Sealed">Sealed product</option>
+            <option value="Slabs">Slabs / graded</option>
+            <option value="Vintage">Vintage (Base–Neo)</option>
+            <option value="Japanese">Japanese imports</option>
+            <option value="Modern">Modern chase cards</option>
+            <option value="Mixed">Mixed inventory</option>
+          </select>
+
+          <label style={labelCss}>Short bio (shows next to your posts)</label>
+          <textarea value={form.bio} onChange={setField('bio')} rows={3} placeholder="A sentence or two about your shop or what you bring to Vendor Day" style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }} />
+
+          <div style={{ height: '8px' }} />
+          <label style={labelCss}>How did you hear about Vendor Day?</label>
+          <select value={form.heard_from} onChange={setField('heard_from')} style={{ ...inputCss, cursor: 'pointer' }}>
+            <option value="">Pick one</option>
+            <option value="trainer_center_customer">I shop at Trainer Center</option>
+            <option value="word_of_mouth">Word of mouth</option>
+            <option value="social_media">Social media</option>
+            <option value="vendor_referral">Another vendor referred me</option>
+            <option value="event">Saw it at an event</option>
+            <option value="other">Other</option>
+          </select>
+
+          {form.heard_from === 'vendor_referral' && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: '10px', padding: '16px 18px', marginBottom: '14px'
+            }}>
+              <p style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700', margin: '0 0 12px 0' }}>
+                Who referred you? We want to thank them.
+              </p>
+              <label style={labelCss}>Their name</label>
+              <input value={form.referred_by_name} onChange={setField('referred_by_name')} style={inputCss} />
+              <label style={labelCss}>Their phone or email</label>
+              <input value={form.referred_by_contact} onChange={setField('referred_by_contact')} style={inputCss} />
+              <label style={labelCss}>Their social handle</label>
+              <input value={form.referred_by_handle} onChange={setField('referred_by_handle')} placeholder="@theirhandle" style={{ ...inputCss, marginBottom: 0 }} />
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: '8px', padding: '10px 12px', marginBottom: '16px',
+              fontSize: '0.85rem', color: '#dc2626',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
+
+          <button type="submit" disabled={submitting} style={{
+            width: '100%', padding: '14px',
+            backgroundColor: submitting ? '#999' : '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '10px',
+            fontSize: '1rem', fontWeight: '700',
+            cursor: submitting ? 'wait' : 'pointer',
+          }}>
+            {submitting ? 'Submitting...' : 'Submit application'}
+          </button>
+          <p style={{ fontSize: '0.8rem', color: '#999', textAlign: 'center', margin: '12px 0 0 0' }}>
+            Chef and the team will review and email you back. From there, applying for each Vendor Day takes two clicks.
+          </p>
+        </form>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Strips a leading @ from a handle, returns null if blank.
+function cleanHandle(s) {
+  if (!s) return null;
+  const trimmed = s.trim().replace(/^@+/, '');
+  return trimmed || null;
+}
+
+// Fire-and-forget call to the send-vendor-email Edge Function. Failures are
+// logged to console but never block the UI flow — emails are best-effort.
+async function sendVendorEmail(payload) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-vendor-email`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error('[sendVendorEmail] failed', res.status, await res.text());
+    }
+  } catch (err) {
+    console.error('[sendVendorEmail] error', err);
+  }
+}
+
+// ─── Geo helpers ──────────────────────────────────────────
+// Trainer Center: 4911 Warner Ave #210, Huntington Beach, CA 92649
+const TRAINER_CENTER_COORDS = { lat: 33.7191, lng: -117.9836 };
+// Distance in meters within which we consider a check-in geo-verified.
+// 200m covers the building + parking lot + a generous sidewalk margin.
+const GEO_VERIFY_RADIUS_M = 200;
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (x) => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ─── Vendor check-in modal ────────────────────────────────
+// Three-stage flow:
+//   1. Priming — checkbox + explanatory copy, button to trigger geo prompt
+//   2. Permission ask — fires getCurrentPosition, browser shows native prompt
+//   3a. Granted → save attendance, show success
+//   3b. Denied → show recovery instructions + honor-system fallback
+function VendorCheckInModal({ vendorId, eventId, onClose, onCheckedIn }) {
+  const [stage, setStage] = useState('priming'); // priming | requesting | recovery | done
+  const [confirmedHere, setConfirmedHere] = useState(false);
+  const [error, setError] = useState('');
+
+  // On open, check current permission state. If already granted, we can run the
+  // capture immediately without re-priming.
+  useEffect(() => {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    navigator.permissions.query({ name: 'geolocation' }).then(res => {
+      if (res.state === 'granted' && confirmedHere) {
+        runCapture();
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveAttendance = async ({ lat, lng, distance, geoVerified }) => {
+    const { data, error: insertError } = await supabase
+      .from('vendor_attendance')
+      .insert({
+        vendor_id: vendorId,
+        event_id: eventId,
+        lat,
+        lng,
+        distance_m: distance,
+        geo_verified: geoVerified,
+      })
+      .select()
+      .single();
+    if (insertError) {
+      setError(insertError.message);
+      setStage('priming');
+      return;
+    }
+    setStage('done');
+    onCheckedIn(data);
+  };
+
+  const runCapture = () => {
+    setStage('requesting');
+    setError('');
+    if (!navigator.geolocation) {
+      setStage('recovery');
+      setError('Your browser does not support geolocation.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const dist = haversineMeters(latitude, longitude, TRAINER_CENTER_COORDS.lat, TRAINER_CENTER_COORDS.lng);
+        const verified = dist <= GEO_VERIFY_RADIUS_M;
+        saveAttendance({ lat: latitude, lng: longitude, distance: dist, geoVerified: verified });
+      },
+      (err) => {
+        setError(err.message);
+        setStage('recovery');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
+  const checkInHonor = async () => {
+    setStage('requesting');
+    await saveAttendance({ lat: null, lng: null, distance: null, geoVerified: false });
+  };
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+        {stage === 'priming' && (
+          <>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 8px 0' }}>Check in for today</h3>
+            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
+              We use your location once to confirm you are actually at Trainer Center. Your device will ask permission. We don't track you after — just a single point at check-in.
+            </p>
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: '10px',
+              padding: '12px 14px', backgroundColor: '#f9fafb', borderRadius: '8px',
+              cursor: 'pointer', marginBottom: '16px'
+            }}>
+              <input
+                type="checkbox"
+                checked={confirmedHere}
+                onChange={e => setConfirmedHere(e.target.checked)}
+                style={{ marginTop: '3px' }}
+              />
+              <span style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5' }}>
+                I am at Trainer Center right now
+              </span>
+            </label>
+            {error && (
+              <div style={errorStyle}><AlertCircle size={16} />{error}</div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={runCapture}
+                disabled={!confirmedHere}
+                style={{
+                  flex: 1,
+                  backgroundColor: confirmedHere ? '#C8102E' : '#ccc',
+                  color: '#fff', padding: '12px', border: 'none', borderRadius: '8px',
+                  fontWeight: '700', fontSize: '0.95rem',
+                  cursor: confirmedHere ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Verify location
+              </button>
+              <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+            </div>
+          </>
+        )}
+
+        {stage === 'requesting' && (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <Loader2 size={28} className="spin" color="#C8102E" />
+            <p style={{ fontSize: '0.95rem', color: '#666', margin: '12px 0 0 0' }}>
+              Capturing location...
+            </p>
+          </div>
+        )}
+
+        {stage === 'recovery' && (
+          <>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 8px 0' }}>Location is blocked</h3>
+            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 12px 0' }}>
+              Your browser is blocking location access. To fix:
+            </p>
+            <ol style={{ fontSize: '0.85rem', color: '#444', lineHeight: '1.7', paddingLeft: '20px', marginBottom: '16px' }}>
+              <li>Tap the lock icon next to the website URL</li>
+              <li>Find <strong>Location</strong> and set it to <strong>Allow</strong></li>
+              <li>Refresh this page and try check-in again</li>
+            </ol>
+            <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 16px 0' }}>
+              Or check in without location — Chef will see it as unverified.
+            </p>
+            {error && <div style={errorStyle}><AlertCircle size={16} />{error}</div>}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button onClick={checkInHonor} style={{
+                flex: 1,
+                backgroundColor: '#fff', color: '#666',
+                padding: '12px', border: '1px solid #ddd', borderRadius: '8px',
+                fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer'
+              }}>
+                Check in without location
+              </button>
+              <button onClick={onClose} style={cancelBtnStyle}>Close</button>
+            </div>
+          </>
+        )}
+
+        {stage === 'done' && (
+          <div style={{ textAlign: 'center', padding: '12px 0 0 0' }}>
+            <CheckCircle2 size={40} color="#16a34a" style={{ marginBottom: '12px' }} />
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 8px 0' }}>You are checked in!</h3>
+            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
+              Have a great Vendor Day. After the event, come back here to upload photos and a clip from your table.
+            </p>
+            <button onClick={onClose} style={{
+              backgroundColor: '#C8102E', color: '#fff', padding: '12px 24px',
+              border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer'
+            }}>
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const modalBackdropStyle = {
+  position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: '20px', zIndex: 9999
+};
+const modalCardStyle = {
+  backgroundColor: '#fff', borderRadius: '16px', padding: '24px',
+  maxWidth: '480px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+};
+const errorStyle = {
+  backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+  borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
+  fontSize: '0.85rem', color: '#dc2626',
+  display: 'flex', alignItems: 'center', gap: '8px'
+};
+const cancelBtnStyle = {
+  backgroundColor: '#fff', color: '#666',
+  padding: '12px 16px', border: '1px solid #ddd', borderRadius: '8px',
+  fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer'
+};
+
+// ─── Vendor Review Page (member voting) ──────────────────
+// /vendors/review — single-page state machine:
+//   1. Not logged in → magic link form
+//   2. Logged in but no member row → first-name capture
+//   3. No Vendor Day today → "come back later" info screen
+//   4. Event today but no check-in yet → geo priming flow
+//   5. Checked in but not voted → vote form (3 categories + attribution + comment)
+//   6. Voted → confirmation with option to edit
+const VOTE_CATEGORIES = [
+  { key: 'favorite', label: 'Favorite Vendor', help: 'Your overall best pick of the night' },
+  { key: 'friendliest', label: 'Friendliest', help: 'Most engaging, helpful, and fun' },
+  { key: 'best_collection', label: 'Best Collection', help: 'Lots to look at, lots of options' },
+];
+
+function VendorReviewPage({ isMobile }) {
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [member, setMember] = useState(null);
+  const [memberLoading, setMemberLoading] = useState(true);
+  const [todayEvent, setTodayEvent] = useState(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [visit, setVisit] = useState(null);
+  const [vendorsForEvent, setVendorsForEvent] = useState([]);
+  const [existingVotes, setExistingVotes] = useState({}); // keyed by category
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch member row
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setMember(null);
+      setMemberLoading(false);
+      return;
+    }
+    setMemberLoading(true);
+    supabase.from('members').select('*').eq('user_id', session.user.id).maybeSingle()
+      .then(({ data }) => {
+        setMember(data);
+        setMemberLoading(false);
+      });
+  }, [session?.user?.id]);
+
+  // Fetch today's Vendor Day event (if any)
+  useEffect(() => {
+    setEventLoading(true);
+    supabase.from('events')
+      .select('*')
+      .eq('category', 'vendor_day')
+      .eq('event_date', todayISO())
+      .maybeSingle()
+      .then(({ data }) => {
+        setTodayEvent(data);
+        setEventLoading(false);
+      });
+  }, []);
+
+  // When we have member + today's event, fetch visit + vendors + votes
+  useEffect(() => {
+    if (!member?.id || !todayEvent?.id) return;
+    Promise.all([
+      supabase.from('member_event_visits').select('*').eq('member_id', member.id).eq('event_id', todayEvent.id).maybeSingle(),
+      supabase.from('vendor_applications')
+        .select('vendor:vendors(id, name, specialty, ig_handle)')
+        .eq('event_id', todayEvent.id)
+        .eq('status', 'approved'),
+      supabase.from('member_votes').select('*').eq('member_id', member.id).eq('event_id', todayEvent.id),
+    ]).then(([vRes, aRes, mvRes]) => {
+      setVisit(vRes.data || null);
+      const list = (aRes.data || [])
+        .map(r => r.vendor)
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setVendorsForEvent(list);
+      const votesByCategory = {};
+      (mvRes.data || []).forEach(v => { votesByCategory[v.category] = v; });
+      setExistingVotes(votesByCategory);
+    });
+  }, [member?.id, todayEvent?.id]);
+
+  // ─── Stage 1: not logged in ───────────────────
+  if (authReady && !session) {
+    return <ReviewSignupGate isMobile={isMobile} />;
+  }
+
+  // ─── Stage 2: logged in but no member row ────
+  if (authReady && session && !memberLoading && !member) {
+    return <MemberOnboardingForm isMobile={isMobile} session={session} onComplete={(m) => setMember(m)} />;
+  }
+
+  // ─── Loading state ───────────────────────────
+  if (memberLoading || eventLoading || !member) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+          <Loader2 size={20} className="spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // ─── Stage 3: no Vendor Day today ────────────
+  if (!todayEvent) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="No Vendor Day today" subtitle="Voting is only open during a live Vendor Day at Trainer Center" />
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
+            padding: '28px 24px'
+          }}>
+            <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
+              Vendor Days happen the last Friday of every month. Come hang out, meet vendors, and you can vote here on event day.
+            </p>
+            <p style={{ fontSize: '0.85rem', color: '#888', margin: 0 }}>
+              Hi {member.first_name}, glad you joined! We will email you when the next Vendor Day is coming up.
+            </p>
+          </div>
+          <Link to="/calendar" style={{
+            display: 'inline-block', marginTop: '20px', color: '#C8102E',
+            fontWeight: '700', textDecoration: 'none', fontSize: '0.95rem'
+          }}>
+            See full calendar →
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // ─── Stage 4: event today, no check-in yet ───
+  if (!visit) {
+    return (
+      <ReviewGeoCheckIn
+        memberId={member.id}
+        eventId={todayEvent.id}
+        eventTitle={todayEvent.title || 'Vendor Day'}
+        memberName={member.first_name || 'there'}
+        isMobile={isMobile}
+        onCheckedIn={(v) => setVisit(v)}
+      />
+    );
+  }
+
+  // ─── Stage 5/6: vote form (handles both first-time + edit) ───
+  return (
+    <ReviewVoteForm
+      isMobile={isMobile}
+      member={member}
+      event={todayEvent}
+      visit={visit}
+      vendors={vendorsForEvent}
+      existingVotes={existingVotes}
+      onSaved={({ votes, updatedVisit }) => {
+        setExistingVotes(votes);
+        if (updatedVisit) setVisit(updatedVisit);
+      }}
+    />
+  );
+}
+
+// Stage 1: magic-link signup gate
+function ReviewSignupGate({ isMobile }) {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true);
+    setError('');
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/vendors/review`,
+        shouldCreateUser: true,
+      },
+    });
+    setLoading(false);
+    if (authError) {
+      setError(authError.message);
+      return;
+    }
+    setSent(true);
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
+        <SectionHeader title="Vote for Your Favorite Vendors" subtitle="Quick signup — used only to log your vote" />
+        <div style={{
+          backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '32px',
+        }}>
+          {sent ? (
+            <div style={{ textAlign: 'center' }}>
+              <CheckCircle2 size={28} color="#16a34a" />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '12px 0 6px 0' }}>Check your email</h3>
+              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
+                Sent a link to <strong>{email}</strong>. Click it to come back here and vote.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', margin: '0 0 18px 0' }}>
+                Drop your email — we send a one-tap login link. Voting is open at Trainer Center during today's Vendor Day.
+              </p>
+              <input
+                type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{
+                  width: '100%', padding: '12px 14px', fontSize: '1rem',
+                  border: '1px solid #ddd', borderRadius: '10px',
+                  marginBottom: '16px', boxSizing: 'border-box'
+                }}
+              />
+              {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: '14px',
+                backgroundColor: loading ? '#999' : '#16a34a', color: '#fff',
+                border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700',
+                cursor: loading ? 'wait' : 'pointer'
+              }}>
+                {loading ? 'Sending...' : 'Send magic link'}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Stage 2: minimal member onboarding (just first name)
+function MemberOnboardingForm({ isMobile, session, onComplete }) {
+  const [firstName, setFirstName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!firstName.trim()) {
+      setError('A first name helps Chef recognize you at the shop.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    const { data, error: insertError } = await supabase
+      .from('members')
+      .insert({
+        user_id: session.user.id,
+        email: session.user.email,
+        first_name: firstName.trim(),
+      })
+      .select()
+      .single();
+    setSubmitting(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    onComplete(data);
+    // Welcome email (fire-and-forget)
+    sendVendorEmail({ type: 'member_welcome', member_id: data.id });
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '480px', margin: '0 auto' }}>
+        <SectionHeader title="One quick thing" subtitle="What should we call you?" />
+        <form onSubmit={handleSubmit} style={{
+          backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '32px',
+        }}>
+          <input
+            value={firstName}
+            onChange={e => setFirstName(e.target.value)}
+            placeholder="First name"
+            autoFocus
+            style={{
+              width: '100%', padding: '12px 14px', fontSize: '1rem',
+              border: '1px solid #ddd', borderRadius: '10px',
+              marginBottom: '16px', boxSizing: 'border-box'
+            }}
+          />
+          {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
+          <button type="submit" disabled={submitting} style={{
+            width: '100%', padding: '14px',
+            backgroundColor: submitting ? '#999' : '#16a34a', color: '#fff',
+            border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700',
+            cursor: submitting ? 'wait' : 'pointer'
+          }}>
+            {submitting ? 'Saving...' : 'Continue'}
+          </button>
+        </form>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Stage 4: geo check-in (priming → permission → visit row insert)
+function ReviewGeoCheckIn({ memberId, eventId, eventTitle, memberName, isMobile, onCheckedIn }) {
+  const [stage, setStage] = useState('priming');
+  const [confirmedHere, setConfirmedHere] = useState(false);
+  const [error, setError] = useState('');
+
+  const saveVisit = async ({ lat, lng, distance, geoVerified }) => {
+    const { data, error: insertError } = await supabase
+      .from('member_event_visits')
+      .insert({
+        member_id: memberId,
+        event_id: eventId,
+        lat, lng,
+        distance_m: distance,
+        geo_verified: geoVerified,
+      })
+      .select()
+      .single();
+    if (insertError) {
+      setError(insertError.message);
+      setStage('priming');
+      return;
+    }
+    onCheckedIn(data);
+  };
+
+  const runCapture = () => {
+    setStage('requesting');
+    setError('');
+    if (!navigator.geolocation) {
+      setError('Browser does not support geolocation.');
+      setStage('recovery');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const dist = haversineMeters(latitude, longitude, TRAINER_CENTER_COORDS.lat, TRAINER_CENTER_COORDS.lng);
+        if (dist > GEO_VERIFY_RADIUS_M) {
+          setError('You appear to be away from Trainer Center. Voting is only open at the shop during Vendor Day.');
+          setStage('not_here');
+          return;
+        }
+        saveVisit({ lat: latitude, lng: longitude, distance: dist, geoVerified: true });
+      },
+      (err) => { setError(err.message); setStage('recovery'); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
+        <SectionHeader title={`Welcome, ${memberName}!`} subtitle={`${eventTitle} is happening now`} />
+        <div style={{
+          backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '32px',
+        }}>
+          {stage === 'priming' && (
+            <>
+              <p style={{ fontSize: '0.95rem', color: '#444', lineHeight: '1.7', margin: '0 0 16px 0' }}>
+                We use your location once to confirm you are at Trainer Center, then unlock the voting screen. Quick prompt — your device will ask permission.
+              </p>
+              <label style={{
+                display: 'flex', alignItems: 'flex-start', gap: '10px',
+                padding: '12px 14px', backgroundColor: '#f9fafb', borderRadius: '8px',
+                cursor: 'pointer', marginBottom: '16px'
+              }}>
+                <input type="checkbox" checked={confirmedHere} onChange={e => setConfirmedHere(e.target.checked)} style={{ marginTop: '3px' }} />
+                <span style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5' }}>
+                  I am at Trainer Center right now
+                </span>
+              </label>
+              {error && <div style={{ ...errorStyle, marginBottom: '14px' }}><AlertCircle size={16} />{error}</div>}
+              <button onClick={runCapture} disabled={!confirmedHere} style={{
+                width: '100%', padding: '14px',
+                backgroundColor: confirmedHere ? '#16a34a' : '#ccc', color: '#fff',
+                border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700',
+                cursor: confirmedHere ? 'pointer' : 'not-allowed'
+              }}>
+                Verify location
+              </button>
+            </>
+          )}
+          {stage === 'requesting' && (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <Loader2 size={28} className="spin" color="#16a34a" />
+              <p style={{ fontSize: '0.95rem', color: '#666', margin: '12px 0 0 0' }}>Capturing location...</p>
+            </div>
+          )}
+          {stage === 'recovery' && (
+            <>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 8px 0' }}>Location is blocked</h3>
+              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 12px 0' }}>
+                Your browser is blocking location access. Tap the lock icon next to the URL → Permissions → Location → Allow → refresh this page.
+              </p>
+              {error && <div style={errorStyle}><AlertCircle size={16} />{error}</div>}
+              <p style={{ fontSize: '0.8rem', color: '#888', margin: '12px 0 0 0' }}>
+                Voting requires verified location. You can ask a Trainer Center staff member to add your vote manually if needed.
+              </p>
+            </>
+          )}
+          {stage === 'not_here' && (
+            <>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 8px 0' }}>You're not at Trainer Center</h3>
+              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
+                {error}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Stage 5/6: vote form
+function ReviewVoteForm({ isMobile, member, event, visit, vendors, existingVotes, onSaved }) {
+  const [picks, setPicks] = useState(() => {
+    const init = {};
+    VOTE_CATEGORIES.forEach(c => { init[c.key] = existingVotes[c.key]?.vendor_id || ''; });
+    return init;
+  });
+  const [attribution, setAttribution] = useState({
+    source: visit?.attribution_source || '',
+    vendorId: visit?.attributed_vendor_id || '',
+  });
+  const [privateComment, setPrivateComment] = useState(visit?.private_comment || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [doneMessage, setDoneMessage] = useState('');
+
+  const allPicked = VOTE_CATEGORIES.every(c => picks[c.key]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!allPicked) {
+      setError('Please pick a vendor for each of the 3 categories.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    setDoneMessage('');
+
+    try {
+      // Upsert the 3 votes
+      const rows = VOTE_CATEGORIES.map(c => ({
+        member_id: member.id,
+        event_id: event.id,
+        category: c.key,
+        vendor_id: picks[c.key],
+      }));
+      const { error: voteErr } = await supabase
+        .from('member_votes')
+        .upsert(rows, { onConflict: 'member_id,event_id,category' });
+      if (voteErr) throw new Error(voteErr.message);
+
+      // Update visit with attribution + comment
+      const { data: updatedVisit, error: visitErr } = await supabase
+        .from('member_event_visits')
+        .update({
+          attributed_vendor_id: attribution.source === 'vendor' ? (attribution.vendorId || null) : null,
+          attribution_source: attribution.source || null,
+          private_comment: privateComment.trim() || null,
+        })
+        .eq('id', visit.id)
+        .select()
+        .single();
+      if (visitErr) throw new Error(visitErr.message);
+
+      // Refetch own votes (so we have IDs for the next render)
+      const { data: votesAfter } = await supabase
+        .from('member_votes')
+        .select('*')
+        .eq('member_id', member.id)
+        .eq('event_id', event.id);
+      const votesByCategory = {};
+      (votesAfter || []).forEach(v => { votesByCategory[v.category] = v; });
+
+      onSaved({ votes: votesByCategory, updatedVisit });
+      setDoneMessage('Your votes are in. Thanks for showing love!');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box', cursor: 'pointer'
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+
+  if (vendors.length === 0) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', textAlign: 'center', padding: '40px 20px' }}>
+          <SectionHeader title="No vendors yet" subtitle="Approved vendors for today's event will appear here" />
+          <p style={{ fontSize: '0.9rem', color: '#666' }}>
+            No vendors have been approved for today's Vendor Day yet. Check back once tables are set up.
+          </p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '600px', margin: '0 auto' }}>
+        <SectionHeader title="Vote for Your Favorites" subtitle={`${event.title || 'Vendor Day'} · One vote per category`} />
+        <form onSubmit={handleSubmit} style={{
+          backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
+          padding: isMobile ? '24px 20px' : '32px',
+        }}>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 24px 0' }}>
+            You have 3 points to give out — one for each category. Same vendor can win multiple. You can change your picks until the event ends tonight.
+          </p>
+
+          {VOTE_CATEGORIES.map(c => (
+            <div key={c.key}>
+              <label style={labelCss}>{c.label}</label>
+              <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '4px' }}>{c.help}</div>
+              <select
+                value={picks[c.key]}
+                onChange={e => setPicks(p => ({ ...p, [c.key]: e.target.value }))}
+                required
+                style={inputCss}
+              >
+                <option value="">— Pick a vendor —</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}{v.specialty ? ` · ${v.specialty}` : ''}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+
+          <div style={{ height: '8px' }} />
+          <label style={labelCss}>Did a vendor tell you about us?</label>
+          <select
+            value={attribution.source}
+            onChange={e => setAttribution(a => ({ ...a, source: e.target.value, vendorId: e.target.value === 'vendor' ? a.vendorId : '' }))}
+            style={inputCss}
+          >
+            <option value="">— Choose one —</option>
+            <option value="vendor">Yes, a vendor referred me</option>
+            <option value="social">Saw it on social media</option>
+            <option value="walk_in">Walked in / found it today</option>
+            <option value="regular">I'm a regular at Trainer Center</option>
+          </select>
+
+          {attribution.source === 'vendor' && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: '10px', padding: '14px 16px', marginBottom: '14px'
+            }}>
+              <p style={{ fontSize: '0.82rem', color: '#15803d', fontWeight: '700', margin: '0 0 8px 0' }}>
+                Show them love — pick the vendor who told you
+              </p>
+              <select
+                value={attribution.vendorId}
+                onChange={e => setAttribution(a => ({ ...a, vendorId: e.target.value }))}
+                style={{ ...inputCss, marginBottom: 0 }}
+              >
+                <option value="">— Pick a vendor —</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <label style={labelCss}>Anything for Chef privately? (optional)</label>
+          <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '4px' }}>
+            Only Chef and the Trainer Center team will see this. Vendors will not.
+          </div>
+          <textarea
+            value={privateComment}
+            onChange={e => setPrivateComment(e.target.value)}
+            rows={3}
+            placeholder="Honest feedback, anything Chef should know"
+            style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical', cursor: 'text' }}
+          />
+
+          {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
+          {doneMessage && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
+              fontSize: '0.85rem', color: '#15803d',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <CheckCircle2 size={16} />
+              {doneMessage}
+            </div>
+          )}
+
+          <button type="submit" disabled={submitting} style={{
+            width: '100%', padding: '14px',
+            backgroundColor: submitting ? '#999' : '#16a34a', color: '#fff',
+            border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '700',
+            cursor: submitting ? 'wait' : 'pointer'
+          }}>
+            {submitting ? 'Saving...' : (Object.keys(existingVotes).length > 0 ? 'Update votes' : 'Submit votes')}
+          </button>
+        </form>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor Upload Page ───────────────────────────────────
+// /vendors/upload/:eventId — vendor uploads up to 3 photos (Supabase Storage)
+// + 1 video (Bunny Stream via direct TUS upload signed by our Edge Function).
+// If a submission already exists for this (vendor, event), new media is
+// appended to it instead of creating a duplicate.
+function VendorUploadPage({ isMobile }) {
+  const { eventId } = useParams();
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [vendor, setVendor] = useState(null);
+  const [event, setEvent] = useState(null);
+  const [submission, setSubmission] = useState(null);
+  const [existingMedia, setExistingMedia] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [caption, setCaption] = useState('');
+  const [photos, setPhotos] = useState([null, null, null]);
+  const [video, setVideo] = useState(null);
+  const [photoProgress, setPhotoProgress] = useState([0, 0, 0]);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [doneMessage, setDoneMessage] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id || !eventId) return;
+    setLoading(true);
+    Promise.all([
+      supabase.from('vendors').select('*').eq('user_id', session.user.id).maybeSingle(),
+      supabase.from('events').select('*').eq('id', eventId).single(),
+    ]).then(async ([vRes, eRes]) => {
+      if (vRes.error) console.error('[Upload] vendor', vRes.error);
+      if (eRes.error) console.error('[Upload] event', eRes.error);
+      const v = vRes.data;
+      setVendor(v);
+      setEvent(eRes.data);
+      if (v) {
+        const subRes = await supabase
+          .from('vendor_submissions')
+          .select('*, media:vendor_media(*)')
+          .eq('vendor_id', v.id)
+          .eq('event_id', eventId)
+          .maybeSingle();
+        if (subRes.data) {
+          setSubmission(subRes.data);
+          setExistingMedia(subRes.data.media || []);
+          setCaption(subRes.data.caption || '');
+        }
+      }
+      setLoading(false);
+    });
+  }, [session?.user?.id, eventId]);
+
+  const setPhotoSlot = (i) => (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setPhotos(prev => prev.map((p, idx) => idx === i ? f : p));
+  };
+
+  const clearPhotoSlot = (i) => () => {
+    setPhotos(prev => prev.map((p, idx) => idx === i ? null : p));
+  };
+
+  const uploadPhoto = async (file, slotIndex) => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const path = `${vendor.id}/${eventId}/${Date.now()}_${slotIndex}_${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from('vendor-media')
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (upErr) throw new Error(`Photo ${slotIndex + 1} failed: ${upErr.message}`);
+    setPhotoProgress(prev => prev.map((p, idx) => idx === slotIndex ? 100 : p));
+    return path;
+  };
+
+  const uploadVideoToBunny = async (file) => {
+    // 1. Ask edge function for signed Bunny TUS auth
+    const { data: { session: s } } = await supabase.auth.getSession();
+    const fnUrl = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/bunny-create-video`;
+    const tokenRes = await fetch(fnUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${s.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        event_id: eventId,
+        title: `${vendor.name} - ${event.title || 'Vendor Day'}`,
+      }),
+    });
+    if (!tokenRes.ok) {
+      const errBody = await tokenRes.text();
+      throw new Error(`Video auth failed: ${errBody}`);
+    }
+    const { videoGuid, signature, expire, libraryId } = await tokenRes.json();
+
+    // 2. Direct TUS upload to Bunny
+    return new Promise((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: 'https://video.bunnycdn.com/tusupload',
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        chunkSize: 5 * 1024 * 1024,
+        headers: {
+          AuthorizationSignature: signature,
+          AuthorizationExpire: String(expire),
+          VideoId: videoGuid,
+          LibraryId: String(libraryId),
+        },
+        metadata: {
+          filetype: file.type,
+          title: `${vendor.name} - vendor day`,
+        },
+        onError: (err) => reject(err),
+        onProgress: (bytesUploaded, bytesTotal) => {
+          setVideoProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        },
+        onSuccess: () => {
+          const playbackUrl = `https://iframe.mediadelivery.net/embed/${libraryId}/${videoGuid}`;
+          resolve({ videoGuid, playbackUrl });
+        },
+      });
+      upload.start();
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setDoneMessage('');
+    const selectedPhotos = photos.filter(p => p !== null);
+    if (selectedPhotos.length === 0 && !video && !caption.trim() && submission) {
+      setError('Add at least one photo, video, or caption update before submitting.');
+      return;
+    }
+    setUploading(true);
+    setPhotoProgress([0, 0, 0]);
+    setVideoProgress(0);
+
+    try {
+      // Ensure a vendor_submissions row exists.
+      let submissionId = submission?.id;
+      if (!submissionId) {
+        const { data: newSub, error: subErr } = await supabase
+          .from('vendor_submissions')
+          .insert({
+            vendor_id: vendor.id,
+            event_id: eventId,
+            caption: caption.trim() || null,
+          })
+          .select()
+          .single();
+        if (subErr) throw new Error(subErr.message);
+        submissionId = newSub.id;
+        setSubmission(newSub);
+      } else if (caption !== (submission.caption || '')) {
+        // Update caption on existing submission
+        await supabase
+          .from('vendor_submissions')
+          .update({ caption: caption.trim() || null })
+          .eq('id', submissionId);
+      }
+
+      // Upload photos sequentially so progress doesn't race
+      const newMediaRows = [];
+      const baseSortOrder = (existingMedia[existingMedia.length - 1]?.sort_order || 0) + 1;
+      for (let i = 0; i < photos.length; i++) {
+        if (!photos[i]) continue;
+        const path = await uploadPhoto(photos[i], i);
+        newMediaRows.push({
+          submission_id: submissionId,
+          kind: 'photo',
+          supabase_path: path,
+          sort_order: baseSortOrder + i,
+        });
+      }
+
+      // Upload video to Bunny (if selected)
+      if (video) {
+        const { videoGuid, playbackUrl } = await uploadVideoToBunny(video);
+        newMediaRows.push({
+          submission_id: submissionId,
+          kind: 'video',
+          bunny_video_id: videoGuid,
+          bunny_playback_url: playbackUrl,
+          sort_order: baseSortOrder + photos.length,
+        });
+      }
+
+      // Insert media rows
+      if (newMediaRows.length > 0) {
+        const { error: mErr } = await supabase.from('vendor_media').insert(newMediaRows);
+        if (mErr) throw new Error(`Media insert failed: ${mErr.message}`);
+      }
+
+      // Refetch submission with media
+      const refresh = await supabase
+        .from('vendor_submissions')
+        .select('*, media:vendor_media(*)')
+        .eq('id', submissionId)
+        .single();
+      if (refresh.data) {
+        setSubmission(refresh.data);
+        setExistingMedia(refresh.data.media || []);
+      }
+
+      // Reset selection
+      setPhotos([null, null, null]);
+      setVideo(null);
+      setDoneMessage('Uploaded! Your post will appear on the public Vendors page.');
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteExisting = async (mediaItem) => {
+    if (!window.confirm('Delete this media?')) return;
+    if (mediaItem.kind === 'photo' && mediaItem.supabase_path) {
+      await supabase.storage.from('vendor-media').remove([mediaItem.supabase_path]);
+    }
+    await supabase.from('vendor_media').delete().eq('id', mediaItem.id);
+    setExistingMedia(prev => prev.filter(m => m.id !== mediaItem.id));
+  };
+
+  if (authReady && !session) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', textAlign: 'center', padding: '40px 20px' }}>
+          <SectionHeader title="Upload Content" subtitle="Log in to upload your Vendor Day photos and video" />
+          <Link to="/vendors/apply" style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            backgroundColor: '#C8102E', color: '#fff',
+            padding: '12px 24px', borderRadius: '10px',
+            fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+          }}>
+            Log in / Apply
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+          <Loader2 size={24} className="spin" /> Loading...
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (!vendor) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+          <SectionHeader title="No vendor profile" subtitle="Complete your application first" />
+          <Link to="/vendors/dashboard" style={{ color: '#C8102E', fontWeight: '700' }}>Go to dashboard</Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (!event) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '40px 20px', textAlign: 'center', color: '#666' }}>
+          Event not found.
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const eventDate = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
+        <SectionHeader title="Upload your Vendor Day content" subtitle={`${event.title || 'Vendor Day'} · ${eventDate}`} />
+
+        {existingMedia.length > 0 && (
+          <div style={{
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+            padding: '20px', marginBottom: '20px'
+          }}>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>
+              Already uploaded
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px' }}>
+              {existingMedia.map(m => (
+                <div key={m.id} style={{
+                  position: 'relative', aspectRatio: '1 / 1', borderRadius: '8px',
+                  overflow: 'hidden', backgroundColor: '#000',
+                  ...(m.kind === 'photo' ? {
+                    backgroundImage: `url(${photoUrl(m.supabase_path)})`,
+                    backgroundSize: 'cover', backgroundPosition: 'center'
+                  } : {})
+                }}>
+                  {m.kind === 'video' && (
+                    <div style={{
+                      width: '100%', height: '100%', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', backgroundColor: '#000', flexDirection: 'column', gap: '4px'
+                    }}>
+                      <Film size={24} />
+                      <span style={{ fontSize: '0.7rem' }}>Video</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleDeleteExisting(m)}
+                    title="Delete"
+                    style={{
+                      position: 'absolute', top: '4px', right: '4px',
+                      backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff',
+                      border: 'none', borderRadius: '50%', width: '26px', height: '26px',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{
+          backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
+          padding: isMobile ? '20px 16px' : '32px',
+        }}>
+          <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Caption</label>
+          <textarea
+            value={caption}
+            onChange={e => setCaption(e.target.value)}
+            rows={3}
+            placeholder="What did you bring? Any standout pulls or trades? (optional)"
+            style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }}
+          />
+
+          {/* Photo slots */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
+              Photos (up to 3 per upload)
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+              {photos.map((p, i) => (
+                <PhotoSlot
+                  key={i}
+                  file={p}
+                  progress={photoProgress[i]}
+                  uploading={uploading && p !== null}
+                  onSelect={setPhotoSlot(i)}
+                  onClear={clearPhotoSlot(i)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Video */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
+              Video (one short clip — autoplay-friendly on the public page)
+            </label>
+            <VideoSlot
+              file={video}
+              progress={videoProgress}
+              uploading={uploading && !!video}
+              onSelect={(e) => setVideo(e.target.files?.[0] || null)}
+              onClear={() => setVideo(null)}
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
+              fontSize: '0.85rem', color: '#dc2626',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <AlertCircle size={16} />
+              <span style={{ flex: 1 }}>{error}</span>
+            </div>
+          )}
+          {doneMessage && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
+              fontSize: '0.85rem', color: '#15803d',
+              display: 'flex', alignItems: 'center', gap: '8px'
+            }}>
+              <CheckCircle2 size={16} />
+              {doneMessage}
+            </div>
+          )}
+
+          <button type="submit" disabled={uploading} style={{
+            width: '100%', padding: '14px',
+            backgroundColor: uploading ? '#999' : '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '10px',
+            fontSize: '1rem', fontWeight: '700',
+            cursor: uploading ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+          }}>
+            {uploading ? <><Loader2 size={18} className="spin" /> Uploading...</> : <><UploadIcon size={18} /> Upload</>}
+          </button>
+        </form>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Single photo slot (with file picker, preview, progress, clear button)
+function PhotoSlot({ file, progress, uploading, onSelect, onClear }) {
+  const previewUrl = file ? URL.createObjectURL(file) : null;
+  return (
+    <div style={{
+      position: 'relative',
+      aspectRatio: '1 / 1',
+      backgroundColor: file ? '#000' : '#fafafa',
+      border: file ? 'none' : '2px dashed #ddd',
+      borderRadius: '10px',
+      overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      {file ? (
+        <>
+          <img src={previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {!uploading && (
+            <button
+              type="button"
+              onClick={onClear}
+              style={{
+                position: 'absolute', top: '6px', right: '6px',
+                backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff',
+                border: 'none', borderRadius: '50%', width: '26px', height: '26px',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
+          {uploading && progress > 0 && progress < 100 && (
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              height: '4px', backgroundColor: 'rgba(255,255,255,0.3)'
+            }}>
+              <div style={{ height: '100%', backgroundColor: '#16a34a', width: `${progress}%` }} />
+            </div>
+          )}
+        </>
+      ) : (
+        <label style={{
+          width: '100%', height: '100%', display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'column', gap: '6px',
+          cursor: 'pointer', color: '#999', fontSize: '0.75rem', fontWeight: '600'
+        }}>
+          <ImageIcon size={20} />
+          <span>Add photo</span>
+          <input type="file" accept="image/*" onChange={onSelect} style={{ display: 'none' }} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// Video slot with file picker, file size info, progress bar
+function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
+  return (
+    <div style={{
+      backgroundColor: '#fafafa',
+      border: '2px dashed #ddd',
+      borderRadius: '10px',
+      padding: '20px',
+      textAlign: 'center'
+    }}>
+      {file ? (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '8px' }}>
+            <Film size={20} color="#16a34a" />
+            <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>{file.name}</span>
+            {!uploading && (
+              <button
+                type="button"
+                onClick={onClear}
+                style={{
+                  background: 'none', border: 'none', color: '#999',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center'
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#888' }}>
+            {(file.size / (1024 * 1024)).toFixed(1)} MB
+          </div>
+          {uploading && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', backgroundColor: '#16a34a', width: `${progress}%`, transition: 'width 0.2s' }} />
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '4px' }}>{progress}%</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <label style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: '10px', cursor: 'pointer', color: '#666',
+          fontSize: '0.9rem', fontWeight: '700'
+        }}>
+          <Film size={20} />
+          <span>Add a short video</span>
+          <input type="file" accept="video/*" onChange={onSelect} style={{ display: 'none' }} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// ─── Staff Vendor Admin Page ──────────────────────────────
+// Gated by staff?.isAdmin. Two tabs: Pending Applications (approve/decline)
+// and Roster (per-event view of who applied + status + attendance).
+function StaffVendorsPage({ isMobile, staff }) {
+  const [tab, setTab] = useState('pending');
+  const [pending, setPending] = useState([]);
+  const [allVendors, setAllVendors] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [attendance, setAttendance] = useState({}); // { event_id: { vendor_id: row } }
+  const [memberVisits, setMemberVisits] = useState([]); // raw rows joined with member + vendor
+  const [voteCounts, setVoteCounts] = useState({}); // { event_id: [{category, vendor_id, vendor_name, vote_count}] }
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const isAdmin = !!staff?.isAdmin;
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setLoading(true);
+
+    Promise.all([
+      // Pending applications joined with vendor + event
+      supabase.from('vendor_applications')
+        .select('*, vendor:vendors(*), event:events(*)')
+        .eq('status', 'pending')
+        .order('applied_at', { ascending: true }),
+      // All vendors for the vendor list tab
+      supabase.from('vendors').select('*').order('created_at', { ascending: false }),
+      // Upcoming Vendor Day events with their applications
+      supabase.from('events')
+        .select('*, vendor_applications(*, vendor:vendors(*))')
+        .eq('category', 'vendor_day')
+        .order('event_date', { ascending: true })
+        .limit(6),
+      supabase.from('vendor_attendance').select('*'),
+      // Member visits joined with member + attributed vendor
+      supabase.from('member_event_visits')
+        .select('*, member:members(id, first_name, email), attributed_vendor:vendors(id, name), event:events(id, title, event_date)')
+        .order('checked_in_at', { ascending: false })
+        .limit(200),
+    ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes]) => {
+      if (pendRes.error) console.error('[StaffVendors] pending', pendRes.error);
+      if (vendRes.error) console.error('[StaffVendors] vendors', vendRes.error);
+      if (evRes.error)   console.error('[StaffVendors] events', evRes.error);
+      if (attRes.error)  console.error('[StaffVendors] attendance', attRes.error);
+      if (visitsRes.error) console.error('[StaffVendors] visits', visitsRes.error);
+      setPending(pendRes.data || []);
+      setAllVendors(vendRes.data || []);
+      setEvents(evRes.data || []);
+      const att = {};
+      (attRes.data || []).forEach(a => {
+        if (!att[a.event_id]) att[a.event_id] = {};
+        att[a.event_id][a.vendor_id] = a;
+      });
+      setAttendance(att);
+      setMemberVisits(visitsRes.data || []);
+
+      // For each event in the events list, fetch winners (vote counts).
+      const events = evRes.data || [];
+      const counts = {};
+      await Promise.all(events.map(async (ev) => {
+        const { data: w } = await supabase.rpc('get_event_winners', { p_event_id: ev.id });
+        if (w && w.length > 0) counts[ev.id] = w;
+      }));
+      setVoteCounts(counts);
+
+      setLoading(false);
+    });
+  }, [isAdmin, refreshKey]);
+
+  const refresh = () => setRefreshKey(k => k + 1);
+
+  const decideApplication = async (appId, status, note) => {
+    const { error } = await supabase
+      .from('vendor_applications')
+      .update({ status, decision_note: note || null, decided_at: new Date().toISOString(), decided_by: staff.id })
+      .eq('id', appId);
+    if (error) {
+      alert('Error: ' + error.message);
+      return;
+    }
+    // If approved on a first-time application, also flip the vendor profile
+    // status to 'approved' so they show on the public feed and can keep applying.
+    if (status === 'approved') {
+      const app = pending.find(p => p.id === appId);
+      if (app?.vendor?.id && app.vendor.status === 'pending') {
+        await supabase.from('vendors').update({ status: 'approved' }).eq('id', app.vendor.id);
+      }
+    }
+    // Notify the vendor of the decision
+    sendVendorEmail({ type: 'application_decided', application_id: appId });
+    refresh();
+  };
+
+  const setVendorStatus = async (vendorId, status) => {
+    const { error } = await supabase.from('vendors').update({ status }).eq('id', vendorId);
+    if (error) {
+      alert('Error: ' + error.message);
+      return;
+    }
+    refresh();
+  };
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="Staff only" subtitle="You need to be logged in as staff to manage vendors" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const tabBtnStyle = (active) => ({
+    padding: '10px 16px', border: 'none',
+    backgroundColor: active ? '#C8102E' : '#fff',
+    color: active ? '#fff' : '#666',
+    borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700',
+    cursor: 'pointer', border: active ? 'none' : '1px solid #ddd'
+  });
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Vendor Admin" subtitle="Approve applications, see who is coming" />
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '8px', maxWidth: '1100px', margin: '0 auto 24px', flexWrap: 'wrap' }}>
+          <button onClick={() => setTab('pending')} style={tabBtnStyle(tab === 'pending')}>
+            Pending applications ({pending.length})
+          </button>
+          <button onClick={() => setTab('roster')} style={tabBtnStyle(tab === 'roster')}>
+            Event roster
+          </button>
+          <button onClick={() => setTab('vendors')} style={tabBtnStyle(tab === 'vendors')}>
+            All vendors ({allVendors.length})
+          </button>
+          <button onClick={() => setTab('members')} style={tabBtnStyle(tab === 'members')}>
+            Members &amp; feedback
+          </button>
+        </div>
+
+        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+              <Loader2 size={20} className="spin" /> Loading...
+            </div>
+          )}
+
+          {!loading && tab === 'pending' && (
+            <PendingApplicationsList items={pending} onDecide={decideApplication} isMobile={isMobile} />
+          )}
+
+          {!loading && tab === 'roster' && (
+            <EventRosterList events={events} attendance={attendance} onDecide={decideApplication} isMobile={isMobile} />
+          )}
+
+          {!loading && tab === 'vendors' && (
+            <AllVendorsList vendors={allVendors} onStatusChange={setVendorStatus} isMobile={isMobile} />
+          )}
+
+          {!loading && tab === 'members' && (
+            <MembersAndFeedbackTab visits={memberVisits} voteCounts={voteCounts} events={events} isMobile={isMobile} />
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Members + feedback tab on staff admin ────────────────
+function MembersAndFeedbackTab({ visits, voteCounts, events, isMobile }) {
+  // Group visits by event_id
+  const visitsByEvent = {};
+  visits.forEach(v => {
+    if (!visitsByEvent[v.event_id]) visitsByEvent[v.event_id] = [];
+    visitsByEvent[v.event_id].push(v);
+  });
+
+  // Show events that have either visits or vote counts, sorted by event date desc
+  const relevantEventIds = new Set([...Object.keys(visitsByEvent), ...Object.keys(voteCounts)]);
+  const eventsToShow = events
+    .filter(e => relevantEventIds.has(e.id))
+    .sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+  if (eventsToShow.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+      }}>
+        No member activity yet. Once members check in and vote, you will see attribution and private feedback here.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {eventsToShow.map(ev => {
+        const evVisits = visitsByEvent[ev.id] || [];
+        const evCounts = voteCounts[ev.id] || [];
+        const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        // Aggregate vote counts per vendor across all 3 categories
+        const vendorTotals = {};
+        evCounts.forEach(c => {
+          if (!vendorTotals[c.vendor_id]) {
+            vendorTotals[c.vendor_id] = { name: c.vendor_name, total: 0, byCategory: {} };
+          }
+          vendorTotals[c.vendor_id].total += Number(c.vote_count);
+          vendorTotals[c.vendor_id].byCategory[c.category] = Number(c.vote_count);
+        });
+        const sortedVendors = Object.values(vendorTotals).sort((a, b) => b.total - a.total);
+
+        return (
+          <div key={ev.id} style={{
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+            padding: isMobile ? '16px' : '20px 24px'
+          }}>
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
+              <div style={{ fontSize: '0.85rem', color: '#666' }}>{dateStr} · {evVisits.length} member check-in{evVisits.length === 1 ? '' : 's'}</div>
+            </div>
+
+            {/* Vote totals */}
+            {sortedVendors.length > 0 && (
+              <div style={{ marginBottom: '18px' }}>
+                <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '800', color: '#16a34a', margin: '0 0 8px 0' }}>
+                  Vote totals
+                </h4>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={voteTH}>Vendor</th>
+                      <th style={voteTH}>Favorite</th>
+                      <th style={voteTH}>Friendliest</th>
+                      <th style={voteTH}>Best Collection</th>
+                      <th style={voteTH}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedVendors.map((v, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f0f0f0' }}>
+                        <td style={voteTD}><strong>{v.name}</strong></td>
+                        <td style={voteTD}>{v.byCategory.favorite || 0}</td>
+                        <td style={voteTD}>{v.byCategory.friendliest || 0}</td>
+                        <td style={voteTD}>{v.byCategory.best_collection || 0}</td>
+                        <td style={{ ...voteTD, fontWeight: '800', color: '#16a34a' }}>{v.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Member check-ins + attribution + feedback */}
+            {evVisits.length > 0 && (
+              <div>
+                <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '800', color: '#666', margin: '0 0 8px 0' }}>
+                  Member check-ins
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {evVisits.map(v => {
+                    const attrLabel = ({
+                      vendor: 'Referred by vendor',
+                      social: 'Social media',
+                      walk_in: 'Walked in',
+                      regular: 'Regular customer',
+                    })[v.attribution_source] || '—';
+                    return (
+                      <div key={v.id} style={{
+                        padding: '10px 14px', backgroundColor: '#fafafa', borderRadius: '8px',
+                        fontSize: '0.85rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
+                          <div>
+                            <strong>{v.member?.first_name || 'Member'}</strong>
+                            {v.member?.email && <span style={{ color: '#888' }}> · {v.member.email}</span>}
+                            {!v.geo_verified && (
+                              <span style={{
+                                marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fef2f2',
+                                color: '#dc2626', padding: '2px 6px', borderRadius: '10px', fontWeight: '700'
+                              }}>
+                                geo unverified
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#888' }}>
+                            {attrLabel}
+                            {v.attributed_vendor?.name && ` · ${v.attributed_vendor.name}`}
+                          </div>
+                        </div>
+                        {v.private_comment && (
+                          <div style={{
+                            marginTop: '6px', fontSize: '0.85rem', color: '#444',
+                            backgroundColor: '#fff7ed', borderLeft: '3px solid #c2410c',
+                            padding: '8px 12px', borderRadius: '6px', fontStyle: 'italic'
+                          }}>
+                            "{v.private_comment}"
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const voteTH = { textAlign: 'left', padding: '6px 8px', fontSize: '0.75rem', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' };
+const voteTD = { padding: '8px', verticalAlign: 'top' };
+
+// ─── Pending applications tab ─────────────────────────────
+function PendingApplicationsList({ items, onDecide, isMobile }) {
+  if (items.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+      }}>
+        No pending applications. You are all caught up.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {items.map(app => (
+        <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} isMobile={isMobile} />
+      ))}
+    </div>
+  );
+}
+
+function PendingApplicationCard({ app, onDecide, isMobile }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const v = app.vendor || {};
+  const ev = app.event || {};
+  const eventDate = ev.event_date ? new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
+  const isFirstApp = v.status === 'pending';
+
+  const handle = async (status) => {
+    setBusy(true);
+    await onDecide(app.id, status, note);
+    setBusy(false);
+  };
+
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+      padding: isMobile ? '16px' : '20px 24px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+        <div>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>
+            {v.name || '(no name)'}
+            {isFirstApp && (
+              <span style={{
+                marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fff7ed', color: '#c2410c',
+                padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px'
+              }}>
+                First-time applicant
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+            {v.email}{v.phone ? ` · ${v.phone}` : ''}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+            For: <strong>{ev.title || 'Vendor Day'}</strong> · {eventDate}
+          </div>
+        </div>
+      </div>
+
+      {/* Vendor profile preview (when first-time) */}
+      {isFirstApp && (
+        <div style={{
+          backgroundColor: '#f9fafb', borderRadius: '8px', padding: '12px 14px',
+          marginBottom: '12px', fontSize: '0.85rem', color: '#444', lineHeight: '1.6'
+        }}>
+          {v.specialty && <div><strong>Specialty:</strong> {v.specialty}</div>}
+          {v.bio && <div style={{ marginTop: '4px' }}>{v.bio}</div>}
+          <div style={{ marginTop: '6px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {v.ig_handle && <span>IG: @{v.ig_handle}</span>}
+            {v.tiktok_handle && <span>TikTok: @{v.tiktok_handle}</span>}
+            {v.fb_handle && <span>FB: {v.fb_handle}</span>}
+          </div>
+          {v.heard_from && <div style={{ marginTop: '6px' }}><strong>Heard from:</strong> {v.heard_from.replace(/_/g, ' ')}</div>}
+          {v.referred_by_name && (
+            <div style={{ marginTop: '6px' }}>
+              <strong>Referred by:</strong> {v.referred_by_name}
+              {v.referred_by_handle && ` (@${v.referred_by_handle})`}
+              {v.referred_by_contact && ` · ${v.referred_by_contact}`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {app.vendor_note && (
+        <div style={{ fontSize: '0.85rem', color: '#444', marginBottom: '10px', fontStyle: 'italic' }}>
+          "{app.vendor_note}"
+        </div>
+      )}
+
+      <input
+        value={note}
+        onChange={e => setNote(e.target.value)}
+        placeholder="Optional note to vendor (saved with decision)"
+        style={{
+          width: '100%', padding: '8px 12px', fontSize: '0.85rem',
+          border: '1px solid #ddd', borderRadius: '8px',
+          marginBottom: '10px', boxSizing: 'border-box'
+        }}
+      />
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button onClick={() => handle('approved')} disabled={busy} style={{
+          backgroundColor: '#16a34a', color: '#fff', padding: '8px 16px',
+          border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
+          cursor: busy ? 'wait' : 'pointer'
+        }}>
+          {isFirstApp ? 'Approve vendor + event' : 'Approve'}
+        </button>
+        <button onClick={() => handle('declined')} disabled={busy} style={{
+          backgroundColor: '#fff', color: '#dc2626', padding: '8px 16px',
+          border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
+          cursor: busy ? 'wait' : 'pointer'
+        }}>
+          Decline
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Event roster tab ─────────────────────────────────────
+function EventRosterList({ events, attendance, onDecide, isMobile }) {
+  if (events.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+      }}>
+        No upcoming Vendor Day events. Add one in the calendar with category "Vendor Day".
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {events.map(ev => {
+        const apps = ev.vendor_applications || [];
+        const evAttend = attendance[ev.id] || {};
+        const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const approved = apps.filter(a => a.status === 'approved');
+        const pending = apps.filter(a => a.status === 'pending');
+        return (
+          <div key={ev.id} style={{
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+            padding: isMobile ? '16px' : '20px 24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
+                <div style={{ fontSize: '0.85rem', color: '#666' }}>{dateStr}</div>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                {approved.length} approved · {pending.length} pending
+              </div>
+            </div>
+            {apps.length === 0 ? (
+              <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic' }}>No applications yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {apps.map(a => {
+                  const checkedIn = evAttend[a.vendor_id];
+                  const v = a.vendor || {};
+                  return (
+                    <div key={a.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', backgroundColor: '#fafafa', borderRadius: '8px',
+                      fontSize: '0.85rem', flexWrap: 'wrap', gap: '8px'
+                    }}>
+                      <div>
+                        <strong>{v.name}</strong>
+                        {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ApplicationStatusBadge status={a.status} />
+                        {a.status === 'approved' && (
+                          checkedIn ? (
+                            <span style={{
+                              fontSize: '0.7rem', backgroundColor: '#f0fdf4', color: '#15803d',
+                              padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
+                            }}>
+                              {checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '0.7rem', backgroundColor: '#f3f4f6', color: '#6b7280',
+                              padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
+                            }}>
+                              Not checked in
+                            </span>
+                          )
+                        )}
+                        {a.status === 'pending' && (
+                          <button onClick={() => onDecide(a.id, 'approved', null)} style={{
+                            fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
+                            border: 'none', padding: '4px 10px', borderRadius: '6px',
+                            fontWeight: '700', cursor: 'pointer'
+                          }}>Approve</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ApplicationStatusBadge({ status }) {
+  const styles = {
+    pending: { bg: '#fff7ed', text: '#c2410c' },
+    approved: { bg: '#f0fdf4', text: '#15803d' },
+    declined: { bg: '#fef2f2', text: '#991b1b' },
+    cancelled: { bg: '#f3f4f6', text: '#6b7280' },
+  }[status] || { bg: '#f3f4f6', text: '#374151' };
+  return (
+    <span style={{
+      fontSize: '0.7rem', backgroundColor: styles.bg, color: styles.text,
+      padding: '2px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'capitalize'
+    }}>{status}</span>
+  );
+}
+
+// ─── All vendors tab ──────────────────────────────────────
+function AllVendorsList({ vendors, onStatusChange, isMobile }) {
+  if (vendors.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+      }}>
+        No vendors yet.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {vendors.map(v => (
+        <div key={v.id} style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
+          padding: '12px 16px', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
+        }}>
+          <div>
+            <strong>{v.name}</strong>
+            <span style={{ color: '#888' }}> · {v.email}</span>
+            {v.specialty && <span style={{ color: '#888' }}> · {v.specialty}</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <VendorStatusBadge status={v.status} />
+            {v.status !== 'approved' && (
+              <button onClick={() => onStatusChange(v.id, 'approved')} style={{
+                fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
+                border: 'none', padding: '4px 10px', borderRadius: '6px',
+                fontWeight: '700', cursor: 'pointer'
+              }}>Approve</button>
+            )}
+            {v.status !== 'suspended' && (
+              <button onClick={() => onStatusChange(v.id, 'suspended')} style={{
+                fontSize: '0.75rem', backgroundColor: '#fff', color: '#991b1b',
+                border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px',
+                fontWeight: '700', cursor: 'pointer'
+              }}>Suspend</button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Nav Link Helper ──────────────────────────────────────
 const NAV_ITEMS = [
   { label: 'Home', to: '/' },
   { label: 'Calendar', to: '/calendar' },
+  { label: 'Vendors', to: '/vendors' },
   { label: 'Visit Us', to: '/#visit-us' },
   { label: 'Buy/Sell', to: '/buy-sell' },
   { label: 'Consultation', to: '/consultation' },
@@ -2721,6 +5661,12 @@ function App() {
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
+        <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
+        <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
+        <Route path="/vendors/upload/:eventId" element={<VendorUploadPage isMobile={isMobile} />} />
+        <Route path="/vendors/review" element={<VendorReviewPage isMobile={isMobile} />} />
+        <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
       {/* Staff Login Modal */}

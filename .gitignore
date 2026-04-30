@@ -28,3 +28,10 @@ yarn-error.log*
 
 # Charter curriculum (internal reference deck for Chef, not part of the website)
 /charter-curriculum
+
+# Internal deliverables for Chef, not part of the website
+/qr
+/seo-review
+
+# Supabase CLI build artifacts
+/supabase/.temp
