@@ -7,12 +7,12 @@ const BLOG_DATA = [
       { type: 'p', text: 'If you collect Pokemon cards, you have probably tried to trade or buy from someone online. Maybe through social media, OfferUp, or a Facebook group. And maybe it went fine. But maybe it felt sketchy. You did not know if the cards were real. You did not know if the person would show up. You met in a parking lot and hoped for the best.' },
       { type: 'p', text: 'CardChase was built to fix that.' },
       { type: 'h2', text: 'A Trading App Built for In-Person Meetups' },
-      { type: 'p', text: 'CardChase is a free app for Pokemon card collectors that connects traders in their area and brings them together at verified Trainer Center locations. Real card shops with real staff. No parking lots. No strangers at your front door.' },
-      { type: 'p', text: 'Chef, co-owner of Trainer Center in Huntington Beach, is also a co-owner of CardChase. The app was designed with shops like Trainer Center in mind. A place where you can walk in, meet someone, evaluate cards together, and make a fair trade with people around who know what they are looking at.' },
+      { type: 'p', text: 'CardChase is a free app for Pokemon card collectors that connects traders in their area and brings them together at verified Trainer Center HB locations. Real card shops with real staff. No parking lots. No strangers at your front door.' },
+      { type: 'p', text: 'Chef, co-owner of Trainer Center HB in Huntington Beach, is also a co-owner of CardChase. The app was designed with shops like Trainer Center HB in mind. A place where you can walk in, meet someone, evaluate cards together, and make a fair trade with people around who know what they are looking at.' },
       { type: 'h2', text: 'How It Works' },
       { type: 'p', text: 'You create an account, scan or add your cards, and build your collection digitally. You can set up a wish list of cards you are looking for. When another trader nearby has what you want (and you have what they want), the app lets you know.' },
       { type: 'p', text: 'All communication happens through guided chat. There is no free-text messaging. This keeps conversations focused and safe, especially for younger collectors.' },
-      { type: 'p', text: 'When you are ready to trade, you meet at a verified Trainer Center location. Staff are there. The environment is supervised. You make your trade and both sides walk away happy.' },
+      { type: 'p', text: 'When you are ready to trade, you meet at a verified Trainer Center HB location. Staff are there. The environment is supervised. You make your trade and both sides walk away happy.' },
       { type: 'h2', text: 'CardPrint: Build Your Collection List' },
       { type: 'p', text: 'One of the tools inside CardChase is called CardPrint. It lets you browse every Pokemon set ever made, filter by rarity, type, evolution stage, and more. You pick the cards you want to collect and print out a physical checklist. It is a simple way to start a focused collection instead of just buying random packs and hoping for the best.' },
       { type: 'h2', text: 'Built for Families' },
@@ -52,7 +52,7 @@ const BLOG_DATA = [
         'Use an AI grading tool like SnapGradeAI or PokeGrade to get a quick estimate before spending money on a real submission.',
         'Be honest with yourself. If you see a flaw, PSA will see it too.'
       ]},
-      { type: 'h2', text: 'Bring Your Cards to Trainer Center' },
+      { type: 'h2', text: 'Bring Your Cards to Trainer Center HB' },
       { type: 'p', text: 'Not sure if your card is worth grading? Bring it in. Our staff will evaluate it with you and give you an honest opinion before you spend the money. We also handle the PSA submission process so you do not have to deal with shipping and paperwork yourself.' }
     ]
   },
@@ -70,7 +70,7 @@ const BLOG_DATA = [
       { type: 'p', text: 'Here are a few principles:' },
       { type: 'p', text: '<strong>Buy singles, not packs.</strong> Packs are gambling. If you want a specific card, buy it directly. You will almost always spend less than what it would cost to pull it from packs.' },
       { type: 'p', text: '<strong>Learn to trade up and down.</strong> Trading is not just swapping cards of equal value. Sometimes you trade several smaller cards for one bigger card (trading up). Sometimes you trade one card for multiple cards you need (trading down). This is how experienced collectors build valuable collections without spending a fortune.' },
-      { type: 'p', text: '<strong>Make connections.</strong> The people you trade with regularly become your network. They tip you off about deals, hold cards for you, and help you find what you are looking for. This is where meeting in person at shops like Trainer Center makes a huge difference compared to anonymous online transactions.' },
+      { type: 'p', text: '<strong>Make connections.</strong> The people you trade with regularly become your network. They tip you off about deals, hold cards for you, and help you find what you are looking for. This is where meeting in person at shops like Trainer Center HB makes a huge difference compared to anonymous online transactions.' },
       { type: 'p', text: '<strong>Track what you want.</strong> Random collecting leads to random results. Pick a focus. Whether that is a specific Pokemon, a specific set, or a specific era, having a target makes every trade and purchase more intentional.' },
       { type: 'h2', text: 'CardPrint: Start With a List' },
       { type: 'p', text: 'If you are not sure where to start, check out CardPrint on <a href="https://cardchase.org" target="_blank" rel="noopener noreferrer">cardchase.org</a>. It lets you browse every Pokemon set, filter by what interests you, and print out a physical checklist of the cards you want to collect. Having that list in your binder when you walk into a shop or a trade night changes everything. You stop browsing aimlessly and start collecting with purpose.' },
@@ -92,7 +92,7 @@ const BLOG_DATA = [
       { type: 'p', text: '<strong>For vintage cards:</strong> Do not trust a single number. Go to eBay, search for the exact card, and filter by "Sold Items." Look at the last 10 to 20 sales, not just the most recent one. Check the condition of the cards that sold. A near mint Base Set Charizard is worth significantly more than a played one, even if they are technically the same card.' },
       { type: 'p', text: '<strong>For graded cards:</strong> PSA has their own price guide, and sites like 130point.com track auction results specifically for graded cards. The grade makes a massive difference. A PSA 7 and a PSA 10 of the same card can be hundreds or thousands of dollars apart.' },
       { type: 'h2', text: 'Cards That Break the Apps' },
-      { type: 'p', text: 'Some cards are so rare that pricing apps simply do not have enough data. Japanese promos, error cards, staff tournament cards, and unreleased variants may have zero recent sales in any database. For these, you need to talk to someone who knows the market. That is where a consultation at a shop like Trainer Center comes in.' },
+      { type: 'p', text: 'Some cards are so rare that pricing apps simply do not have enough data. Japanese promos, error cards, staff tournament cards, and unreleased variants may have zero recent sales in any database. For these, you need to talk to someone who knows the market. That is where a consultation at a shop like Trainer Center HB comes in.' },
       { type: 'h2', text: 'The Short Version' },
       { type: 'li', items: [
         'Modern cards: apps are reliable, use TCGPlayer or PriceCharting',
@@ -105,12 +105,12 @@ const BLOG_DATA = [
   },
   {
     slug: 'how-consignment-works',
-    title: 'How Consignment Works at Trainer Center',
+    title: 'How Consignment Works at Trainer Center HB',
     published: true,
     content: [
       { type: 'p', text: 'You have graded cards or collectibles you want to sell, but you do not want to deal with eBay listings, shipping, buyer disputes, or marketplace fees. That is exactly what consignment is for.' },
       { type: 'h2', text: 'What is Consignment?' },
-      { type: 'p', text: 'Consignment means you bring your items to Trainer Center, we display them in the store, and when they sell, you get paid. You keep ownership of the items until they sell. We handle the display, the customer interaction, and the sale.' },
+      { type: 'p', text: 'Consignment means you bring your items to Trainer Center HB, we display them in the store, and when they sell, you get paid. You keep ownership of the items until they sell. We handle the display, the customer interaction, and the sale.' },
       { type: 'h2', text: 'What Qualifies for Consignment?' },
       { type: 'p', text: 'Not everything qualifies. Consignment works best for items that have clear value and will move in a retail setting:' },
       { type: 'li', items: [
@@ -138,7 +138,7 @@ const BLOG_DATA = [
       { type: 'p', text: 'When you sell directly to a shop, you get paid immediately but at a lower price. The shop needs margin to resell. With consignment, you typically get a higher return because you are waiting for a retail buyer to pay closer to market value.' },
       { type: 'p', text: 'The tradeoff is time. Direct sale is instant. Consignment takes longer but usually puts more money in your pocket.' },
       { type: 'h2', text: 'Ready to Consign?' },
-      { type: 'p', text: 'Call Trainer Center at (714) 951-9100 to get started. We will walk you through everything and make sure you are comfortable with the terms before anything goes on the shelf.' }
+      { type: 'p', text: 'Call Trainer Center HB at (714) 951-9100 to get started. We will walk you through everything and make sure you are comfortable with the terms before anything goes on the shelf.' }
     ]
   },
   {
@@ -184,12 +184,12 @@ const BLOG_DATA = [
       { type: 'p', text: '<strong>After 3 to 5 games:</strong> You will have the flow down. Draw, play, attach energy, attack. The basic mechanics become automatic.' },
       { type: 'p', text: '<strong>After 10+ games:</strong> You start thinking about strategy. Which Pokemon to lead with, when to use supporter cards, how to manage your energy attachments. This is where the game gets really fun.' },
       { type: 'h2', text: 'Competitive Play is Optional' },
-      { type: 'p', text: 'Tournaments exist for people who want them, but most players at Trainer Center are casual. They come in, play a few games, trade some cards, and hang out. There is no pressure to be competitive unless that is what you are into.' },
+      { type: 'p', text: 'Tournaments exist for people who want them, but most players at Trainer Center HB are casual. They come in, play a few games, trade some cards, and hang out. There is no pressure to be competitive unless that is what you are into.' },
       { type: 'p', text: 'If you do want to compete, the Pokemon TCG has organized leagues and tournaments at every level from local shop events to regional championships. But that is a choice, not a requirement.' },
       { type: 'h2', text: 'Playing With Your Kids' },
       { type: 'p', text: 'This is one of the best parts. The Pokemon TCG is one of the few card games where a parent and child can genuinely enjoy playing together. The rules are simple enough for kids to learn but strategic enough to keep adults engaged.' },
       { type: 'p', text: 'If your kid is into Pokemon and you have never played, give it a shot. Pick up two Battle Decks, spend 30 minutes learning together, and see what happens.' },
-      { type: 'h2', text: 'Try It at Trainer Center' },
+      { type: 'h2', text: 'Try It at Trainer Center HB' },
       { type: 'p', text: 'We host game nights and casual play sessions. If you have never played before, come in and someone will teach you. No experience needed, no deck required. Just show up.' }
     ]
   },
@@ -222,7 +222,7 @@ const BLOG_DATA = [
         'The back of the card is a noticeably different shade of blue'
       ]},
       { type: 'h2', text: 'When in Doubt' },
-      { type: 'p', text: 'Bring the card to Trainer Center. Our staff handles thousands of cards and can spot a fake in seconds. It is better to check before you trade or sell a card that turns out to be counterfeit.' }
+      { type: 'p', text: 'Bring the card to Trainer Center HB. Our staff handles thousands of cards and can spot a fake in seconds. It is better to check before you trade or sell a card that turns out to be counterfeit.' }
     ]
   },
   {
@@ -257,7 +257,7 @@ const BLOG_DATA = [
       { type: 'p', text: 'You do not need to learn every Pokemon name or understand the meta of the TCG. What matters is that you help your kid navigate the hobby safely and make good decisions. Here are the things that actually matter.' },
       { type: 'h2', text: 'Help Them Meet the Right Kids' },
       { type: 'p', text: 'Pokemon is social. The best part of the hobby for most kids is not the cards themselves. It is the friends they make trading and playing. Help your kid find the right environment for that.' },
-      { type: 'p', text: 'Card shops like Trainer Center host trade nights and events specifically for this. The environment is supervised, the staff is present, and the kids who show up regularly are part of a community. This is very different from trading at school where there is no oversight and trades can go sideways fast.' },
+      { type: 'p', text: 'Card shops like Trainer Center HB host trade nights and events specifically for this. The environment is supervised, the staff is present, and the kids who show up regularly are part of a community. This is very different from trading at school where there is no oversight and trades can go sideways fast.' },
       { type: 'h2', text: 'Always Meet at Shops or Public Places' },
       { type: 'p', text: 'If your kid wants to trade with someone they met online or through a friend of a friend, do it at a card shop. Not at your house. Not at a park. A card shop has staff who can help mediate if there is a disagreement about a trade, and it is a safe, supervised space.' },
       { type: 'p', text: 'Be very careful with platforms like OfferUp, Facebook Marketplace, or Craigslist for card transactions. These are not designed for kids and the risk of scams or unsafe meetups is real.' },
@@ -327,7 +327,7 @@ const BLOG_DATA = [
       { type: 'p', text: '<strong>Error cards and misprints.</strong> Foreign language error cards can be valuable because they are rare and unusual. A misprint in a small print run foreign set creates something truly one-of-a-kind.' },
       { type: 'h2', text: 'The Bottom Line' },
       { type: 'p', text: 'If you are buying to collect, get whatever language makes you happy. Japanese cards are beautiful and often cheaper than English for the same artwork. If you are buying to invest or resell, stick with English unless you know exactly what you are doing in the foreign market.' },
-      { type: 'p', text: 'And if you have a stack of foreign language cards you are not sure about, bring them into Trainer Center. Some of them might be worth more than you think, and some might not be worth the sleeve they are in. We can help you figure out which is which.' }
+      { type: 'p', text: 'And if you have a stack of foreign language cards you are not sure about, bring them into Trainer Center HB. Some of them might be worth more than you think, and some might not be worth the sleeve they are in. We can help you figure out which is which.' }
     ]
   }
 ];

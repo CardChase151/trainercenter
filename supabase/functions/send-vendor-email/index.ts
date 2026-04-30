@@ -12,7 +12,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
-const FROM_ADDRESS = 'Trainer Center <noreply@mysendz.com>'
+const FROM_ADDRESS = 'Trainer Center HB <noreply@mysendz.com>'
 const STAFF_EMAILS = ['chase@appcatalyst.org', 'Trainercenter.pokemon@gmail.com']
 const SITE_URL = 'https://pokemontrainercenter.com'
 
@@ -68,7 +68,7 @@ function wrapHtml(inner: string) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:32px 16px"><tr><td align="center">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
       <tr><td style="background:#C8102E;padding:24px 32px;text-align:center">
-        <h1 style="margin:0;color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.01em">Trainer Center</h1>
+        <h1 style="margin:0;color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.01em">Trainer Center HB</h1>
         <p style="margin:4px 0 0;color:#fbb;font-size:12px">California's Pokemon-only shop</p>
       </td></tr>
       <tr><td style="padding:32px">${inner}</td></tr>
@@ -108,13 +108,13 @@ Deno.serve(async (req: Request) => {
       if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
       const { data: v, error: vErr } = await supabase.from('vendors').select('*').eq('id', payload.vendor_id).single()
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
-      const subject = 'Welcome to Trainer Center vendors'
+      const subject = 'Welcome to Trainer Center HB vendors'
       const body = `<p>Hi ${v.name},</p>` +
         `<p>Your vendor profile is in. Chef will personally review it before approving you. Once approved, you can apply for any upcoming Vendor Day in two clicks from your dashboard.</p>` +
         `<p><strong>Vendor Day cadence:</strong> last Friday of every month at the shop.</p>` +
-        `<p>While you wait, drop by Trainer Center or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
+        `<p>While you wait, drop by Trainer Center HB or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`
-      await sendResendEmail([v.email], subject, wrapHtml(body), `Welcome to Trainer Center vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
+      await sendResendEmail([v.email], subject, wrapHtml(body), `Welcome to Trainer Center HB vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
@@ -122,14 +122,14 @@ Deno.serve(async (req: Request) => {
       if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
       const { data: v, error: vErr } = await supabase.from('vendors').select('*').eq('id', payload.vendor_id).single()
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
-      const subject = "You're an approved Trainer Center vendor partner!"
+      const subject = "You're an approved Trainer Center HB vendor partner!"
       const body = `<p>Hi ${v.name},</p>` +
-        `<p><strong>Welcome to the Trainer Center vendor family.</strong> Chef just approved your profile, which means you're a recognized partner with the shop.</p>` +
+        `<p><strong>Welcome to the Trainer Center HB vendor family.</strong> Chef just approved your profile, which means you're a recognized partner with the shop.</p>` +
         `<p>This isn't an approval for any specific Vendor Day yet — it's the partnership tier. The next step is up to you: head to your dashboard and pick which Vendor Days you'd like to be at. Each one still needs a quick per-event confirmation from Chef, but with your profile already approved, applying takes about two clicks.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Pick your Vendor Days</a></p>` +
         `<p style="margin-top:20px;font-size:13px;color:#666">Vendor Days happen the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
       await sendResendEmail([v.email], subject, wrapHtml(body),
-        `You're an approved Trainer Center vendor partner!\n\nThis is the partnership tier — not an approval for a specific Vendor Day yet. Head to your dashboard to pick which Vendor Days you want to be at: ${SITE_URL}/vendors/dashboard`)
+        `You're an approved Trainer Center HB vendor partner!\n\nThis is the partnership tier — not an approval for a specific Vendor Day yet. Head to your dashboard to pick which Vendor Days you want to be at: ${SITE_URL}/vendors/dashboard`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
@@ -137,13 +137,13 @@ Deno.serve(async (req: Request) => {
       if (!payload.member_id) return json({ error: 'member_id required' }, 400)
       const { data: m, error: mErr } = await supabase.from('members').select('*').eq('id', payload.member_id).single()
       if (mErr || !m) return json({ error: mErr?.message || 'member not found' }, 404)
-      const subject = 'Welcome to the Trainer Center community'
+      const subject = 'Welcome to the Trainer Center HB community'
       const body = `<p>Hi ${m.first_name || 'there'},</p>` +
         `<p>You're in! You can vote for your favorite vendors at any future Vendor Day. Voting opens at the shop on event day — just tap <strong>Review Vendors</strong> on the Vendors page when you're here.</p>` +
         `<p><strong>Vendor Day cadence:</strong> last Friday of every month.</p>` +
         `<p>We'll send you a reminder a few days before the next one. No spam, no list-selling — just shop news.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors" style="display:inline-block;background:#16a34a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">See Vendors page</a></p>`
-      await sendResendEmail([m.email], subject, wrapHtml(body), `Welcome to Trainer Center, ${m.first_name || ''}!\n\nVendor Day = last Friday of every month. Vote at the shop on event day.\n\n${SITE_URL}/vendors`)
+      await sendResendEmail([m.email], subject, wrapHtml(body), `Welcome to Trainer Center HB, ${m.first_name || ''}!\n\nVendor Day = last Friday of every month. Vote at the shop on event day.\n\n${SITE_URL}/vendors`)
       return json({ ok: true, sent: ['member'] })
     }
 
@@ -184,7 +184,7 @@ Deno.serve(async (req: Request) => {
         await sendResendEmail([v.email], subject, wrapHtml(body), `Approved for ${eventTitle} on ${dateStr}.\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
       } else if (status === 'declined') {
         const subject = `About your Vendor Day application`
-        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center.</p>`
+        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center HB.</p>`
         await sendResendEmail([v.email], subject, wrapHtml(body), `About your Vendor Day application: not approved this time.`)
       } else {
         return json({ ok: true, skipped: 'not a notify-worthy status' })

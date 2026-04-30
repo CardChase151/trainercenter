@@ -169,7 +169,7 @@ function StaffLogin({ onClose, onLogin }) {
         width: '100%', maxWidth: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
       }} onClick={e => e.stopPropagation()}>
         <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Staff Login</h2>
-        <p style={{ fontSize: '0.8rem', color: '#999', margin: '0 0 20px 0' }}>Trainer Center staff only</p>
+        <p style={{ fontSize: '0.8rem', color: '#999', margin: '0 0 20px 0' }}>Trainer Center HB staff only</p>
         <form onSubmit={handleLogin}>
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
             style={{
@@ -1618,7 +1618,7 @@ function Footer() {
         <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '76px', height: '76px', objectFit: 'contain' }} />
       </div>
       <p style={{ fontSize: '0.9rem', fontWeight: '600', color: '#ccc', margin: '0 0 8px 0' }}>
-        Trainer <span style={{ color: '#C8102E' }}>Center</span>
+        Trainer <span style={{ color: '#C8102E' }}>Center HB</span>
       </p>
       <p style={{ fontSize: '0.75rem', margin: '0 0 12px 0' }}>
         Pokemon cards, collectibles, and community events
@@ -1860,7 +1860,7 @@ function HomePage({ isMobile }) {
             textShadow: '0 2px 20px rgba(0,0,0,0.4)',
             textAlign: 'center'
           }}>
-            Trainer <span style={{ color: '#C8102E', backgroundColor: '#ffffff', padding: '0px 5px', borderRadius: '6px', marginLeft: '4px' }}>Center</span>
+            Trainer <span style={{ color: '#C8102E', backgroundColor: '#ffffff', padding: '0px 5px', borderRadius: '6px', marginLeft: '4px' }}>Center HB</span>
           </h1>
           <p style={{
             fontSize: isMobile ? 'clamp(1rem, 4vw, 1.3rem)' : '1.6rem',
@@ -1932,7 +1932,7 @@ function HomePage({ isMobile }) {
               lineHeight: '1.8',
               marginBottom: '20px'
             }}>
-              Trainer Center is a Pokemon only store. We are an education and community driven store that promotes math, reading, critical thinking, social engagement, friendship and community action through Pokemon. We host an after school social club for collectors, traders, friends and family that promotes social interaction in a clean, safe, fun, fair and supervised environment. Our goal is to become fully licensed and a part of the Pokemon Company family and have Pokemon be a positive staple in the Huntington Beach area.
+              Trainer Center HB is a Pokemon only store. We are an education and community driven store that promotes math, reading, critical thinking, social engagement, friendship and community action through Pokemon. We host an after school social club for collectors, traders, friends and family that promotes social interaction in a clean, safe, fun, fair and supervised environment. Our goal is to become fully licensed and a part of the Pokemon Company family and have Pokemon be a positive staple in the Huntington Beach area.
             </p>
             <p style={{
               fontSize: '1.05rem',
@@ -2451,7 +2451,7 @@ function GradingPage({ isMobile }) {
           margin: '32px auto 0'
         }}>
           <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 20px 0' }}>
-            Common questions about grading through Trainer Center
+            Common questions about grading through Trainer Center HB
           </h3>
           {[
             {
@@ -2596,7 +2596,7 @@ function BuySellPage({ isMobile }) {
           margin: '32px auto 0'
         }}>
           <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
-            How selling cards to Trainer Center works
+            How selling cards to Trainer Center HB works
           </h3>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
             You walk in with your cards. We sit at the counter together. Chef looks through the collection card by card for anything meaningful and bulks the rest into obvious lots. You watch the entire process. Nothing goes into a back room. Once we have a picture of what is there, we price each meaningful card or lot using live TCGplayer market data, eBay sold listings, and our own read on current Pokemon market movement.
@@ -2790,7 +2790,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     };
 
     printWin.document.write(`
-      <html><head><title>Trainer Center - ${moName} ${yr}</title>
+      <html><head><title>Trainer Center HB - ${moName} ${yr}</title>
       <style>
         @page { size: landscape; margin: 0.5in; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; }
@@ -2813,8 +2813,8 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .weekly strong { color: #1a1a1a; }
       </style></head><body>
       <div class="header">
-        <img src="/logo-square.png" alt="Trainer Center" />
-        <div><h1>Trainer Center - ${moName} ${yr}</h1><span>4911 Warner Ave #210, Huntington Beach, CA 92649 | (714) 951-9100</span></div>
+        <img src="/logo-square.png" alt="Trainer Center HB" />
+        <div><h1>Trainer Center HB - ${moName} ${yr}</h1><span>4911 Warner Ave #210, Huntington Beach, CA 92649 | (714) 951-9100</span></div>
       </div>
     `);
 
@@ -3205,7 +3205,7 @@ function VendorsPage({ isMobile, staff }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Vendors" subtitle="Last-Friday Vendor Day at Trainer Center" />
+        <SectionHeader title="Vendors" subtitle="Last-Friday Vendor Day at Trainer Center HB" />
 
         {/* Intro + Apply CTA */}
         <div style={{
@@ -3224,12 +3224,12 @@ function VendorsPage({ isMobile, staff }) {
               <Users size={24} color="#16a34a" />
             </div>
             <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-              Vendor Day at Trainer Center
+              Vendor Day at Trainer Center HB
             </h3>
           </div>
 
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
-            Every last Friday of the month, Pokemon vendors set up tables at Trainer Center, Huntington Beach. Bring your singles, sealed product, slabs, vintage, Japanese imports - whatever you specialize in. Trade with collectors, sell to walk-ins, and connect with the community.
+            Every last Friday of the month, Pokemon vendors set up tables at Trainer Center HB, Huntington Beach. Bring your singles, sealed product, slabs, vintage, Japanese imports - whatever you specialize in. Trade with collectors, sell to walk-ins, and connect with the community.
           </p>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
             Apply once, return every month with two clicks. After each event, share photos and a short clip from your table - we feature recent vendor posts right here on the page.
@@ -4205,7 +4205,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
           <label style={labelCss}>How did you hear about Vendor Day?</label>
           <select value={form.heard_from} onChange={setField('heard_from')} style={{ ...inputCss, cursor: 'pointer' }}>
             <option value="">Pick one</option>
-            <option value="trainer_center_customer">I shop at Trainer Center</option>
+            <option value="trainer_center_customer">I shop at Trainer Center HB</option>
             <option value="word_of_mouth">Word of mouth</option>
             <option value="social_media">Social media</option>
             <option value="vendor_referral">Another vendor referred me</option>
@@ -4364,7 +4364,7 @@ async function sendVendorEmail(payload) {
 }
 
 // ─── Geo helpers ──────────────────────────────────────────
-// Trainer Center: 4911 Warner Ave #210, Huntington Beach, CA 92649
+// Trainer Center HB: 4911 Warner Ave #210, Huntington Beach, CA 92649
 const TRAINER_CENTER_COORDS = { lat: 33.7191, lng: -117.9836 };
 // Distance in meters within which we consider a check-in geo-verified.
 // 200m covers the building + parking lot + a generous sidewalk margin.
@@ -4464,7 +4464,7 @@ function VendorCheckInModal({ vendorId, eventId, onClose, onCheckedIn }) {
           <>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 8px 0' }}>Check in for today</h3>
             <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
-              We use your location once to confirm you are actually at Trainer Center. Your device will ask permission. We don't track you after — just a single point at check-in.
+              We use your location once to confirm you are actually at Trainer Center HB. Your device will ask permission. We don't track you after — just a single point at check-in.
             </p>
             <label style={{
               display: 'flex', alignItems: 'flex-start', gap: '10px',
@@ -4478,7 +4478,7 @@ function VendorCheckInModal({ vendorId, eventId, onClose, onCheckedIn }) {
                 style={{ marginTop: '3px' }}
               />
               <span style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5' }}>
-                I am at Trainer Center right now
+                I am at Trainer Center HB right now
               </span>
             </label>
             {error && (
@@ -4700,7 +4700,7 @@ function VendorReviewPage({ isMobile }) {
     return (
       <PageWrapper isMobile={isMobile}>
         <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
-          <SectionHeader title="No Vendor Day today" subtitle="Voting is only open during a live Vendor Day at Trainer Center" />
+          <SectionHeader title="No Vendor Day today" subtitle="Voting is only open during a live Vendor Day at Trainer Center HB" />
           <div style={{
             backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
             padding: '28px 24px'
@@ -4833,7 +4833,7 @@ function MemberOnboardingForm({ isMobile, session, onComplete }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '480px', margin: '0 auto' }}>
-        <SectionHeader title="One quick thing" subtitle="Set up your Trainer Center account" />
+        <SectionHeader title="One quick thing" subtitle="Set up your Trainer Center HB account" />
         <form onSubmit={handleSubmit} style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '32px',
@@ -4910,7 +4910,7 @@ function ReviewGeoCheckIn({ memberId, eventId, eventTitle, memberName, isMobile,
         const { latitude, longitude } = pos.coords;
         const dist = haversineMeters(latitude, longitude, TRAINER_CENTER_COORDS.lat, TRAINER_CENTER_COORDS.lng);
         if (dist > GEO_VERIFY_RADIUS_M) {
-          setError('You appear to be away from Trainer Center. Voting is only open at the shop during Vendor Day.');
+          setError('You appear to be away from Trainer Center HB. Voting is only open at the shop during Vendor Day.');
           setStage('not_here');
           return;
         }
@@ -4932,7 +4932,7 @@ function ReviewGeoCheckIn({ memberId, eventId, eventTitle, memberName, isMobile,
           {stage === 'priming' && (
             <>
               <p style={{ fontSize: '0.95rem', color: '#444', lineHeight: '1.7', margin: '0 0 16px 0' }}>
-                We use your location once to confirm you are at Trainer Center, then unlock the voting screen. Quick prompt — your device will ask permission.
+                We use your location once to confirm you are at Trainer Center HB, then unlock the voting screen. Quick prompt — your device will ask permission.
               </p>
               <label style={{
                 display: 'flex', alignItems: 'flex-start', gap: '10px',
@@ -4941,7 +4941,7 @@ function ReviewGeoCheckIn({ memberId, eventId, eventTitle, memberName, isMobile,
               }}>
                 <input type="checkbox" checked={confirmedHere} onChange={e => setConfirmedHere(e.target.checked)} style={{ marginTop: '3px' }} />
                 <span style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5' }}>
-                  I am at Trainer Center right now
+                  I am at Trainer Center HB right now
                 </span>
               </label>
               {error && <div style={{ ...errorStyle, marginBottom: '14px' }}><AlertCircle size={16} />{error}</div>}
@@ -4969,13 +4969,13 @@ function ReviewGeoCheckIn({ memberId, eventId, eventTitle, memberName, isMobile,
               </p>
               {error && <div style={errorStyle}><AlertCircle size={16} />{error}</div>}
               <p style={{ fontSize: '0.8rem', color: '#888', margin: '12px 0 0 0' }}>
-                Voting requires verified location. You can ask a Trainer Center staff member to add your vote manually if needed.
+                Voting requires verified location. You can ask a Trainer Center HB staff member to add your vote manually if needed.
               </p>
             </>
           )}
           {stage === 'not_here' && (
             <>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 8px 0' }}>You're not at Trainer Center</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 8px 0' }}>You're not at Trainer Center HB</h3>
               <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: 0 }}>
                 {error}
               </p>
@@ -5120,7 +5120,7 @@ function ReviewVoteForm({ isMobile, member, event, visit, vendors, existingVotes
             <option value="vendor">Yes, a vendor referred me</option>
             <option value="social">Saw it on social media</option>
             <option value="walk_in">Walked in / found it today</option>
-            <option value="regular">I'm a regular at Trainer Center</option>
+            <option value="regular">I'm a regular at Trainer Center HB</option>
           </select>
 
           {attribution.source === 'vendor' && (
@@ -5146,7 +5146,7 @@ function ReviewVoteForm({ isMobile, member, event, visit, vendors, existingVotes
 
           <label style={labelCss}>Anything for Chef privately? (optional)</label>
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '4px' }}>
-            Only Chef and the Trainer Center team will see this. Vendors will not.
+            Only Chef and the Trainer Center HB team will see this. Vendors will not.
           </div>
           <textarea
             value={privateComment}
@@ -6136,7 +6136,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
           borderRadius: '8px', padding: '10px 12px', marginBottom: '10px',
           fontSize: '0.82rem', color: '#991b1b', lineHeight: '1.5'
         }}>
-          Approve this vendor's profile in the <strong>All vendors</strong> tab first. You can't add a vendor to a Vendor Day until they're a recognized Trainer Center vendor.
+          Approve this vendor's profile in the <strong>All vendors</strong> tab first. You can't add a vendor to a Vendor Day until they're a recognized Trainer Center HB vendor.
         </div>
       )}
 
@@ -6741,11 +6741,11 @@ function UnsubscribePage({ isMobile }) {
             <>
               <h1 style={titleCss}>Link not found</h1>
               <p style={bodyCss}>
-                This link is invalid or has expired. If you'd still like to update your Trainer Center email
+                This link is invalid or has expired. If you'd still like to update your Trainer Center HB email
                 preferences, reply to any email we've sent you and we'll handle it manually.
               </p>
               <p style={{ textAlign: 'center', margin: 0 }}>
-                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+                <Link to="/" style={linkCss}>Back to Trainer Center HB</Link>
               </p>
             </>
           )}
@@ -6809,7 +6809,7 @@ function UnsubscribePage({ isMobile }) {
                 Changes take a couple of days to fully clear our queue.
               </p>
               <p style={{ textAlign: 'center', margin: 0 }}>
-                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+                <Link to="/" style={linkCss}>Back to Trainer Center HB</Link>
               </p>
             </>
           )}
@@ -6818,13 +6818,13 @@ function UnsubscribePage({ isMobile }) {
             <>
               <h1 style={titleCss}>You're unsubscribed</h1>
               <p style={{ ...bodyCss, textAlign: 'center' }}>
-                We won't send you any more Trainer Center marketing emails. Sorry to see you go.
+                We won't send you any more Trainer Center HB marketing emails. Sorry to see you go.
               </p>
               <p style={{ ...bodyCss, textAlign: 'center' }}>
                 You're always welcome at the shop, and the website is here whenever you want to come back.
               </p>
               <p style={{ textAlign: 'center', margin: 0 }}>
-                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+                <Link to="/" style={linkCss}>Back to Trainer Center HB</Link>
               </p>
             </>
           )}
@@ -6839,7 +6839,7 @@ function UnsubscribePage({ isMobile }) {
                 Please try again, or reply to any email we've sent you and we'll handle it manually.
               </p>
               <p style={{ textAlign: 'center', margin: 0 }}>
-                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+                <Link to="/" style={linkCss}>Back to Trainer Center HB</Link>
               </p>
             </>
           )}
@@ -6996,7 +6996,7 @@ function App() {
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
           <img src="/logo-circle-transparent.png" alt="TrainerCenter" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
           <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', letterSpacing: '-0.02em' }}>
-            Trainer <span style={{ color: '#C8102E' }}>Center</span>
+            Trainer <span style={{ color: '#C8102E' }}>Center HB</span>
           </span>
         </Link>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
