@@ -6570,47 +6570,83 @@ const NAV_ITEMS = [
 // ─── Unsubscribe page ─────────────────────────────────────
 // Public, token-based. Loaded from links in marketing emails:
 //   https://pokemontrainercenter.com/unsubscribe?token=<uuid>
-// The unique token IS the credential -- no login needed.
+// The unique token IS the credential -- no login needed. Page lets the
+// recipient turn individual category subscriptions on/off, or unsubscribe
+// from everything in one click.
+const MARKETING_CATEGORIES = [
+  { key: 'vendor_day', label: 'Vendor Day announcements', help: 'Monthly Vendor Day reminders and lineup previews.' },
+  { key: 'events',     label: 'Other events',             help: 'Tournaments, set releases, signings, special days.' },
+  { key: 'store_news', label: 'Store news and updates',   help: 'Hours, restocks, new arrivals, store happenings.' },
+  { key: 'blog',       label: 'New blog posts',           help: 'Articles and guides we publish on the site.' },
+];
+
 function UnsubscribePage({ isMobile }) {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
 
-  const [phase, setPhase] = useState('loading'); // loading | invalid | confirm | already | done | error
+  // loading | invalid | manage | done_partial | done_all | error
+  const [phase, setPhase] = useState('loading');
   const [contact, setContact] = useState(null);
+  const [subs, setSubs] = useState({ vendor_day: true, store_news: true, events: true, blog: true });
+  const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    if (!token) {
-      setPhase('invalid');
-      return;
-    }
+    if (!token) { setPhase('invalid'); return; }
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase.rpc('lookup_marketing_contact_by_token', { p_token: token });
       if (cancelled) return;
-      if (error || !data || data.length === 0) {
-        setPhase('invalid');
-        return;
-      }
+      if (error || !data || data.length === 0) { setPhase('invalid'); return; }
       const row = data[0];
       setContact(row);
-      setPhase(row.is_subscribed ? 'confirm' : 'already');
+      // Hydrate checkbox state from current DB state.
+      const current = row.subscriptions || {};
+      setSubs({
+        vendor_day: current.vendor_day !== false,
+        store_news: current.store_news !== false,
+        events:     current.events     !== false,
+        blog:       current.blog       !== false,
+      });
+      setPhase('manage');
     })();
     return () => { cancelled = true; };
   }, [token]);
 
-  const handleConfirm = async () => {
-    setPhase('loading');
+  const toggle = (key) => setSubs((s) => ({ ...s, [key]: !s[key] }));
+
+  const handleSavePreferences = async () => {
+    setSaving(true);
+    setErrorMsg('');
+    const { data, error } = await supabase.rpc('update_marketing_subscriptions', {
+      p_token: token,
+      p_subscriptions: subs,
+    });
+    setSaving(false);
+    if (error || !data || data.length === 0) {
+      setErrorMsg(error?.message || 'Could not save your preferences.');
+      setPhase('error');
+      return;
+    }
+    const anyOn = Object.values(subs).some(Boolean);
+    setPhase(anyOn ? 'done_partial' : 'done_all');
+  };
+
+  const handleUnsubscribeAll = async () => {
+    setSaving(true);
+    setErrorMsg('');
     const { data, error } = await supabase.rpc('unsubscribe_marketing_contact', {
       p_token: token,
-      p_reason: 'self_unsubscribe',
+      p_reason: 'self_unsubscribe_all',
     });
+    setSaving(false);
     if (error || !data || data.length === 0) {
       setErrorMsg(error?.message || 'Could not process unsubscribe.');
       setPhase('error');
       return;
     }
-    setPhase('done');
+    setSubs({ vendor_day: false, store_news: false, events: false, blog: false });
+    setPhase('done_all');
   };
 
   const cardCss = {
@@ -6618,82 +6654,129 @@ function UnsubscribePage({ isMobile }) {
     borderRadius: '16px',
     border: '1px solid #eee',
     padding: isMobile ? '28px 22px' : '40px',
-    maxWidth: '520px',
+    maxWidth: '560px',
     margin: '0 auto',
-    textAlign: 'center',
   };
-  const titleCss = { fontSize: isMobile ? '1.4rem' : '1.7rem', fontWeight: 700, color: '#1a1a1a', margin: '0 0 12px 0' };
+  const titleCss = { fontSize: isMobile ? '1.4rem' : '1.7rem', fontWeight: 700, color: '#1a1a1a', margin: '0 0 8px 0', textAlign: 'center' };
+  const subtitleCss = { fontSize: '0.95rem', color: '#666', textAlign: 'center', margin: '0 0 24px 0' };
   const bodyCss = { fontSize: '0.95rem', color: '#555', lineHeight: 1.65, margin: '0 0 18px 0' };
   const emailCss = { fontWeight: 600, color: '#1a1a1a' };
-  const buttonCss = {
+  const primaryBtn = {
     background: '#C8102E', color: '#fff', border: 'none',
     padding: '13px 28px', borderRadius: '10px', fontSize: '1rem',
-    fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px',
+    fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px', width: '100%',
+  };
+  const secondaryBtn = {
+    background: 'transparent', color: '#666', border: '1px solid #ddd',
+    padding: '11px 22px', borderRadius: '10px', fontSize: '0.9rem',
+    fontWeight: 600, cursor: 'pointer', width: '100%',
   };
   const linkCss = { color: '#C8102E', fontWeight: 600, textDecoration: 'none' };
+  const rowCss = {
+    display: 'flex', alignItems: 'flex-start', gap: '12px',
+    padding: '14px 0', borderBottom: '1px solid #f0f0f0',
+  };
+  const checkboxCss = { marginTop: '3px', width: '18px', height: '18px', accentColor: '#C8102E', cursor: 'pointer', flexShrink: 0 };
+  const labelTextCss = { fontSize: '1rem', color: '#1a1a1a', fontWeight: 600, margin: '0 0 2px 0' };
+  const helpTextCss = { fontSize: '0.85rem', color: '#888', margin: 0, lineHeight: 1.5 };
 
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginTop: '40px', marginBottom: '64px' }}>
         <div style={cardCss}>
           {phase === 'loading' && (
-            <p style={bodyCss}>Loading...</p>
+            <p style={{ ...bodyCss, textAlign: 'center' }}>Loading your preferences...</p>
           )}
 
           {phase === 'invalid' && (
             <>
               <h1 style={titleCss}>Link not found</h1>
               <p style={bodyCss}>
-                This unsubscribe link is invalid or has expired. If you'd still like to be removed from
-                Trainer Center emails, reply to any email we've sent you and we'll handle it manually.
+                This link is invalid or has expired. If you'd still like to update your Trainer Center email
+                preferences, reply to any email we've sent you and we'll handle it manually.
               </p>
-              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              </p>
             </>
           )}
 
-          {phase === 'confirm' && contact && (
+          {phase === 'manage' && contact && (
             <>
               <h1 style={titleCss}>
-                {contact.first_name ? `Hey ${contact.first_name},` : 'Unsubscribe?'}
+                {contact.first_name ? `Hey ${contact.first_name},` : 'Email preferences'}
               </h1>
+              <p style={subtitleCss}>
+                {contact.email
+                  ? <>Manage what we send to <span style={emailCss}>{contact.email}</span>.</>
+                  : 'Manage what we send you.'}
+              </p>
               <p style={bodyCss}>
-                Click below to unsubscribe <span style={emailCss}>{contact.email}</span> from Trainer Center
-                marketing emails.
+                Check the categories you want to keep getting. Uncheck the ones you don't. Transactional emails
+                (vendor application status, account stuff) aren't affected by this.
               </p>
-              <p style={{ ...bodyCss, fontSize: '0.85rem', color: '#888' }}>
-                You'll still get transactional emails (vendor application updates, account stuff). Just no
-                more event/marketing announcements.
-              </p>
-              <button type="button" style={buttonCss} onClick={handleConfirm}>
-                Confirm unsubscribe
+
+              <div style={{ marginBottom: '24px' }}>
+                {MARKETING_CATEGORIES.map((cat) => (
+                  <label key={cat.key} style={{ ...rowCss, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!subs[cat.key]}
+                      onChange={() => toggle(cat.key)}
+                      style={checkboxCss}
+                    />
+                    <span style={{ flex: 1 }}>
+                      <p style={labelTextCss}>{cat.label}</p>
+                      <p style={helpTextCss}>{cat.help}</p>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                style={{ ...primaryBtn, opacity: saving ? 0.6 : 1, marginBottom: '12px' }}
+                onClick={handleSavePreferences}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save my preferences'}
               </button>
-              <p style={{ marginTop: '20px', marginBottom: 0 }}>
-                <Link to="/" style={linkCss}>Cancel and stay subscribed</Link>
-              </p>
+              <button
+                type="button"
+                style={{ ...secondaryBtn, opacity: saving ? 0.6 : 1 }}
+                onClick={handleUnsubscribeAll}
+                disabled={saving}
+              >
+                Unsubscribe from everything
+              </button>
             </>
           )}
 
-          {phase === 'already' && contact && (
+          {phase === 'done_partial' && contact && (
             <>
-              <h1 style={titleCss}>You're already unsubscribed</h1>
-              <p style={bodyCss}>
-                <span style={emailCss}>{contact.email}</span> is not receiving Trainer Center marketing emails.
-                If you're still seeing them, give us a couple of days for the change to fully clear our queue.
+              <h1 style={titleCss}>Preferences saved</h1>
+              <p style={{ ...bodyCss, textAlign: 'center' }}>
+                We updated what we'll send to <span style={emailCss}>{contact.email}</span>.
+                Changes take a couple of days to fully clear our queue.
               </p>
-              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              </p>
             </>
           )}
 
-          {phase === 'done' && (
+          {phase === 'done_all' && (
             <>
               <h1 style={titleCss}>You're unsubscribed</h1>
-              <p style={bodyCss}>
-                We won't send you any more Trainer Center marketing emails. We're sorry to see you go.
+              <p style={{ ...bodyCss, textAlign: 'center' }}>
+                We won't send you any more Trainer Center marketing emails. Sorry to see you go.
               </p>
-              <p style={bodyCss}>
+              <p style={{ ...bodyCss, textAlign: 'center' }}>
                 You're always welcome at the shop, and the website is here whenever you want to come back.
               </p>
-              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              </p>
             </>
           )}
 
@@ -6701,12 +6784,14 @@ function UnsubscribePage({ isMobile }) {
             <>
               <h1 style={titleCss}>Something went wrong</h1>
               <p style={bodyCss}>
-                {errorMsg || 'We could not process your unsubscribe request right now.'}
+                {errorMsg || 'We could not save your preferences right now.'}
               </p>
               <p style={bodyCss}>
                 Please try again, or reply to any email we've sent you and we'll handle it manually.
               </p>
-              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+              </p>
             </>
           )}
         </div>
