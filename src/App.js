@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
-import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
+import { Link, Routes, Route, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
@@ -241,7 +241,7 @@ const CATEGORIES = {
 };
 
 // ─── Event Modal (Add/Edit) ───────────────────────────────
-function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile, staff }) {
+function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelEvent, isMobile, staff }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [startTime, setStartTime] = useState('18:00');
@@ -251,6 +251,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
   const [recurrence, setRecurrence] = useState('none');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
+  const [eventToDelete, setEventToDelete] = useState(null);
 
   const dateStr = `${date.toLocaleString('default', { month: 'long' })} ${date.getDate()}, ${date.getFullYear()}`;
 
@@ -396,7 +397,25 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
                     backgroundColor: CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'
                   }} />
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</div>
+                    <div style={{
+                      fontWeight: '700', fontSize: '0.85rem',
+                      color: ev.cancelled ? '#999' : '#1a1a1a',
+                      textDecoration: ev.cancelled ? 'line-through' : 'none',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
+                      {ev.title}
+                      {ev.cancelled && (
+                        <span style={{
+                          marginLeft: '6px', fontSize: '0.65rem', fontWeight: '800',
+                          color: '#dc2626', backgroundColor: '#fef2f2',
+                          padding: '1px 6px', borderRadius: '4px',
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                          textDecoration: 'none'
+                        }}>
+                          Cancelled
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: '#888' }}>
                       {formatTime12h(ev.start_time)} - {formatTime12h(ev.end_time)}
                       {ev.recurrence !== 'none' && <span style={{ color: '#C8102E', marginLeft: '8px' }}>{ev.recurrence}</span>}
@@ -408,7 +427,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
                     background: '#eee', border: 'none', borderRadius: '6px', padding: '6px 10px',
                     fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer'
                   }}>Edit</button>
-                  <button onClick={() => onDelete(ev.id)} style={{
+                  <button onClick={() => setEventToDelete(ev)} style={{
                     background: '#fee', border: 'none', borderRadius: '6px', padding: '6px 10px',
                     fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', color: '#C8102E'
                   }}>Delete</button>
@@ -543,6 +562,124 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
           )}
         </div>
       </div>
+      {eventToDelete && (
+        <DeleteEventConfirmModal
+          event={eventToDelete}
+          onClose={() => setEventToDelete(null)}
+          onCancelWithEmail={async (reason) => {
+            await onCancelEvent(eventToDelete.id, reason);
+            setEventToDelete(null);
+            onClose();
+          }}
+          onPermanentDelete={async () => {
+            await onDelete(eventToDelete.id);
+            setEventToDelete(null);
+            onClose();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Two-path confirm dialog for the calendar Delete button.
+//   Soft cancel: notifies applicants + stops reminders, keeps data.
+//   Permanent delete: cascades through applications/attendance/votes; no email.
+function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanentDelete }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [confirmHard, setConfirmHard] = useState(false);
+
+  const handleSoftCancel = async () => {
+    setBusy(true);
+    await onCancelWithEmail(reason.trim() || null);
+    setBusy(false);
+  };
+  const handleHardDelete = async () => {
+    setBusy(true);
+    await onPermanentDelete();
+    setBusy(false);
+  };
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0', color: '#dc2626' }}>
+          Delete "{event.title}"?
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 16px 0' }}>
+          Pick how to handle this event below. The default option notifies applicants — use the permanent delete only for events you created by mistake.
+        </p>
+
+        <div style={{
+          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+          borderRadius: '8px', padding: '12px 14px', marginBottom: '14px',
+          fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.6'
+        }}>
+          <strong>Cancel event (recommended):</strong> sends a cancellation email to every approved + pending applicant and tells future reminder emails to skip this date. Applications, attendance, and votes are preserved.
+        </div>
+
+        <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Reason for cancellation (optional)
+        </label>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={2}
+          placeholder="Included in the email"
+          style={{
+            width: '100%', padding: '10px 12px', fontSize: '0.9rem',
+            border: '1px solid #ddd', borderRadius: '8px',
+            marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box',
+            fontFamily: 'inherit', resize: 'vertical'
+          }}
+        />
+
+        <button onClick={handleSoftCancel} disabled={busy} style={{
+          width: '100%', padding: '12px',
+          backgroundColor: busy ? '#999' : '#dc2626', color: '#fff',
+          border: 'none', borderRadius: '8px',
+          fontWeight: '700', fontSize: '0.95rem',
+          cursor: busy ? 'wait' : 'pointer',
+          marginBottom: '12px'
+        }}>
+          {busy ? 'Cancelling...' : 'Cancel event + email applicants'}
+        </button>
+
+        <details style={{ marginBottom: '14px' }}>
+          <summary style={{ fontSize: '0.78rem', color: '#888', cursor: 'pointer', fontWeight: '600', userSelect: 'none' }}>
+            Or permanently delete (no notifications)
+          </summary>
+          <div style={{
+            marginTop: '10px',
+            backgroundColor: '#fff7ed', border: '1px solid #fed7aa',
+            borderRadius: '8px', padding: '12px 14px',
+            fontSize: '0.82rem', color: '#9a3412', lineHeight: '1.6'
+          }}>
+            <strong>Permanent delete:</strong> removes the event row and cascade-deletes every related application, attendance row, vote, and submission. <em>No emails sent.</em> Use this only if the event was created by mistake.
+          </div>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            margin: '10px 0', fontSize: '0.85rem', color: '#444', cursor: 'pointer'
+          }}>
+            <input type="checkbox" checked={confirmHard} onChange={e => setConfirmHard(e.target.checked)} />
+            I understand this destroys all related data with no notifications
+          </label>
+          <button onClick={handleHardDelete} disabled={!confirmHard || busy} style={{
+            width: '100%', padding: '10px',
+            backgroundColor: (!confirmHard || busy) ? '#ccc' : '#7f1d1d', color: '#fff',
+            border: 'none', borderRadius: '8px',
+            fontWeight: '700', fontSize: '0.85rem',
+            cursor: (!confirmHard || busy) ? 'not-allowed' : 'pointer'
+          }}>
+            Permanently delete event
+          </button>
+        </details>
+
+        <button onClick={onClose} style={{ ...cancelBtnStyle, width: '100%' }}>
+          Keep event, close
+        </button>
+      </div>
     </div>
   );
 }
@@ -644,6 +781,25 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
       alert(`Could not delete event: ${error.message}`);
       return;
     }
+    fetchEvents();
+  };
+
+  // Soft-cancel: marks events.cancelled=true and fires email to applicants.
+  // Preserves all related data (applications, attendance, votes, media).
+  const handleCancelEvent = async (eventId, reason) => {
+    const { error } = await supabase
+      .from('events')
+      .update({
+        cancelled: true,
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason || null,
+      })
+      .eq('id', eventId);
+    if (error) {
+      alert(`Could not cancel event: ${error.message}`);
+      return;
+    }
+    sendVendorEmail({ type: 'event_cancelled', event_id: eventId, reason: reason || null });
     fetchEvents();
   };
 
@@ -819,7 +975,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
                       marginBottom: '10px',
                       borderLeft: `4px solid ${catColor}`
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                         <span style={{
                           fontSize: '0.6rem', fontWeight: '700', color: catColor,
                           backgroundColor: catColor + '15', padding: '2px 8px',
@@ -827,8 +983,22 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
                         }}>
                           {(event.categories || []).map(c => CATEGORIES[c]?.label || c).join(' · ') || 'Other'}
                         </span>
+                        {event.cancelled && (
+                          <span style={{
+                            fontSize: '0.6rem', fontWeight: '800', color: '#dc2626',
+                            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                            padding: '2px 8px', borderRadius: '4px',
+                            textTransform: 'uppercase', letterSpacing: '0.05em'
+                          }}>
+                            Cancelled
+                          </span>
+                        )}
                       </div>
-                      <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#1a1a1a', marginBottom: '4px' }}>
+                      <div style={{
+                        fontWeight: '700', fontSize: '0.95rem',
+                        color: event.cancelled ? '#999' : '#1a1a1a', marginBottom: '4px',
+                        textDecoration: event.cancelled ? 'line-through' : 'none'
+                      }}>
                         {event.title}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#888' }}>
@@ -898,6 +1068,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
           onClose={() => setShowEventModal(false)}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          onCancelEvent={handleCancelEvent}
           isMobile={isMobile}
           staff={staff}
         />
@@ -3412,6 +3583,7 @@ function useNavigateInternal() {
 //   2. Logged in but no vendor row → onboarding form (collect full profile)
 //   3. Logged in with vendor row → normal dashboard with event apply/check-in
 function VendorDashboardPage({ isMobile }) {
+  const { isAdmin } = useSite();
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [vendor, setVendor] = useState(null);
@@ -3513,6 +3685,11 @@ function VendorDashboardPage({ isMobile }) {
         </div>
       </PageWrapper>
     );
+  }
+
+  // ─── Staff bypass: admins skip vendor onboarding ─────────
+  if (authReady && session && isAdmin && !vendorLoading && !vendor) {
+    return <StaffBypassScreen isMobile={isMobile} title="You're staff, not a vendor" body="This dashboard is for outside vendors applying to Vendor Days. As staff you don't need a vendor profile." linkTo="/staff/vendors" linkLabel="Open Vendor Admin" />;
   }
 
   // ─── State 2: logged in but no vendor row → onboarding ───
@@ -3660,7 +3837,13 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   // Determine the action area content for this event card based on status,
   // attendance, and whether the event is today / past / future.
   let actionEl = null;
-  if (!application) {
+  if (event.cancelled) {
+    actionEl = (
+      <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: '700' }}>
+        Event cancelled
+      </span>
+    );
+  } else if (!application) {
     if (vendorStatus !== 'approved') {
       // Profile gate — until the vendor's profile is approved, hide the
       // apply button on every event card and show why.
@@ -3753,9 +3936,23 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
             <CalendarIcon size={20} color="#16a34a" />
           </div>
           <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>
+            <div style={{
+              fontSize: '0.95rem', fontWeight: '800',
+              color: event.cancelled ? '#999' : '#1a1a1a',
+              textDecoration: event.cancelled ? 'line-through' : 'none'
+            }}>
               {event.title || 'Vendor Day'}
-              {isToday && (
+              {event.cancelled && (
+                <span style={{
+                  marginLeft: '8px', fontSize: '0.65rem', backgroundColor: '#fef2f2', color: '#dc2626',
+                  border: '1px solid #fecaca',
+                  padding: '2px 8px', borderRadius: '10px', fontWeight: '800', textTransform: 'uppercase',
+                  textDecoration: 'none'
+                }}>
+                  Cancelled
+                </span>
+              )}
+              {!event.cancelled && isToday && (
                 <span style={{
                   marginLeft: '8px', fontSize: '0.65rem', backgroundColor: '#fef2f2', color: '#dc2626',
                   padding: '2px 8px', borderRadius: '10px', fontWeight: '800', textTransform: 'uppercase'
@@ -3763,7 +3960,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
                   Today
                 </span>
               )}
-              {isPast && !isToday && (
+              {!event.cancelled && isPast && !isToday && (
                 <span style={{
                   marginLeft: '8px', fontSize: '0.65rem', backgroundColor: '#f3f4f6', color: '#6b7280',
                   padding: '2px 8px', borderRadius: '10px', fontWeight: '800', textTransform: 'uppercase'
@@ -3881,6 +4078,18 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
     setSubmitting(false);
     onComplete(savedVendor);
     sendVendorEmail({ type: 'vendor_welcome', vendor_id: savedVendor.id });
+    // Add to marketing list (fire-and-forget). RPC handles dedupe + linking.
+    supabase.rpc('upsert_marketing_contact_from_app', {
+      p_email: savedVendor.email,
+      p_first_name: savedVendor.first_name || null,
+      p_last_name: savedVendor.last_name || null,
+      p_phone: savedVendor.phone || null,
+      p_source: 'app_vendor',
+      p_member_id: null,
+      p_vendor_id: savedVendor.id,
+    }).then(({ error: mcErr }) => {
+      if (mcErr) console.warn('[marketing] vendor upsert failed', mcErr);
+    });
   };
 
   const inputCss = {
@@ -3997,6 +4206,27 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
             Chef and the team will review and email you back. From there, applying for each Vendor Day takes two clicks.
           </p>
         </form>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Friendly bypass screen for admin/staff who land on a vendor or member
+// page they don't belong on. Skips the onboarding ask and points them at
+// the admin panel instead.
+function StaffBypassScreen({ isMobile, title, body, linkTo, linkLabel }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
+        <SectionHeader title={title || "You're staff"} subtitle={body || ""} />
+        <Link to={linkTo} style={{
+          display: 'inline-flex', alignItems: 'center', gap: '8px',
+          backgroundColor: '#1a1a1a', color: '#fff',
+          padding: '12px 24px', borderRadius: '10px',
+          fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
+        }}>
+          {linkLabel}
+        </Link>
       </div>
     </PageWrapper>
   );
@@ -4318,6 +4548,7 @@ const VOTE_CATEGORIES = [
 ];
 
 function VendorReviewPage({ isMobile }) {
+  const { isAdmin } = useSite();
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [member, setMember] = useState(null);
@@ -4392,6 +4623,11 @@ function VendorReviewPage({ isMobile }) {
   // ─── Stage 1: not logged in ───────────────────
   if (authReady && !session) {
     return <ReviewSignupGate isMobile={isMobile} />;
+  }
+
+  // ─── Staff bypass: admins skip member onboarding ─
+  if (authReady && session && isAdmin && !memberLoading && !member) {
+    return <StaffBypassScreen isMobile={isMobile} title="You're staff, not a member" body="Voting is for customers attending Vendor Day. As staff you don't need a member profile to see results — they live in the admin panel." linkTo="/staff/vendors" linkLabel="Open Vendor Admin" />;
   }
 
   // ─── Stage 2: logged in but no member row ────
@@ -4524,6 +4760,18 @@ function MemberOnboardingForm({ isMobile, session, onComplete }) {
     onComplete(data);
     // Welcome email (fire-and-forget)
     sendVendorEmail({ type: 'member_welcome', member_id: data.id });
+    // Add to marketing list (fire-and-forget). RPC handles dedupe + linking.
+    supabase.rpc('upsert_marketing_contact_from_app', {
+      p_email: data.email,
+      p_first_name: data.first_name || null,
+      p_last_name: data.last_name || null,
+      p_phone: null,
+      p_source: 'app_member',
+      p_member_id: data.id,
+      p_vendor_id: null,
+    }).then(({ error: mcErr }) => {
+      if (mcErr) console.warn('[marketing] member upsert failed', mcErr);
+    });
   };
 
   const inputCss = {
@@ -5511,10 +5759,16 @@ function StaffVendorsPage({ isMobile, staff }) {
   };
 
   const setVendorStatus = async (vendorId, status) => {
+    // Capture the previous status so we only fire the partnership-approved
+    // email on a real pending → approved transition.
+    const prev = allVendors.find(v => v.id === vendorId)?.status;
     const { error } = await supabase.from('vendors').update({ status }).eq('id', vendorId);
     if (error) {
       alert('Error: ' + error.message);
       return;
+    }
+    if (status === 'approved' && prev !== 'approved') {
+      sendVendorEmail({ type: 'vendor_profile_approved', vendor_id: vendorId });
     }
     // Suspending cascades — cancel this vendor's approved applications on
     // any FUTURE events. Past attendance records are left alone.
@@ -5900,6 +6154,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 // ─── Event roster tab ─────────────────────────────────────
 function EventRosterList({ events, attendance, allVendors, onDecide, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
+  const [cancelling, setCancelling] = useState(null); // event row when cancelling
 
   if (events.length === 0) {
     return (
@@ -5933,14 +6188,36 @@ function EventRosterList({ events, attendance, allVendors, onDecide, onChange, s
                 <div style={{ fontSize: '0.8rem', color: '#666' }}>
                   {approved.length} approved · {pending.length} pending
                 </div>
-                <button onClick={() => setAddingTo(ev)} style={{
-                  backgroundColor: '#16a34a', color: '#fff', border: 'none',
-                  padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                  fontSize: '0.78rem', cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  <Plus size={13} /> Add vendor
-                </button>
+                {ev.cancelled ? (
+                  <span style={{
+                    backgroundColor: '#fef2f2', color: '#dc2626',
+                    padding: '4px 10px', borderRadius: '20px',
+                    fontWeight: '800', fontSize: '0.7rem',
+                    textTransform: 'uppercase', letterSpacing: '0.5px',
+                    border: '1px solid #fecaca'
+                  }}>
+                    Cancelled
+                  </span>
+                ) : (
+                  <>
+                    <button onClick={() => setAddingTo(ev)} style={{
+                      backgroundColor: '#16a34a', color: '#fff', border: 'none',
+                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                      fontSize: '0.78rem', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: '4px'
+                    }}>
+                      <Plus size={13} /> Add vendor
+                    </button>
+                    <button onClick={() => setCancelling(ev)} style={{
+                      backgroundColor: '#fff', color: '#dc2626',
+                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                      fontSize: '0.78rem', cursor: 'pointer',
+                      border: '1px solid #fecaca'
+                    }}>
+                      Cancel event
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             {apps.length === 0 ? (
@@ -6006,6 +6283,102 @@ function EventRosterList({ events, attendance, allVendors, onDecide, onChange, s
           onSaved={() => { setAddingTo(null); onChange(); }}
         />
       )}
+      {cancelling && (
+        <CancelEventModal
+          event={cancelling}
+          onClose={() => setCancelling(null)}
+          onCancelled={() => { setCancelling(null); onChange(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal for soft-cancelling an event. Marks events.cancelled=true with reason
+// and fires the event_cancelled email to every applicant (approved + pending).
+function CancelEventModal({ event, onClose, onCancelled }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const dateStr = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Count emails that will go out so the warning is concrete
+  const pending = (event.vendor_applications || []).filter(a => a.status === 'pending').length;
+  const approved = (event.vendor_applications || []).filter(a => a.status === 'approved').length;
+  const total = pending + approved;
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    setError('');
+    const { error: upErr } = await supabase
+      .from('events')
+      .update({
+        cancelled: true,
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason.trim() || null,
+      })
+      .eq('id', event.id);
+    if (upErr) {
+      setBusy(false);
+      setError(upErr.message);
+      return;
+    }
+    // Fire emails (async, don't block the UI on email status)
+    sendVendorEmail({ type: 'event_cancelled', event_id: event.id, reason: reason.trim() || null });
+    setBusy(false);
+    onCancelled();
+  };
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0', color: '#dc2626' }}>
+          Cancel {event.title || 'Vendor Day'}?
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 14px 0' }}>{dateStr}</p>
+
+        <div style={{
+          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+          borderRadius: '8px', padding: '12px 14px', marginBottom: '14px',
+          fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.6'
+        }}>
+          {total > 0
+            ? <>This sends a cancellation email to <strong>{total}</strong> {total === 1 ? 'applicant' : 'applicants'} ({approved} approved · {pending} pending). Reminder emails to general members for this event will also stop.</>
+            : <>No vendor applications on this event yet — no emails will be sent. Reminder emails to general members will stop.</>
+          }
+        </div>
+
+        <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Reason (optional, included in the email)
+        </label>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={3}
+          placeholder="e.g. Power outage at the shop · Rescheduled to next week"
+          style={{
+            width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+            border: '1px solid #ddd', borderRadius: '8px',
+            marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box',
+            fontFamily: 'inherit', resize: 'vertical'
+          }}
+        />
+
+        {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleConfirm} disabled={busy} style={{
+            flex: 1, padding: '12px',
+            backgroundColor: busy ? '#999' : '#dc2626', color: '#fff',
+            border: 'none', borderRadius: '8px',
+            fontWeight: '700', fontSize: '0.95rem',
+            cursor: busy ? 'wait' : 'pointer'
+          }}>
+            {busy ? 'Cancelling...' : `Cancel event${total > 0 ? ` + email ${total}` : ''}`}
+          </button>
+          <button onClick={onClose} style={cancelBtnStyle}>Keep event</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -6193,6 +6566,154 @@ const NAV_ITEMS = [
   { label: 'Grading', to: '/grading' },
   { label: 'Blog', to: '/blog' }
 ];
+
+// ─── Unsubscribe page ─────────────────────────────────────
+// Public, token-based. Loaded from links in marketing emails:
+//   https://pokemontrainercenter.com/unsubscribe?token=<uuid>
+// The unique token IS the credential -- no login needed.
+function UnsubscribePage({ isMobile }) {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+
+  const [phase, setPhase] = useState('loading'); // loading | invalid | confirm | already | done | error
+  const [contact, setContact] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setPhase('invalid');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc('lookup_marketing_contact_by_token', { p_token: token });
+      if (cancelled) return;
+      if (error || !data || data.length === 0) {
+        setPhase('invalid');
+        return;
+      }
+      const row = data[0];
+      setContact(row);
+      setPhase(row.is_subscribed ? 'confirm' : 'already');
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const handleConfirm = async () => {
+    setPhase('loading');
+    const { data, error } = await supabase.rpc('unsubscribe_marketing_contact', {
+      p_token: token,
+      p_reason: 'self_unsubscribe',
+    });
+    if (error || !data || data.length === 0) {
+      setErrorMsg(error?.message || 'Could not process unsubscribe.');
+      setPhase('error');
+      return;
+    }
+    setPhase('done');
+  };
+
+  const cardCss = {
+    backgroundColor: '#fff',
+    borderRadius: '16px',
+    border: '1px solid #eee',
+    padding: isMobile ? '28px 22px' : '40px',
+    maxWidth: '520px',
+    margin: '0 auto',
+    textAlign: 'center',
+  };
+  const titleCss = { fontSize: isMobile ? '1.4rem' : '1.7rem', fontWeight: 700, color: '#1a1a1a', margin: '0 0 12px 0' };
+  const bodyCss = { fontSize: '0.95rem', color: '#555', lineHeight: 1.65, margin: '0 0 18px 0' };
+  const emailCss = { fontWeight: 600, color: '#1a1a1a' };
+  const buttonCss = {
+    background: '#C8102E', color: '#fff', border: 'none',
+    padding: '13px 28px', borderRadius: '10px', fontSize: '1rem',
+    fontWeight: 700, cursor: 'pointer', letterSpacing: '0.3px',
+  };
+  const linkCss = { color: '#C8102E', fontWeight: 600, textDecoration: 'none' };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginTop: '40px', marginBottom: '64px' }}>
+        <div style={cardCss}>
+          {phase === 'loading' && (
+            <p style={bodyCss}>Loading...</p>
+          )}
+
+          {phase === 'invalid' && (
+            <>
+              <h1 style={titleCss}>Link not found</h1>
+              <p style={bodyCss}>
+                This unsubscribe link is invalid or has expired. If you'd still like to be removed from
+                Trainer Center emails, reply to any email we've sent you and we'll handle it manually.
+              </p>
+              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+            </>
+          )}
+
+          {phase === 'confirm' && contact && (
+            <>
+              <h1 style={titleCss}>
+                {contact.first_name ? `Hey ${contact.first_name},` : 'Unsubscribe?'}
+              </h1>
+              <p style={bodyCss}>
+                Click below to unsubscribe <span style={emailCss}>{contact.email}</span> from Trainer Center
+                marketing emails.
+              </p>
+              <p style={{ ...bodyCss, fontSize: '0.85rem', color: '#888' }}>
+                You'll still get transactional emails (vendor application updates, account stuff). Just no
+                more event/marketing announcements.
+              </p>
+              <button type="button" style={buttonCss} onClick={handleConfirm}>
+                Confirm unsubscribe
+              </button>
+              <p style={{ marginTop: '20px', marginBottom: 0 }}>
+                <Link to="/" style={linkCss}>Cancel and stay subscribed</Link>
+              </p>
+            </>
+          )}
+
+          {phase === 'already' && contact && (
+            <>
+              <h1 style={titleCss}>You're already unsubscribed</h1>
+              <p style={bodyCss}>
+                <span style={emailCss}>{contact.email}</span> is not receiving Trainer Center marketing emails.
+                If you're still seeing them, give us a couple of days for the change to fully clear our queue.
+              </p>
+              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+            </>
+          )}
+
+          {phase === 'done' && (
+            <>
+              <h1 style={titleCss}>You're unsubscribed</h1>
+              <p style={bodyCss}>
+                We won't send you any more Trainer Center marketing emails. We're sorry to see you go.
+              </p>
+              <p style={bodyCss}>
+                You're always welcome at the shop, and the website is here whenever you want to come back.
+              </p>
+              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+            </>
+          )}
+
+          {phase === 'error' && (
+            <>
+              <h1 style={titleCss}>Something went wrong</h1>
+              <p style={bodyCss}>
+                {errorMsg || 'We could not process your unsubscribe request right now.'}
+              </p>
+              <p style={bodyCss}>
+                Please try again, or reply to any email we've sent you and we'll handle it manually.
+              </p>
+              <Link to="/" style={linkCss}>Back to Trainer Center</Link>
+            </>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
 
 // ─── Main App ─────────────────────────────────────────────
 function App() {
@@ -6458,6 +6979,7 @@ function App() {
       {/* Routes */}
       <Routes>
         <Route path="/" element={<HomePage isMobile={isMobile} />} />
+        <Route path="/unsubscribe" element={<UnsubscribePage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
