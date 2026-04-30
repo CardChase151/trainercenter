@@ -247,7 +247,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('20:00');
   const [location, setLocation] = useState('');
-  const [category, setCategory] = useState('other');
+  const [categories, setCategories] = useState(['other']);
   const [recurrence, setRecurrence] = useState('none');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
@@ -256,7 +256,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
 
   const resetForm = () => {
     setTitle(''); setDescription(''); setStartTime('18:00'); setEndTime('20:00');
-    setLocation(''); setCategory('other'); setRecurrence('none'); setRecurrenceEndDate(''); setEditingEvent(null);
+    setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate(''); setEditingEvent(null);
   };
 
   const loadEvent = (event) => {
@@ -266,7 +266,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
     setStartTime(event.start_time?.slice(0, 5) || '18:00');
     setEndTime(event.end_time?.slice(0, 5) || '20:00');
     setLocation(event.location || '');
-    setCategory(event.category || 'other');
+    setCategories(event.categories?.length ? event.categories : ['other']);
     setRecurrence(event.recurrence || 'none');
     setRecurrenceEndDate(event.recurrence_end_date || '');
   };
@@ -286,7 +286,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
       start_time: startTime,
       end_time: endTime,
       location: location.trim() || null,
-      category,
+      categories: categories.length > 0 ? categories : ['other'],
       recurrence,
       recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null
     };
@@ -393,7 +393,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                   <div style={{
                     width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: CATEGORIES[ev.category]?.color || '#ea580c'
+                    backgroundColor: CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'
                   }} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: '700', fontSize: '0.85rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</div>
@@ -447,12 +447,41 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, isMobile,
         <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Location (optional)</label>
         <input placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} style={inputStyle} />
 
-        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Category</label>
-        <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-          {Object.entries(CATEGORIES).map(([key, { label }]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
+        <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Categories (pick all that apply)</label>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gap: '6px', marginBottom: '10px'
+        }}>
+          {Object.entries(CATEGORIES).map(([key, { label, color }]) => {
+            const checked = categories.includes(key);
+            return (
+              <label key={key} style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: checked ? color : '#fafafa',
+                color: checked ? '#fff' : '#444',
+                borderRadius: '8px',
+                border: `1px solid ${checked ? color : '#ddd'}`,
+                cursor: 'pointer',
+                fontSize: '0.85rem', fontWeight: '600',
+                userSelect: 'none'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => {
+                    setCategories(prev => checked
+                      ? prev.filter(c => c !== key)
+                      : [...prev, key]
+                    );
+                  }}
+                  style={{ accentColor: '#fff' }}
+                />
+                {label}
+              </label>
+            );
+          })}
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
           <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
@@ -529,11 +558,14 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const monthName = currentDate.toLocaleString('default', { month: 'long' });
-  const firstDay = new Date(year, month, 1).getDay();
+  // Calendar grid is Mon–Sun. JS getDay() returns 0=Sun…6=Sat, so we remap
+  // (Sun=0)→6, (Mon=1)→0, …, (Sat=6)→5 with `(getDay() + 6) % 7` to compute
+  // how many empty cells precede the 1st of the month.
+  const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const prevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null); };
   const nextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null); };
@@ -573,7 +605,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    }).filter(ev => !categoryFilter || ev.category === categoryFilter);
+    }).filter(ev => !categoryFilter || (ev.categories || []).includes(categoryFilter));
   };
 
   const handleDayClick = (day) => {
@@ -588,16 +620,30 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
   };
 
   const handleSaveEvent = async (eventData) => {
-    if (eventData.id) {
-      await supabase.from('events').update(eventData).eq('id', eventData.id);
-    } else {
-      await supabase.from('events').insert([eventData]);
+    const op = eventData.id
+      ? supabase.from('events').update(eventData).eq('id', eventData.id).select()
+      : supabase.from('events').insert([eventData]).select();
+    const { data, error } = await op;
+    if (error) {
+      console.error('[Calendar] save failed', error);
+      alert(`Could not save event: ${error.message}`);
+      return;
+    }
+    if (!data || data.length === 0) {
+      console.warn('[Calendar] save returned no rows — likely RLS blocked it');
+      alert('Save was blocked. Make sure you are still logged in as staff (the lock icon in the nav should be red).');
+      return;
     }
     fetchEvents();
   };
 
   const handleDeleteEvent = async (eventId) => {
-    await supabase.from('events').delete().eq('id', eventId);
+    const { error } = await supabase.from('events').delete().eq('id', eventId);
+    if (error) {
+      console.error('[Calendar] delete failed', error);
+      alert(`Could not delete event: ${error.message}`);
+      return;
+    }
     fetchEvents();
   };
 
@@ -611,7 +657,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
     const isSelected = selectedDay === day;
 
     // Get unique category colors for dots
-    const dotColors = [...new Set(dayEvents.map(e => CATEGORIES[e.category]?.color || '#ea580c'))];
+    const dotColors = [...new Set(dayEvents.flatMap(e => (e.categories || []).map(c => CATEGORIES[c]?.color || '#ea580c')))];
 
     cells.push(
       <div
@@ -763,7 +809,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
             <div style={{ padding: '16px', flex: 1, overflowY: 'auto' }}>
               {selectedDayEvents.length > 0 ? (
                 selectedDayEvents.map((event) => {
-                  const catColor = CATEGORIES[event.category]?.color || '#ea580c';
+                  const catColor = CATEGORIES[(event.categories || [])[0]]?.color || '#ea580c';
                   return (
                     <div key={event.id} style={{
                       padding: '14px 16px',
@@ -779,7 +825,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
                           backgroundColor: catColor + '15', padding: '2px 8px',
                           borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em'
                         }}>
-                          {CATEGORIES[event.category]?.label || 'Other'}
+                          {(event.categories || []).map(c => CATEGORIES[c]?.label || c).join(' · ') || 'Other'}
                         </span>
                       </div>
                       <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#1a1a1a', marginBottom: '4px' }}>
@@ -2468,7 +2514,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
   // Derive special events (vendor days, big events)
-  const specialEvents = events.filter(ev => ev.category === 'big_event' && ev.recurrence === 'none');
+  const specialEvents = events.filter(ev => (ev.categories || []).includes('big_event') && ev.recurrence === 'none');
 
   // Get today's events
   const today = new Date();
@@ -2534,7 +2580,8 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     const yr = calDate.getFullYear();
     const mo = calDate.getMonth();
     const moName = calDate.toLocaleString('default', { month: 'long' });
-    const firstDay = new Date(yr, mo, 1).getDay();
+    // Print grid is Mon–Sun (matches the on-screen calendar).
+    const firstDay = (new Date(yr, mo, 1).getDay() + 6) % 7;
     const daysInMo = new Date(yr, mo + 1, 0).getDate();
 
     // Build day-to-events map from actual data
@@ -2584,14 +2631,14 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     `);
 
     printWin.document.write('<div class="grid">');
-    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
       printWin.document.write('<div class="day-header">' + d + '</div>');
     });
     for (let i = 0; i < firstDay; i++) printWin.document.write('<div class="day-cell empty"></div>');
 
     for (let d = 1; d <= daysInMo; d++) {
       const dayEvts = getEventsForPrintDay(d);
-      const evHtml = dayEvts.map(ev => '<div class="event-title ' + (ev.category || 'other') + '">' + ev.title + '</div>').join('');
+      const evHtml = dayEvts.map(ev => '<div class="event-title ' + ((ev.categories || ['other'])[0]) + '">' + ev.title + '</div>').join('');
       printWin.document.write('<div class="day-cell"><div class="day-num">' + d + '</div>' + evHtml + '</div>');
     }
     const totalCells = firstDay + daysInMo;
@@ -2672,7 +2719,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                 }}>
                   <div style={{
                     width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: CATEGORIES[ev.category]?.color || '#ea580c'
+                    backgroundColor: CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'
                   }} />
                   <div>
                     <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1a1a1a' }}>{ev.title}</span>
@@ -2701,7 +2748,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
               <div key={ev.id} style={{
                 padding: '14px 16px', borderRadius: '10px', backgroundColor: '#ffffff',
                 border: '1px solid #eee',
-                borderLeft: '3px solid ' + (CATEGORIES[ev.category]?.color || '#ea580c'),
+                borderLeft: '3px solid ' + (CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'),
               }}>
                 <p style={{ fontSize: '0.7rem', color: '#999', fontWeight: '700', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{ev.dayName}</p>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{ev.title}</h4>
@@ -3412,7 +3459,7 @@ function VendorDashboardPage({ isMobile }) {
     Promise.all([
       supabase.from('events')
         .select('*')
-        .eq('category', 'vendor_day')
+        .contains('categories', ['vendor_day'])
         .gte('event_date', fromISO)
         .order('event_date', { ascending: true })
         .limit(20),
@@ -5393,7 +5440,7 @@ function StaffVendorsPage({ isMobile, staff }) {
       // Upcoming Vendor Day events with their applications
       supabase.from('events')
         .select('*, vendor_applications(*, vendor:vendors(*))')
-        .eq('category', 'vendor_day')
+        .contains('categories', ['vendor_day'])
         .order('event_date', { ascending: true })
         .limit(6),
       supabase.from('vendor_attendance').select('*'),
