@@ -2738,17 +2738,23 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
   const formatTime = formatTime12h;
 
-  // Driven directly off the CATEGORIES dict so the chips and the actual
-  // category data can never drift out of sync. Order is intentional: the
-  // top three are the user-facing big rocks, "other" stays last as the
-  // catch-all for weekly recurring events.
+  // Live tally of how many events carry each category in the DB. Counts an
+  // event once per category it has, so a Vendor Day tagged [vendor_day,
+  // big_event] shows up under both chips. Cancelled events are excluded so
+  // the chip count matches what shows on the calendar grid.
+  const categoryCounts = events.reduce((acc, ev) => {
+    if (ev.cancelled) return acc;
+    (ev.categories || []).forEach(c => { acc[c] = (acc[c] || 0) + 1; });
+    return acc;
+  }, {});
+
+  // Filter chips. Driven directly off the CATEGORIES dict so labels +
+  // colors always match the category data. Each chip shows its live count.
   const FILTER_OPTIONS = [
-    { key: null, label: 'All Events' },
-    { key: 'vendor_day', label: CATEGORIES.vendor_day.label, color: CATEGORIES.vendor_day.color },
-    { key: 'trade_night', label: CATEGORIES.trade_night.label, color: CATEGORIES.trade_night.color },
-    { key: 'tournament', label: CATEGORIES.tournament.label, color: CATEGORIES.tournament.color },
-    { key: 'big_event', label: CATEGORIES.big_event.label, color: CATEGORIES.big_event.color },
-    { key: 'other', label: 'Weekly Events', color: CATEGORIES.other.color },
+    { key: null, label: 'All Events', count: events.filter(e => !e.cancelled).length },
+    ...Object.entries(CATEGORIES).map(([key, { label, color }]) => ({
+      key, label, color, count: categoryCounts[key] || 0
+    })),
   ];
 
   const handlePrint = () => {
@@ -2995,9 +3001,20 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                 border: activeFilter === opt.key ? '2px solid ' + (opt.color || '#1a1a1a') : '2px solid #e0e0e0',
                 backgroundColor: activeFilter === opt.key ? (opt.color || '#1a1a1a') : '#fff',
                 color: activeFilter === opt.key ? '#fff' : '#666',
+                opacity: opt.count === 0 ? 0.4 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}
+              disabled={opt.count === 0}
+              title={opt.count === 0 ? 'No events in this category yet' : `${opt.count} event${opt.count === 1 ? '' : 's'}`}
             >
               {opt.label}
+              <span style={{
+                fontSize: '0.65rem',
+                padding: '1px 7px', borderRadius: '10px',
+                backgroundColor: activeFilter === opt.key ? 'rgba(255,255,255,0.25)' : '#f3f4f6',
+                color: activeFilter === opt.key ? '#fff' : '#888',
+                fontWeight: '700'
+              }}>{opt.count}</span>
             </button>
           ))}
           <div style={{ flex: 1 }} />
