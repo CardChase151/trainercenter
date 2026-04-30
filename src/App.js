@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
 import { Link, Routes, Route, useLocation, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import './App.css';
 
@@ -196,6 +196,40 @@ function StaffLogin({ onClose, onLogin }) {
     </div>
   );
 }
+
+// ─── Site Context ─────────────────────────────────────────
+// Holds editable site config (Visit Us section) + active/upcoming
+// special-hours overrides. Provided by App, consumed by VisitUsSection,
+// OpenNowBanner, and Footer.
+const SiteContext = createContext({
+  siteSettings: null,
+  specialHours: [],
+  isAdmin: false,
+  refresh: () => {},
+});
+const useSite = () => useContext(SiteContext);
+
+// Resolve which special_hours entry (if any) covers a given YYYY-MM-DD.
+// Returns the row, or null if no override applies.
+function specialHoursForDate(specialHours, isoDate) {
+  if (!specialHours) return null;
+  for (const sh of specialHours) {
+    if (isoDate >= sh.start_date && isoDate <= sh.end_date) return sh;
+  }
+  return null;
+}
+
+// Pretty-format "10:00" → "10 AM", "14:30" → "2:30 PM", "Closed" if null
+function formatTime(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  if (h12 === 12 && period === 'PM' && m === 0) return 'Noon';
+  return m === 0 ? `${h12} ${period}` : `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ─── Category Colors ──────────────────────────────────────
 const CATEGORIES = {
@@ -828,121 +862,522 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
 
 // ─── Visit Us Section ─────────────────────────────────────
 function VisitUsSection({ isMobile }) {
+  const { siteSettings, specialHours, isAdmin, refresh } = useSite();
+  const [editPanel, setEditPanel] = useState(null); // 'location' | 'phone' | 'contact' | 'hours' | null
+
+  if (!siteSettings) return null;
+
+  const s = siteSettings;
+  const igUrl = s.ig_handle ? `https://www.instagram.com/${s.ig_handle}/` : null;
+  const phoneTel = s.phone ? `tel:+1${s.phone.replace(/\D/g, '')}` : null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingBlocks = (specialHours || []).filter(sh => sh.end_date >= today).slice(0, 5);
+
   return (
     <div id="visit-us" style={{
       padding: isMobile ? '48px 20px' : '64px 48px',
       maxWidth: '1200px',
       margin: '0 auto'
     }}>
-      <SectionHeader title="Visit Us" subtitle="Come check us out at Harbour Landing" />
+      <SectionHeader title="Visit Us" subtitle={s.address_subtitle ? `Come check us out, ${s.address_subtitle.toLowerCase()}` : 'Come check us out'} />
+
+      {/* Active special-hours banner (public) */}
+      {upcomingBlocks.length > 0 && (
+        <div style={{
+          backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+          borderRadius: '12px', padding: '14px 18px', marginBottom: '20px',
+          display: 'flex', alignItems: 'flex-start', gap: '10px', flexWrap: 'wrap'
+        }}>
+          <CalendarIcon size={18} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', color: '#92400e', lineHeight: '1.6' }}>
+            <strong>Heads up:</strong> {upcomingBlocks.map((b, i) => (
+              <span key={b.id}>
+                {i > 0 && ' · '}
+                {formatDateRange(b.start_date, b.end_date)} — {b.title}
+                {b.closed ? ' (closed)' : (b.open_time && b.close_time ? ` (${formatTime(b.open_time)} – ${formatTime(b.close_time)})` : '')}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
         gap: '24px'
       }}>
         {/* Location & Contact */}
-        <div style={{
-          backgroundColor: '#fff',
-          borderRadius: '14px',
-          border: '1px solid #eee',
-          padding: '28px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <MapPin size={20} color="#C8102E" />
-            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Location</h3>
-          </div>
-          <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 4px 0', lineHeight: '1.6' }}>
-            4911 Warner Ave #210
-          </p>
-          <p style={{ fontSize: '0.9rem', color: '#444', margin: '0 0 16px 0', lineHeight: '1.6' }}>
-            Huntington Beach, CA 92649
-          </p>
-          <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 24px 0' }}>
-            Located in Harbour Landing
-          </p>
+        <div style={visitCardStyle}>
+          {/* Location */}
+          <CardHeader icon={<MapPin size={20} color="#C8102E" />} title="Location" onEdit={isAdmin ? () => setEditPanel('location') : null} />
+          {s.address_line_1 && <p style={addrLineStyle}>{s.address_line_1}</p>}
+          {s.address_line_2 && <p style={{ ...addrLineStyle, marginBottom: '16px' }}>{s.address_line_2}</p>}
+          {s.address_subtitle && <p style={{ fontSize: '0.8rem', color: '#888', margin: '0 0 24px 0' }}>{s.address_subtitle}</p>}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <Phone size={20} color="#C8102E" />
-            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Phone</h3>
-          </div>
-          <a
-            href="tel:+17149519100"
-            style={{
-              display: 'inline-block',
-              backgroundColor: '#C8102E',
-              color: '#fff',
-              padding: '12px 28px',
-              borderRadius: '10px',
-              fontSize: '0.95rem',
-              fontWeight: '700',
-              textDecoration: 'none',
-              transition: 'opacity 0.2s',
-              marginBottom: '24px'
-            }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-          >
-            (714) 951-9100
-          </a>
+          {/* Phone */}
+          <CardHeader icon={<Phone size={20} color="#C8102E" />} title="Phone" onEdit={isAdmin ? () => setEditPanel('phone') : null} />
+          {s.phone && (
+            <a href={phoneTel} style={{
+              display: 'inline-block', backgroundColor: '#C8102E', color: '#fff',
+              padding: '12px 28px', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
+              textDecoration: 'none', marginBottom: '24px'
+            }}>{s.phone}</a>
+          )}
 
+          {/* Contact */}
+          <CardHeader icon={<Mail size={20} color="#C8102E" />} title="Contact" onEdit={isAdmin ? () => setEditPanel('contact') : null} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <a href="mailto:Trainercenter.pokemon@gmail.com" style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              fontSize: '0.85rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none'
-            }}>
-              <Mail size={16} /> Trainercenter.pokemon@gmail.com
-            </a>
-            <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: '8px',
-              fontSize: '0.85rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none'
-            }}>
-              <IgIcon size={16} /> @trainercenter.pokemon
-            </a>
+            {s.email && (
+              <a href={`mailto:${s.email}`} style={contactLinkStyle}>
+                <Mail size={16} /> {s.email}
+              </a>
+            )}
+            {igUrl && (
+              <a href={igUrl} target="_blank" rel="noopener noreferrer" style={contactLinkStyle}>
+                <IgIcon size={16} /> @{s.ig_handle}
+              </a>
+            )}
           </div>
         </div>
 
         {/* Hours */}
-        <div style={{
-          backgroundColor: '#fff',
-          borderRadius: '14px',
-          border: '1px solid #eee',
-          padding: '28px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-            <Clock size={20} color="#C8102E" />
-            <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>Hours</h3>
-          </div>
+        <div style={visitCardStyle}>
+          <CardHeader icon={<Clock size={20} color="#C8102E" />} title="Hours" onEdit={isAdmin ? () => setEditPanel('hours') : null} />
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
-              {[
-                ['Sunday', '10 AM - 5 PM'],
-                ['Monday', 'Closed'],
-                ['Tuesday', 'Noon - 8 PM'],
-                ['Wednesday', 'Noon - 8 PM'],
-                ['Thursday', 'Noon - 8 PM'],
-                ['Friday', 'Noon - 10 PM'],
-                ['Saturday', '10 AM - 8 PM']
-              ].map(([day, hours]) => (
-                <tr key={day}>
-                  <td style={{
-                    padding: '8px 0',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    color: hours === 'Closed' ? '#999' : '#1a1a1a',
-                    borderBottom: '1px solid #f0f0f0'
-                  }}>{day}</td>
-                  <td style={{
-                    padding: '8px 0',
-                    fontSize: '0.9rem',
-                    color: hours === 'Closed' ? '#ccc' : '#444',
-                    textAlign: 'right',
-                    fontWeight: hours === 'Closed' ? '400' : '600',
-                    borderBottom: '1px solid #f0f0f0'
-                  }}>{hours}</td>
-                </tr>
-              ))}
+              {DAY_LABELS.map((day, idx) => {
+                const h = s.hours?.[idx];
+                const display = h ? `${formatTime(h.open)} - ${formatTime(h.close)}` : 'Closed';
+                const isClosed = !h;
+                return (
+                  <tr key={day}>
+                    <td style={{
+                      padding: '8px 0', fontSize: '0.9rem', fontWeight: '600',
+                      color: isClosed ? '#999' : '#1a1a1a', borderBottom: '1px solid #f0f0f0'
+                    }}>{day}</td>
+                    <td style={{
+                      padding: '8px 0', fontSize: '0.9rem',
+                      color: isClosed ? '#ccc' : '#444', textAlign: 'right',
+                      fontWeight: isClosed ? '400' : '600', borderBottom: '1px solid #f0f0f0'
+                    }}>{display}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+
+          {/* Special hours admin panel — only visible to admin */}
+          {isAdmin && (
+            <SpecialHoursAdminPanel specialHours={specialHours} onChange={refresh} />
+          )}
+        </div>
+      </div>
+
+      {editPanel && (
+        <SiteSettingsEditModal
+          panel={editPanel}
+          settings={s}
+          onClose={() => setEditPanel(null)}
+          onSaved={() => { setEditPanel(null); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+const visitCardStyle = {
+  backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee', padding: '28px'
+};
+const addrLineStyle = { fontSize: '0.9rem', color: '#444', margin: '0 0 4px 0', lineHeight: '1.6' };
+const contactLinkStyle = {
+  display: 'flex', alignItems: 'center', gap: '8px',
+  fontSize: '0.85rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none'
+};
+
+// Card header with icon + title + optional edit pencil
+function CardHeader({ icon, title, onEdit }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+      {icon}
+      <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: 0, flex: 1 }}>{title}</h3>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          title={`Edit ${title.toLowerCase()}`}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px', color: '#999', borderRadius: '6px',
+            display: 'inline-flex', alignItems: 'center'
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#C8102E'}
+          onMouseLeave={e => e.currentTarget.style.color = '#999'}
+        >
+          <Edit2 size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Format a date range like "Dec 25" or "Dec 24 – 26".
+function formatDateRange(startISO, endISO) {
+  const opts = { month: 'short', day: 'numeric' };
+  const s = new Date(startISO + 'T12:00:00').toLocaleDateString('en-US', opts);
+  if (startISO === endISO) return s;
+  const e = new Date(endISO + 'T12:00:00').toLocaleDateString('en-US', opts);
+  return `${s} – ${e}`;
+}
+
+// ─── Site Settings Edit Modal ─────────────────────────────
+// Different panels: location | phone | contact | hours.
+function SiteSettingsEditModal({ panel, settings, onClose, onSaved }) {
+  const [draft, setDraft] = useState({
+    address_line_1: settings.address_line_1 || '',
+    address_line_2: settings.address_line_2 || '',
+    address_subtitle: settings.address_subtitle || '',
+    phone: settings.phone || '',
+    email: settings.email || '',
+    ig_handle: settings.ig_handle || '',
+    hours: settings.hours || {},
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const setField = (k) => (e) => setDraft(d => ({ ...d, [k]: e.target.value }));
+
+  const setDayHours = (dayIdx, field, value) => {
+    setDraft(d => {
+      const next = { ...d.hours };
+      if (field === 'closed') {
+        next[dayIdx] = value ? null : { open: '12:00', close: '20:00', theme: '' };
+      } else {
+        next[dayIdx] = { ...(next[dayIdx] || { open: '12:00', close: '20:00', theme: '' }), [field]: value };
+      }
+      return { ...d, hours: next };
+    });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    let payload = {};
+    if (panel === 'location') {
+      payload = {
+        address_line_1: draft.address_line_1.trim() || null,
+        address_line_2: draft.address_line_2.trim() || null,
+        address_subtitle: draft.address_subtitle.trim() || null,
+      };
+    } else if (panel === 'phone') {
+      payload = { phone: draft.phone.trim() || null };
+    } else if (panel === 'contact') {
+      payload = {
+        email: draft.email.trim() || null,
+        ig_handle: cleanHandle(draft.ig_handle),
+      };
+    } else if (panel === 'hours') {
+      payload = { hours: draft.hours };
+    }
+    const { error: upErr } = await supabase.from('site_settings').update(payload).eq('id', 1);
+    setSaving(false);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    onSaved();
+  };
+
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
+  };
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={{ ...modalCardStyle, maxWidth: panel === 'hours' ? '600px' : '480px' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 14px 0' }}>
+          Edit {panel === 'location' ? 'location' : panel === 'phone' ? 'phone' : panel === 'contact' ? 'contact' : 'hours'}
+        </h3>
+
+        {panel === 'location' && (
+          <>
+            <label style={labelCss}>Address line 1</label>
+            <input value={draft.address_line_1} onChange={setField('address_line_1')} style={inputCss} placeholder="4911 Warner Ave #210" />
+            <label style={labelCss}>Address line 2</label>
+            <input value={draft.address_line_2} onChange={setField('address_line_2')} style={inputCss} placeholder="Huntington Beach, CA 92649" />
+            <label style={labelCss}>Subtitle</label>
+            <input value={draft.address_subtitle} onChange={setField('address_subtitle')} style={inputCss} placeholder="Located in Harbour Landing" />
+          </>
+        )}
+
+        {panel === 'phone' && (
+          <>
+            <label style={labelCss}>Phone number</label>
+            <input value={draft.phone} onChange={setField('phone')} style={inputCss} placeholder="(714) 951-9100" />
+          </>
+        )}
+
+        {panel === 'contact' && (
+          <>
+            <label style={labelCss}>Email</label>
+            <input value={draft.email} onChange={setField('email')} style={inputCss} placeholder="info@trainercenter.com" />
+            <label style={labelCss}>Instagram handle</label>
+            <input value={draft.ig_handle} onChange={setField('ig_handle')} style={inputCss} placeholder="@trainercenter.pokemon" />
+          </>
+        )}
+
+        {panel === 'hours' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {DAY_LABELS.map((day, idx) => {
+              const h = draft.hours[idx];
+              const isClosed = !h;
+              return (
+                <div key={day} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '90px 1fr',
+                  alignItems: 'center', gap: '12px',
+                  padding: '8px 12px', backgroundColor: '#fafafa', borderRadius: '8px'
+                }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#444' }}>{day}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={isClosed}
+                        onChange={e => setDayHours(idx, 'closed', e.target.checked)}
+                      />
+                      Closed
+                    </label>
+                    {!isClosed && (
+                      <>
+                        <input
+                          type="time"
+                          value={h?.open || ''}
+                          onChange={e => setDayHours(idx, 'open', e.target.value)}
+                          style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
+                        />
+                        <span style={{ color: '#888' }}>–</span>
+                        <input
+                          type="time"
+                          value={h?.close || ''}
+                          onChange={e => setDayHours(idx, 'close', e.target.value)}
+                          style={{ padding: '6px 10px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.85rem' }}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {error && <div style={{ ...errorStyle, marginTop: '12px' }}><AlertCircle size={16} />{error}</div>}
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+          <button onClick={handleSave} disabled={saving} style={{
+            flex: 1, padding: '12px', backgroundColor: saving ? '#999' : '#C8102E',
+            color: '#fff', border: 'none', borderRadius: '8px',
+            fontWeight: '700', fontSize: '0.95rem', cursor: saving ? 'wait' : 'pointer'
+          }}>{saving ? 'Saving...' : 'Save changes'}</button>
+          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Special Hours Admin Panel ────────────────────────────
+// Shows list of upcoming special hours blocks + Add/Edit/Delete UI.
+function SpecialHoursAdminPanel({ specialHours, onChange }) {
+  const [editing, setEditing] = useState(null); // null | 'new' | row object
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = (specialHours || []).filter(sh => sh.end_date >= today);
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this block?')) return;
+    await supabase.from('special_hours').delete().eq('id', id);
+    onChange();
+  };
+
+  return (
+    <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px dashed #e5e7eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#374151', margin: 0,
+          textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Block of days / holidays
+        </h4>
+        <button onClick={() => setEditing('new')} style={{
+          backgroundColor: '#16a34a', color: '#fff', border: 'none',
+          padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+          fontSize: '0.78rem', cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: '4px'
+        }}>
+          <Plus size={13} /> Add
+        </button>
+      </div>
+
+      {upcoming.length === 0 ? (
+        <p style={{ fontSize: '0.8rem', color: '#999', fontStyle: 'italic', margin: 0 }}>
+          No upcoming holidays or blocks. Use this for things like Christmas closure, Thanksgiving early-close, or off-day events.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {upcoming.map(b => (
+            <div key={b.id} style={{
+              padding: '8px 12px', backgroundColor: '#fffbeb', borderRadius: '6px',
+              border: '1px solid #fde68a',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px'
+            }}>
+              <div style={{ minWidth: 0, fontSize: '0.85rem' }}>
+                <div style={{ fontWeight: '700', color: '#92400e' }}>{b.title}</div>
+                <div style={{ fontSize: '0.78rem', color: '#a16207' }}>
+                  {formatDateRange(b.start_date, b.end_date)}
+                  {b.closed ? ' · Closed' : b.open_time && b.close_time ? ` · ${formatTime(b.open_time)} – ${formatTime(b.close_time)}` : ''}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button onClick={() => setEditing(b)} title="Edit" style={iconBtnStyle}>
+                  <Edit2 size={13} />
+                </button>
+                <button onClick={() => handleDelete(b.id)} title="Delete" style={iconBtnStyle}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <SpecialHoursEditModal
+          row={editing === 'new' ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onChange(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+const iconBtnStyle = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  padding: '4px 6px', color: '#92400e', borderRadius: '4px',
+  display: 'inline-flex', alignItems: 'center'
+};
+
+// ─── Special Hours Edit Modal ─────────────────────────────
+function SpecialHoursEditModal({ row, onClose, onSaved }) {
+  const [draft, setDraft] = useState({
+    title: row?.title || '',
+    description: row?.description || '',
+    start_date: row?.start_date || todayISO(),
+    end_date: row?.end_date || todayISO(),
+    closed: row?.closed ?? true,
+    open_time: row?.open_time?.slice(0, 5) || '12:00',
+    close_time: row?.close_time?.slice(0, 5) || '20:00',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const setField = (k) => (e) => setDraft(d => ({ ...d, [k]: e.target.value }));
+
+  const handleSave = async () => {
+    if (!draft.title.trim()) {
+      setError('Title is required.');
+      return;
+    }
+    if (draft.end_date < draft.start_date) {
+      setError('End date must be on or after start date.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    const payload = {
+      title: draft.title.trim(),
+      description: draft.description.trim() || null,
+      start_date: draft.start_date,
+      end_date: draft.end_date,
+      closed: draft.closed,
+      open_time: draft.closed ? null : draft.open_time,
+      close_time: draft.closed ? null : draft.close_time,
+    };
+    const op = row?.id
+      ? supabase.from('special_hours').update(payload).eq('id', row.id)
+      : supabase.from('special_hours').insert(payload);
+    const { error: upErr } = await op;
+    setSaving(false);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    onSaved();
+  };
+
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
+  };
+
+  return (
+    <div style={modalBackdropStyle} onClick={onClose}>
+      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 14px 0' }}>
+          {row?.id ? 'Edit block' : 'Add a block of days'}
+        </h3>
+
+        <label style={labelCss}>Title</label>
+        <input value={draft.title} onChange={setField('title')} style={inputCss}
+          placeholder="Christmas Day · Thanksgiving · Early close" />
+
+        <label style={labelCss}>Description (optional)</label>
+        <input value={draft.description} onChange={setField('description')} style={inputCss}
+          placeholder="Anything to mention" />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <label style={labelCss}>Start date</label>
+            <input type="date" value={draft.start_date} onChange={setField('start_date')} style={inputCss} />
+          </div>
+          <div>
+            <label style={labelCss}>End date</label>
+            <input type="date" value={draft.end_date} onChange={setField('end_date')} style={inputCss} />
+          </div>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '12px 14px', backgroundColor: '#fafafa', borderRadius: '8px',
+          cursor: 'pointer', marginBottom: '14px' }}>
+          <input type="checkbox" checked={draft.closed} onChange={e => setDraft(d => ({ ...d, closed: e.target.checked }))} />
+          <span style={{ fontSize: '0.9rem', color: '#333' }}>Closed all day</span>
+        </label>
+
+        {!draft.closed && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={labelCss}>Special open</label>
+              <input type="time" value={draft.open_time} onChange={setField('open_time')} style={inputCss} />
+            </div>
+            <div>
+              <label style={labelCss}>Special close</label>
+              <input type="time" value={draft.close_time} onChange={setField('close_time')} style={inputCss} />
+            </div>
+          </div>
+        )}
+
+        {error && <div style={{ ...errorStyle, marginTop: '8px' }}><AlertCircle size={16} />{error}</div>}
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+          <button onClick={handleSave} disabled={saving} style={{
+            flex: 1, padding: '12px', backgroundColor: saving ? '#999' : '#16a34a',
+            color: '#fff', border: 'none', borderRadius: '8px',
+            fontWeight: '700', fontSize: '0.95rem', cursor: saving ? 'wait' : 'pointer'
+          }}>{saving ? 'Saving...' : (row?.id ? 'Save changes' : 'Add block')}</button>
+          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
         </div>
       </div>
     </div>
@@ -1008,42 +1443,56 @@ function PageWrapper({ children, isMobile }) {
 
 // ─── Home Page ────────────────────────────────────────────
 function OpenNowBanner({ isMobile }) {
-  const STORE_HOURS = {
-    0: [10, 17], // Sunday 10 AM - 5 PM
-    1: null,     // Monday closed
-    2: [12, 20], // Tuesday Noon - 8 PM
-    3: [12, 20], // Wednesday
-    4: [12, 20], // Thursday
-    5: [12, 22], // Friday Noon - 10 PM
-    6: [10, 20], // Saturday 10 AM - 8 PM
-  };
+  const { siteSettings, specialHours } = useSite();
+  if (!siteSettings) return null;
 
-  const DAY_THEMES = {
-    0: 'Painting Day',
-    2: 'Masterset with Larry',
-    3: 'Game Day with Seth',
-    4: 'Consultation with Chef',
-    5: 'Trade Night',
-    6: 'Community Day',
+  // Convert "12:00" → numeric hours (12.0), "17:30" → 17.5
+  const toFractionalHour = (t) => {
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h + m / 60;
   };
-
-  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const hoursMap = siteSettings.hours || {};
+  const themeFor = (idx) => hoursMap[idx]?.theme || null;
+  const rangeFor = (idx) => {
+    const h = hoursMap[idx];
+    if (!h) return null;
+    return [toFractionalHour(h.open), toFractionalHour(h.close)];
+  };
 
   const now = new Date();
   const dow = now.getDay();
-  const hours = STORE_HOURS[dow];
-  const currentHour = now.getHours() + now.getMinutes() / 60;
-  const isOpen = hours && currentHour >= hours[0] && currentHour < hours[1];
+  const todayISOStr = now.toISOString().slice(0, 10);
+  const todaySpecial = specialHoursForDate(specialHours, todayISOStr);
 
-  // Find next open day with an event
+  // Effective hours for today: special overrides regular
+  let effectiveRange = rangeFor(dow);
+  if (todaySpecial) {
+    if (todaySpecial.closed) {
+      effectiveRange = null;
+    } else {
+      effectiveRange = [toFractionalHour(todaySpecial.open_time), toFractionalHour(todaySpecial.close_time)];
+    }
+  }
+
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const isOpen = effectiveRange && currentHour >= effectiveRange[0] && currentHour < effectiveRange[1];
+
+  // Find next open day with an event (skipping closed days + special-closed days)
   let nextDayName = '';
   let nextTheme = '';
   if (!isOpen) {
-    for (let offset = 1; offset <= 7; offset++) {
-      const checkDow = (dow + offset) % 7;
-      if (STORE_HOURS[checkDow] && DAY_THEMES[checkDow]) {
-        nextDayName = DAY_NAMES[checkDow];
-        nextTheme = DAY_THEMES[checkDow];
+    for (let offset = 1; offset <= 14; offset++) {
+      const checkDate = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+      const checkDow = checkDate.getDay();
+      const checkISO = checkDate.toISOString().slice(0, 10);
+      const checkSpecial = specialHoursForDate(specialHours, checkISO);
+      if (checkSpecial?.closed) continue;
+      if (!hoursMap[checkDow] && !checkSpecial) continue;
+      const theme = checkSpecial?.title || themeFor(checkDow);
+      if (theme) {
+        nextDayName = DAY_LABELS[checkDow];
+        nextTheme = theme;
         break;
       }
     }
@@ -2467,7 +2916,7 @@ function VendorsPage({ isMobile, staff }) {
   useEffect(() => {
     supabase
       .from('vendor_submissions')
-      .select('*, vendor:vendors(id, name, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
+      .select('*, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
       .eq('visible', true)
       .order('submitted_at', { ascending: false })
       .limit(24)
@@ -2695,17 +3144,30 @@ function VendorSubmissionCard({ submission }) {
 
       {/* Body */}
       <div style={{ padding: '14px 16px', flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '6px' }}>
-          <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name}</div>
-            {v.specialty && (
-              <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
-                {v.specialty}
-              </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            {v.avatar_url && (
+              <img
+                src={v.avatar_url}
+                alt={`${v.name} logo`}
+                style={{
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  objectFit: 'cover', flexShrink: 0,
+                  border: '1px solid #eee'
+                }}
+              />
             )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name}</div>
+              {v.specialty && (
+                <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
+                  {v.specialty}
+                </div>
+              )}
+            </div>
           </div>
           {dateStr && (
-            <div style={{ fontSize: '0.75rem', color: '#999', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: '0.75rem', color: '#999', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {dateStr}
             </div>
           )}
@@ -3291,6 +3753,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
     referred_by_contact: '',
     referred_by_handle: '',
   });
+  const [logoFile, setLogoFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -3326,14 +3789,38 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
       })
       .select()
       .single();
-    setSubmitting(false);
     if (insertError) {
+      setSubmitting(false);
       setError(insertError.message);
       return;
     }
-    onComplete(data);
-    // Welcome email (fire-and-forget)
-    sendVendorEmail({ type: 'vendor_welcome', vendor_id: data.id });
+
+    // Upload logo if provided. Failure here doesn't block onboarding —
+    // vendor can add a logo later from the dashboard.
+    let savedVendor = data;
+    if (logoFile) {
+      const safeName = logoFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const path = `${data.id}/logo/${Date.now()}_${safeName}`;
+      const { error: upErr } = await supabase.storage
+        .from('vendor-media')
+        .upload(path, logoFile, { contentType: logoFile.type, upsert: false });
+      if (!upErr) {
+        const url = `${process.env.REACT_APP_SUPABASE_URL}/storage/v1/object/public/vendor-media/${path}`;
+        const { data: updated } = await supabase
+          .from('vendors')
+          .update({ avatar_url: url })
+          .eq('id', data.id)
+          .select()
+          .single();
+        if (updated) savedVendor = updated;
+      } else {
+        console.error('[VendorOnboarding] logo upload failed', upErr);
+      }
+    }
+
+    setSubmitting(false);
+    onComplete(savedVendor);
+    sendVendorEmail({ type: 'vendor_welcome', vendor_id: savedVendor.id });
   };
 
   const inputCss = {
@@ -3360,6 +3847,12 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
 
           <label style={labelCss}>Last name *</label>
           <input required value={form.last_name} onChange={setField('last_name')} style={inputCss} />
+
+          <label style={labelCss}>Vendor logo (optional)</label>
+          <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '8px' }}>
+            Square or round image works best. Shows next to your name on the public Vendors page.
+          </div>
+          <LogoPicker file={logoFile} onSelect={setLogoFile} onClear={() => setLogoFile(null)} />
 
           <label style={labelCss}>Phone</label>
           <input type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
@@ -3454,6 +3947,57 @@ function cleanHandle(s) {
   if (!s) return null;
   const trimmed = s.trim().replace(/^@+/, '');
   return trimmed || null;
+}
+
+// Square logo file picker with circular preview + clear button.
+function LogoPicker({ file, onSelect, onClear }) {
+  const previewUrl = file ? URL.createObjectURL(file) : null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+      <div style={{
+        width: '72px', height: '72px', borderRadius: '50%',
+        backgroundColor: file ? '#000' : '#fafafa',
+        border: file ? 'none' : '2px dashed #ddd',
+        overflow: 'hidden', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+      }}>
+        {file ? (
+          <img src={previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <ImageIcon size={22} color="#aaa" />
+        )}
+      </div>
+      <div style={{ flex: 1 }}>
+        {file ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: '600' }}>
+              {file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name}
+            </span>
+            <button type="button" onClick={onClear} style={{
+              background: 'none', border: 'none', color: '#999',
+              cursor: 'pointer', fontSize: '0.85rem', padding: '4px 8px'
+            }}>Remove</button>
+          </div>
+        ) : (
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '8px 14px', backgroundColor: '#fff',
+            border: '1px solid #ddd', borderRadius: '8px',
+            fontSize: '0.85rem', fontWeight: '700', color: '#444',
+            cursor: 'pointer'
+          }}>
+            <ImageIcon size={14} /> Choose image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onSelect(f); }}
+              style={{ display: 'none' }}
+            />
+          </label>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Fire-and-forget call to the send-vendor-email Edge Function. Failures are
@@ -5175,23 +5719,35 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
       padding: isMobile ? '16px' : '20px 24px',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
-        <div>
-          <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>
-            {v.name || '(no name)'}
-            {isFirstApp && (
-              <span style={{
-                marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fff7ed', color: '#c2410c',
-                padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px'
-              }}>
-                First-time applicant
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-            {v.email}{v.phone ? ` · ${v.phone}` : ''}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
-            For: <strong>{ev.title || 'Vendor Day'}</strong> · {eventDate}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
+          {v.avatar_url && (
+            <img
+              src={v.avatar_url}
+              alt=""
+              style={{
+                width: '48px', height: '48px', borderRadius: '50%',
+                objectFit: 'cover', border: '1px solid #eee', flexShrink: 0
+              }}
+            />
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>
+              {v.name || '(no name)'}
+              {isFirstApp && (
+                <span style={{
+                  marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fff7ed', color: '#c2410c',
+                  padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px'
+                }}>
+                  First-time applicant
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+              {v.email}{v.phone ? ` · ${v.phone}` : ''}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+              For: <strong>{ev.title || 'Vendor Day'}</strong> · {eventDate}
+            </div>
           </div>
         </div>
       </div>
@@ -5438,6 +5994,20 @@ function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const location = useLocation();
 
+  // Site settings + special hours (editable Visit Us section + holiday overrides)
+  const [siteSettings, setSiteSettings] = useState(null);
+  const [specialHours, setSpecialHours] = useState([]);
+  const fetchSiteData = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const [ssRes, shRes] = await Promise.all([
+      supabase.from('site_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('special_hours').select('*').gte('end_date', today).order('start_date', { ascending: true }).limit(20),
+    ]);
+    if (ssRes.data) setSiteSettings(ssRes.data);
+    setSpecialHours(shRes.data || []);
+  }, []);
+  useEffect(() => { fetchSiteData(); }, [fetchSiteData]);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
@@ -5524,6 +6094,7 @@ function App() {
   };
 
   return (
+    <SiteContext.Provider value={{ siteSettings, specialHours, isAdmin, refresh: fetchSiteData }}>
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#f8f8f8',
@@ -5722,6 +6293,7 @@ function App() {
         }
       `}</style>
     </div>
+    </SiteContext.Provider>
   );
 }
 
