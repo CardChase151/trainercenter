@@ -31,6 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 type Payload = {
   type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
   vendor_id?: string
+  vendor_ids?: string[]
   member_id?: string
   application_id?: string
   event_id?: string
@@ -164,10 +165,15 @@ Deno.serve(async (req: Request) => {
       if (eErr || !ev) return json({ error: eErr?.message || 'event not found' }, 404)
 
       // Approved vendors with no application row for this event
-      const { data: approvedVendors, error: vErr } = await supabase
+      let vendorQuery = supabase
         .from('vendors')
         .select('id, name, email, ig_handle')
         .eq('status', 'approved')
+      // Optional retry-targeting: limit to specific vendor_ids
+      if (payload.vendor_ids && payload.vendor_ids.length > 0) {
+        vendorQuery = vendorQuery.in('id', payload.vendor_ids)
+      }
+      const { data: approvedVendors, error: vErr } = await vendorQuery
       if (vErr) return json({ error: vErr.message }, 500)
       const { data: existingApps } = await supabase
         .from('vendor_applications')
@@ -192,8 +198,13 @@ Deno.serve(async (req: Request) => {
 
       const sentTo: string[] = []
       const failed: string[] = []
+      // Resend rate limit is ~2 req/sec on standard plans, throttle to be safe
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+      let firstSend = true
       for (const v of targets) {
         if (!v.email) continue
+        if (!firstSend) await sleep(600)
+        firstSend = false
         const body =
           `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
           `<p style="margin:0 0 24px">You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.</p>` +
