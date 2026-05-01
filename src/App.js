@@ -4252,6 +4252,56 @@ function useNavigateInternal() {
   return (path) => { window.location.href = path; };
 }
 
+// ─── Vendor Edit Profile Page ─────────────────────────────
+// /vendors/edit — logged-in vendors update logo, tagline (bio), socials,
+// specialty, etc. Re-uses VendorOnboardingForm in edit mode (existingVendor).
+// Auth-gated: kicks back to /vendors/apply if not signed in or no vendor row.
+function VendorEditProfilePage({ isMobile }) {
+  const [session, setSession] = useState(null);
+  const [vendor, setVendor] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigateInternal();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (!s) { navigate('/vendors/apply'); return; }
+      setSession(s);
+      const { data: v } = await supabase
+        .from('vendors')
+        .select('*')
+        .eq('user_id', s.user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (!v) { navigate('/vendors/dashboard'); return; }
+      setVendor(v);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [navigate]);
+
+  if (loading || !vendor || !session) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
+          <Loader2 size={24} className="spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <VendorOnboardingForm
+      isMobile={isMobile}
+      session={session}
+      existingVendor={vendor}
+      onComplete={() => navigate('/vendors/dashboard')}
+    />
+  );
+}
+
 // ─── Vendor Dashboard Page ────────────────────────────────
 // Logged-in vendor home. Three states:
 //   1. Not logged in → prompt to go to /vendors/apply
@@ -4384,6 +4434,40 @@ function VendorDashboardPage({ isMobile }) {
               <LogOut size={14} /> Log out
             </button>
           </div>
+        </div>
+
+        {/* Edit profile entry point */}
+        <div style={{ maxWidth: '900px', margin: '0 auto 24px' }}>
+          <Link to="/vendors/edit" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+            padding: isMobile ? '14px 16px' : '16px 20px',
+            textDecoration: 'none', color: '#1a1a1a',
+            transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                backgroundColor: '#fff0f0', color: '#C8102E',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Edit2 size={18} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
+                  Edit profile
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                  Update your logo, tagline, socials, or specialty
+                </div>
+              </div>
+            </div>
+            <ArrowRight size={18} color="#999" />
+          </Link>
         </div>
 
         {/* Upcoming Vendor Days */}
@@ -4641,23 +4725,28 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   );
 }
 
-// ─── Onboarding form (first-time vendor only) ─────────────
-function VendorOnboardingForm({ isMobile, session, onComplete }) {
+// ─── Onboarding form (also used in edit mode) ─────────────
+// When `existingVendor` is passed, the form runs in edit mode: pre-populated,
+// signup-only fields hidden (heard_from + referral), submits an UPDATE
+// rather than an INSERT, and skips the welcome email + marketing upsert.
+function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor }) {
+  const isEdit = !!existingVendor;
   const [form, setForm] = useState({
-    first_name: '',
-    last_name: '',
-    phone: '',
-    ig_handle: '',
-    tiktok_handle: '',
-    fb_handle: '',
-    specialty: '',
-    bio: '',
-    heard_from: '',
-    referred_by_name: '',
-    referred_by_contact: '',
-    referred_by_handle: '',
+    first_name: existingVendor?.first_name || '',
+    last_name: existingVendor?.last_name || '',
+    phone: existingVendor?.phone || '',
+    ig_handle: existingVendor?.ig_handle || '',
+    tiktok_handle: existingVendor?.tiktok_handle || '',
+    fb_handle: existingVendor?.fb_handle || '',
+    specialty: existingVendor?.specialty || '',
+    bio: existingVendor?.bio || '',
+    heard_from: existingVendor?.heard_from || '',
+    referred_by_name: existingVendor?.referred_by_name || '',
+    referred_by_contact: existingVendor?.referred_by_contact || '',
+    referred_by_handle: existingVendor?.referred_by_handle || '',
   });
   const [logoFile, setLogoFile] = useState(null);
+  const [removeExistingLogo, setRemoveExistingLogo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -4672,39 +4761,62 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
     setSubmitting(true);
     setError('');
     const fullName = `${form.first_name.trim()} ${form.last_name.trim()}`;
-    const { data, error: insertError } = await supabase
-      .from('vendors')
-      .insert({
-        user_id: session.user.id,
-        email: session.user.email,
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        name: fullName,
-        phone: form.phone.trim() || null,
-        ig_handle: cleanHandle(form.ig_handle),
-        tiktok_handle: cleanHandle(form.tiktok_handle),
-        fb_handle: cleanHandle(form.fb_handle),
-        specialty: form.specialty.trim() || null,
-        bio: form.bio.trim() || null,
-        heard_from: form.heard_from.trim() || null,
-        referred_by_name: form.referred_by_name.trim() || null,
-        referred_by_contact: form.referred_by_contact.trim() || null,
-        referred_by_handle: cleanHandle(form.referred_by_handle),
-      })
-      .select()
-      .single();
-    if (insertError) {
-      setSubmitting(false);
-      setError(insertError.message);
-      return;
+
+    // Build the row payload shared by both modes.
+    const payload = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      name: fullName,
+      phone: form.phone.trim() || null,
+      ig_handle: cleanHandle(form.ig_handle),
+      tiktok_handle: cleanHandle(form.tiktok_handle),
+      fb_handle: cleanHandle(form.fb_handle),
+      specialty: form.specialty.trim() || null,
+      bio: form.bio.trim() || null,
+    };
+
+    let savedVendor = null;
+    if (isEdit) {
+      // Edit: update existing row, keep heard_from/referral as-is.
+      const { data, error: updErr } = await supabase
+        .from('vendors')
+        .update(payload)
+        .eq('id', existingVendor.id)
+        .select()
+        .single();
+      if (updErr) {
+        setSubmitting(false);
+        setError(updErr.message);
+        return;
+      }
+      savedVendor = data;
+    } else {
+      // Signup: insert new row including signup-only fields.
+      const { data, error: insertError } = await supabase
+        .from('vendors')
+        .insert({
+          ...payload,
+          user_id: session.user.id,
+          email: session.user.email,
+          heard_from: form.heard_from.trim() || null,
+          referred_by_name: form.referred_by_name.trim() || null,
+          referred_by_contact: form.referred_by_contact.trim() || null,
+          referred_by_handle: cleanHandle(form.referred_by_handle),
+        })
+        .select()
+        .single();
+      if (insertError) {
+        setSubmitting(false);
+        setError(insertError.message);
+        return;
+      }
+      savedVendor = data;
     }
 
-    // Upload logo if provided. Failure here doesn't block onboarding —
-    // vendor can add a logo later from the dashboard.
-    let savedVendor = data;
+    // Logo handling: upload new file, OR clear existing if user removed it.
     if (logoFile) {
       const safeName = logoFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const path = `${data.id}/logo/${Date.now()}_${safeName}`;
+      const path = `${savedVendor.id}/logo/${Date.now()}_${safeName}`;
       const { error: upErr } = await supabase.storage
         .from('vendor-media')
         .upload(path, logoFile, { contentType: logoFile.type, upsert: false });
@@ -4713,30 +4825,41 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
         const { data: updated } = await supabase
           .from('vendors')
           .update({ avatar_url: url })
-          .eq('id', data.id)
+          .eq('id', savedVendor.id)
           .select()
           .single();
         if (updated) savedVendor = updated;
       } else {
         console.error('[VendorOnboarding] logo upload failed', upErr);
       }
+    } else if (isEdit && removeExistingLogo) {
+      const { data: cleared } = await supabase
+        .from('vendors')
+        .update({ avatar_url: null })
+        .eq('id', savedVendor.id)
+        .select()
+        .single();
+      if (cleared) savedVendor = cleared;
     }
 
     setSubmitting(false);
     onComplete(savedVendor);
-    sendVendorEmail({ type: 'vendor_welcome', vendor_id: savedVendor.id });
-    // Add to marketing list (fire-and-forget). RPC handles dedupe + linking.
-    supabase.rpc('upsert_marketing_contact_from_app', {
-      p_email: savedVendor.email,
-      p_first_name: savedVendor.first_name || null,
-      p_last_name: savedVendor.last_name || null,
-      p_phone: savedVendor.phone || null,
-      p_source: 'app_vendor',
-      p_member_id: null,
-      p_vendor_id: savedVendor.id,
-    }).then(({ error: mcErr }) => {
-      if (mcErr) console.warn('[marketing] vendor upsert failed', mcErr);
-    });
+
+    // Signup-only side effects: welcome email + marketing list opt-in.
+    if (!isEdit) {
+      sendVendorEmail({ type: 'vendor_welcome', vendor_id: savedVendor.id });
+      supabase.rpc('upsert_marketing_contact_from_app', {
+        p_email: savedVendor.email,
+        p_first_name: savedVendor.first_name || null,
+        p_last_name: savedVendor.last_name || null,
+        p_phone: savedVendor.phone || null,
+        p_source: 'app_vendor',
+        p_member_id: null,
+        p_vendor_id: savedVendor.id,
+      }).then(({ error: mcErr }) => {
+        if (mcErr) console.warn('[marketing] vendor upsert failed', mcErr);
+      });
+    }
   };
 
   const inputCss = {
@@ -4749,13 +4872,18 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
-        <SectionHeader title="Complete Your Application" subtitle="Tell us about you so Chef can approve you" />
+        <SectionHeader
+          title={isEdit ? 'Edit Your Profile' : 'Complete Your Application'}
+          subtitle={isEdit ? 'Update your logo, tagline, socials, or specialty' : 'Tell us about you so Chef can approve you'}
+        />
         <form onSubmit={handleSubmit} style={{
           backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '36px',
         }}>
           <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 24px 0' }}>
-            All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.
+            {isEdit
+              ? 'Update anything that\'s changed. Only your name is required. Your approval status is unaffected.'
+              : 'All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.'}
           </p>
 
           <label style={labelCss}>First name *</label>
@@ -4768,7 +4896,13 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '8px' }}>
             Square or round image works best. Shows next to your name on the public Vendors page.
           </div>
-          <LogoPicker file={logoFile} onSelect={setLogoFile} onClear={() => setLogoFile(null)} />
+          <LogoPicker
+            file={logoFile}
+            onSelect={(f) => { setLogoFile(f); setRemoveExistingLogo(false); }}
+            onClear={() => setLogoFile(null)}
+            existingUrl={removeExistingLogo ? null : (existingVendor?.avatar_url || null)}
+            onRemoveExisting={isEdit ? () => setRemoveExistingLogo(true) : null}
+          />
 
           <label style={labelCss}>Phone</label>
           <input type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
@@ -4799,33 +4933,37 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
           <label style={labelCss}>Short bio (shows next to your posts)</label>
           <textarea value={form.bio} onChange={setField('bio')} rows={3} placeholder="A sentence or two about your shop or what you bring to Vendor Day" style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }} />
 
-          <div style={{ height: '8px' }} />
-          <label style={labelCss}>How did you hear about Vendor Day?</label>
-          <select value={form.heard_from} onChange={setField('heard_from')} style={{ ...inputCss, cursor: 'pointer' }}>
-            <option value="">Pick one</option>
-            <option value="trainer_center_customer">I shop at Trainer Center HB</option>
-            <option value="word_of_mouth">Word of mouth</option>
-            <option value="social_media">Social media</option>
-            <option value="vendor_referral">Another vendor referred me</option>
-            <option value="event">Saw it at an event</option>
-            <option value="other">Other</option>
-          </select>
+          {!isEdit && (
+            <>
+              <div style={{ height: '8px' }} />
+              <label style={labelCss}>How did you hear about Vendor Day?</label>
+              <select value={form.heard_from} onChange={setField('heard_from')} style={{ ...inputCss, cursor: 'pointer' }}>
+                <option value="">Pick one</option>
+                <option value="trainer_center_customer">I shop at Trainer Center HB</option>
+                <option value="word_of_mouth">Word of mouth</option>
+                <option value="social_media">Social media</option>
+                <option value="vendor_referral">Another vendor referred me</option>
+                <option value="event">Saw it at an event</option>
+                <option value="other">Other</option>
+              </select>
 
-          {form.heard_from === 'vendor_referral' && (
-            <div style={{
-              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
-              borderRadius: '10px', padding: '16px 18px', marginBottom: '14px'
-            }}>
-              <p style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700', margin: '0 0 12px 0' }}>
-                Who referred you? We want to thank them.
-              </p>
-              <label style={labelCss}>Their name</label>
-              <input value={form.referred_by_name} onChange={setField('referred_by_name')} style={inputCss} />
-              <label style={labelCss}>Their phone or email</label>
-              <input value={form.referred_by_contact} onChange={setField('referred_by_contact')} style={inputCss} />
-              <label style={labelCss}>Their social handle</label>
-              <input value={form.referred_by_handle} onChange={setField('referred_by_handle')} placeholder="@theirhandle" style={{ ...inputCss, marginBottom: 0 }} />
-            </div>
+              {form.heard_from === 'vendor_referral' && (
+                <div style={{
+                  backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+                  borderRadius: '10px', padding: '16px 18px', marginBottom: '14px'
+                }}>
+                  <p style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700', margin: '0 0 12px 0' }}>
+                    Who referred you? We want to thank them.
+                  </p>
+                  <label style={labelCss}>Their name</label>
+                  <input value={form.referred_by_name} onChange={setField('referred_by_name')} style={inputCss} />
+                  <label style={labelCss}>Their phone or email</label>
+                  <input value={form.referred_by_contact} onChange={setField('referred_by_contact')} style={inputCss} />
+                  <label style={labelCss}>Their social handle</label>
+                  <input value={form.referred_by_handle} onChange={setField('referred_by_handle')} placeholder="@theirhandle" style={{ ...inputCss, marginBottom: 0 }} />
+                </div>
+              )}
+            </>
           )}
 
           {error && (
@@ -4847,11 +4985,15 @@ function VendorOnboardingForm({ isMobile, session, onComplete }) {
             fontSize: '1rem', fontWeight: '700',
             cursor: submitting ? 'wait' : 'pointer',
           }}>
-            {submitting ? 'Submitting...' : 'Submit application'}
+            {submitting
+              ? (isEdit ? 'Saving...' : 'Submitting...')
+              : (isEdit ? 'Save changes' : 'Submit application')}
           </button>
-          <p style={{ fontSize: '0.8rem', color: '#999', textAlign: 'center', margin: '12px 0 0 0' }}>
-            Chef and the team will review and email you back. From there, applying for each Vendor Day takes two clicks.
-          </p>
+          {!isEdit && (
+            <p style={{ fontSize: '0.8rem', color: '#999', textAlign: 'center', margin: '12px 0 0 0' }}>
+              Chef and the team will review and email you back. From there, applying for each Vendor Day takes two clicks.
+            </p>
+          )}
         </form>
       </div>
     </PageWrapper>
@@ -4887,25 +5029,32 @@ function cleanHandle(s) {
 }
 
 // Square logo file picker with circular preview + clear button.
-function LogoPicker({ file, onSelect, onClear }) {
+function LogoPicker({ file, onSelect, onClear, existingUrl, onRemoveExisting }) {
   const previewUrl = file ? URL.createObjectURL(file) : null;
+  // Three modes: new file picked, existing URL with no new file, or empty.
+  const showFile = !!file;
+  const showExisting = !file && !!existingUrl;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
       <div style={{
         width: '72px', height: '72px', borderRadius: '50%',
-        backgroundColor: file ? '#000' : '#fafafa',
-        border: file ? 'none' : '2px dashed #ddd',
+        backgroundColor: (showFile || showExisting) ? '#000' : '#fafafa',
+        border: (showFile || showExisting) ? 'none' : '2px dashed #ddd',
         overflow: 'hidden', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
-        {file ? (
+        {showFile && (
           <img src={previewUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
+        )}
+        {showExisting && (
+          <img src={existingUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
+        {!showFile && !showExisting && (
           <ImageIcon size={22} color="#aaa" />
         )}
       </div>
       <div style={{ flex: 1 }}>
-        {file ? (
+        {showFile ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '0.85rem', color: '#444', fontWeight: '600' }}>
               {file.name.length > 28 ? file.name.slice(0, 25) + '…' : file.name}
@@ -4914,6 +5063,31 @@ function LogoPicker({ file, onSelect, onClear }) {
               background: 'none', border: 'none', color: '#999',
               cursor: 'pointer', fontSize: '0.85rem', padding: '4px 8px'
             }}>Remove</button>
+          </div>
+        ) : showExisting ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', backgroundColor: '#fff',
+              border: '1px solid #ddd', borderRadius: '8px',
+              fontSize: '0.85rem', fontWeight: '700', color: '#444',
+              cursor: 'pointer'
+            }}>
+              <ImageIcon size={14} /> Replace
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onSelect(f); }}
+                style={{ display: 'none' }}
+              />
+            </label>
+            {onRemoveExisting && (
+              <button type="button" onClick={onRemoveExisting} style={{
+                background: 'none', border: '1px solid #fecaca', color: '#dc2626',
+                cursor: 'pointer', fontSize: '0.85rem', padding: '7px 12px',
+                borderRadius: '8px', fontWeight: '700'
+              }}>Remove</button>
+            )}
           </div>
         ) : (
           <label style={{
@@ -7840,6 +8014,7 @@ function App() {
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
+        <Route path="/vendors/edit" element={<VendorEditProfilePage isMobile={isMobile} />} />
         <Route path="/vendors/upload/:eventId" element={<VendorUploadPage isMobile={isMobile} />} />
         <Route path="/vendors/review" element={<VendorReviewPage isMobile={isMobile} />} />
         {/* Guest-facing alias for the same review/voting flow. DB still uses members. */}
