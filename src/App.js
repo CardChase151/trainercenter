@@ -324,11 +324,18 @@ function formatTime(t) {
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ─── Category Colors ──────────────────────────────────────
+// The 7 locked-in event categories. These drive: calendar grid colors, the
+// "Check out our events" filter chips above the calendar, calendar event tags,
+// and (for the 6 marked subscribable below) per-category email subscriptions.
+// `description` is shown as the chip subtitle and used for SEO meta copy.
 const CATEGORIES = {
-  trade_night: { label: 'Trade Night', color: '#C8102E' },
-  tournament: { label: 'Tournament', color: '#2563eb' },
-  big_event: { label: 'Big Event', color: '#7c3aed' },
-  other: { label: 'Other', color: '#ea580c' }
+  trade_night:  { label: 'Trade Night',  color: '#C8102E', description: 'Bring cards. Trade with the community. Walk out with the binder you have been chasing.' },
+  tournament:   { label: 'Tournament',   color: '#2563eb', description: 'Compete in TCG, video games, or board games. Prizes for top finishers.' },
+  game_day:     { label: 'Game Day',     color: '#0891b2', description: 'Video games, board games, TCG. Bring your stuff or play what is at the shop.' },
+  crafts:       { label: 'Crafts & Art', color: '#ec4899', description: 'Family-friendly. Paint Pokemon, do crafts, hang out.' },
+  consultation: { label: 'Consultations',color: '#059669', description: 'Book 1-on-1 with Chef for appraisals, strategy, or learn the TCG.' },
+  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Off-site shows we are at, plus signings and special days.' },
+  other:        { label: 'Other',        color: '#ea580c', description: 'Everything else on the schedule.' },
 };
 
 // ─── Event Modal (Add/Edit) ───────────────────────────────
@@ -927,7 +934,7 @@ function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanen
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff, isMobile, staff, activeEventId, calendarRef, events, fetchEvents }) {
+function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, events, fetchEvents }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
@@ -984,7 +991,7 @@ function Calendar({ isStaff, isMobile, staff, activeEventId, calendarRef, events
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    }).filter(ev => !activeEventId || ev.id === activeEventId);
+    }).filter(ev => !activeCategory || (ev.categories || []).includes(activeCategory));
   };
 
   const handleDayClick = (day) => {
@@ -2957,12 +2964,20 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     })
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
-  // Derive special events (vendor-bearing or big events).
+  // Live count of how many distinct, non-cancelled events fall into each
+  // category. Powers the chip-count badges + dims chips for empty categories.
+  const categoryCounts = events.reduce((acc, ev) => {
+    if (ev.cancelled) return acc;
+    (ev.categories || []).forEach(c => { acc[c] = (acc[c] || 0) + 1; });
+    return acc;
+  }, {});
+
+  // Derive special events (vendor-bearing or card shows).
   // Pull non-recurring "headline" events for the top-of-calendar callout.
-  // Anything with `has_vendors=true` or tagged `big_event` qualifies, sorted
+  // Anything with `has_vendors=true` or tagged `card_show` qualifies, sorted
   // by soonest first so the upcoming lineup surfaces ahead of older callouts.
   const specialEvents = events
-    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.has_vendors || (ev.categories || []).includes('big_event')))
+    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.has_vendors || (ev.categories || []).includes('card_show')))
     .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Get today's events
@@ -3058,7 +3073,10 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .day-num { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
         .event-title { background: #f5f5f5; border-radius: 4px; padding: 2px 6px; margin: 2px 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-title.trade_night { border-left: 3px solid #C8102E; }
-        .event-title.big_event { border-left: 3px solid #7c3aed; }
+        .event-title.card_show { border-left: 3px solid #7c3aed; }
+        .event-title.game_day { border-left: 3px solid #0891b2; }
+        .event-title.crafts { border-left: 3px solid #ec4899; }
+        .event-title.consultation { border-left: 3px solid #059669; }
         .event-title.tournament { border-left: 3px solid #2563eb; }
         .event-title.other { border-left: 3px solid #ea580c; }
         .empty { background: #fafafa; }
@@ -3195,70 +3213,99 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
           );
         })()}
 
-        {/* Weekly Schedule Cards — also serve as filters. Clicking a card pins
-            the calendar to just that recurring series; clicking again clears. */}
-        {weeklyEvents.length > 0 && (
+        {/* Check out our events — category filter chips replacing the old
+            day-tagged weekly cards. Each chip filters the calendar grid by
+            category and doubles as the SEO-friendly description of what we
+            do at the shop. The 7 keys here mirror the CATEGORIES dict.
+            Categories with zero events on the calendar are dimmed. */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '10px' }}>
+            <h3 style={{
+              fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
+              margin: '0 0 2px 0',
+            }}>
+              Check out our events
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: '#888', margin: 0 }}>
+              Tap one to see it on the calendar.
+            </p>
+          </div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: '10px',
-            marginBottom: '20px'
           }}>
-            {weeklyEvents.map(ev => {
-              const cardColor = CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c';
-              const isActive = activeFilter === ev.id;
+            {Object.entries(CATEGORIES).map(([key, cat]) => {
+              const isActive = activeFilter === key;
+              const count = categoryCounts[key] || 0;
+              const dim = count === 0;
               return (
                 <button
-                  key={ev.id}
+                  key={key}
                   type="button"
-                  onClick={() => setActiveFilter(isActive ? null : ev.id)}
+                  onClick={() => setActiveFilter(isActive ? null : key)}
+                  disabled={dim}
+                  title={dim ? `No ${cat.label} events on the calendar yet` : cat.description}
                   style={{
                     textAlign: 'left',
-                    padding: '14px 16px',
+                    padding: '12px 14px',
                     borderRadius: '10px',
-                    backgroundColor: isActive ? cardColor : '#ffffff',
-                    border: `1px solid ${isActive ? cardColor : '#eee'}`,
-                    borderLeft: `3px solid ${cardColor}`,
-                    cursor: 'pointer',
+                    backgroundColor: isActive ? cat.color : '#fff',
+                    border: `1px solid ${isActive ? cat.color : '#eee'}`,
+                    borderLeft: `3px solid ${cat.color}`,
+                    cursor: dim ? 'not-allowed' : 'pointer',
                     fontFamily: 'inherit',
+                    opacity: dim ? 0.55 : 1,
                     transition: 'all 0.15s',
-                    boxShadow: isActive ? `0 4px 12px ${cardColor}33` : 'none',
+                    boxShadow: isActive ? `0 4px 12px ${cat.color}33` : 'none',
+                    minWidth: 0,
                   }}
                 >
-                  <p style={{
-                    fontSize: '0.7rem',
-                    color: isActive ? 'rgba(255,255,255,0.85)' : '#999',
-                    fontWeight: '700', margin: '0 0 2px 0',
-                    textTransform: 'uppercase', letterSpacing: '0.5px'
-                  }}>{ev.dayName}</p>
-                  <h4 style={{
-                    fontSize: '0.85rem', fontWeight: '800',
-                    color: isActive ? '#fff' : '#1a1a1a',
-                    margin: '0 0 2px 0'
-                  }}>{ev.title}</h4>
-                  {ev.description && (
-                    <p style={{
-                      fontSize: '0.7rem',
-                      color: isActive ? 'rgba(255,255,255,0.85)' : '#888',
-                      margin: 0, lineHeight: '1.3'
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    marginBottom: '4px',
+                  }}>
+                    <h4 style={{
+                      fontSize: '0.88rem', fontWeight: '800',
+                      color: isActive ? '#fff' : '#1a1a1a',
+                      margin: 0, flex: 1, minWidth: 0,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
-                      {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
-                    </p>
-                  )}
+                      {cat.label}
+                    </h4>
+                    {count > 0 && (
+                      <span style={{
+                        fontSize: '0.65rem', fontWeight: '800',
+                        color: isActive ? '#fff' : cat.color,
+                        backgroundColor: isActive ? 'rgba(255,255,255,0.22)' : cat.color + '1a',
+                        padding: '2px 7px', borderRadius: '999px',
+                        flexShrink: 0,
+                      }}>
+                        {count}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{
+                    fontSize: '0.72rem',
+                    color: isActive ? 'rgba(255,255,255,0.9)' : '#666',
+                    margin: 0, lineHeight: '1.35',
+                  }}>
+                    {cat.description}
+                  </p>
                 </button>
               );
             })}
           </div>
-        )}
+        </div>
 
         {/* Special Events callout (dynamic, color matches primary category) */}
         {specialEvents.length > 0 && (() => {
           const ev = specialEvents[0];
           // Vendor-bearing events read green; otherwise pick the first category.
-          const primaryKey = ev.has_vendors ? 'vendor' : ((ev.categories || [])[0] || 'big_event');
+          const primaryKey = ev.has_vendors ? 'vendor' : ((ev.categories || [])[0] || 'card_show');
           const tone = primaryKey === 'vendor'
             ? { color: '#16a34a', label: 'Vendors' }
-            : (CATEGORIES[primaryKey] || CATEGORIES.big_event);
+            : (CATEGORIES[primaryKey] || CATEGORIES.card_show);
           // Tint the bg with a transparent overlay of the category color so red,
           // green, blue, purple, etc. all read like soft callouts in their hue.
           const bg = tone.color + '12';
@@ -3365,7 +3412,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             }}
           />
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} activeEventId={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} activeCategory={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
           </div>
         </div>
       </div>
@@ -8041,11 +8088,19 @@ const NAV_ITEMS = [
 // The unique token IS the credential -- no login needed. Page lets the
 // recipient turn individual category subscriptions on/off, or unsubscribe
 // from everything in one click.
+// Email subscription categories. The first six mirror CATEGORIES (minus
+// `consultation` which is a fixed 1:1 weekly slot — not blast-worthy).
+// `vendors` is orthogonal to event category and fires whenever an event
+// has has_vendors=true. store_news + blog stay as non-event subscriptions.
 const MARKETING_CATEGORIES = [
-  { key: 'vendor_day', label: 'Vendor lineup announcements', help: 'Reminders and lineup previews for events with vendors.' },
-  { key: 'events',     label: 'Other events',             help: 'Tournaments, set releases, signings, special days.' },
-  { key: 'store_news', label: 'Store news and updates',   help: 'Hours, restocks, new arrivals, store happenings.' },
-  { key: 'blog',       label: 'New blog posts',           help: 'Articles and guides we publish on the site.' },
+  { key: 'vendors',     label: 'Vendor lineup announcements', help: 'Reminders and lineup previews for events with vendors set up.' },
+  { key: 'trade_night', label: 'Trade Night reminders',       help: 'Heads-up for trade-focused nights at the shop.' },
+  { key: 'tournament',  label: 'Tournament announcements',    help: 'TCG, video, and board-game tournaments.' },
+  { key: 'game_day',    label: 'Game Day reminders',          help: 'Weekly games hangout and special game days.' },
+  { key: 'crafts',      label: 'Crafts & Art days',           help: 'Family-friendly painting and creative events.' },
+  { key: 'card_show',   label: 'Card shows + special days',   help: 'Off-site shows we are at, plus signings and special days.' },
+  { key: 'store_news',  label: 'Store news and updates',      help: 'Hours, restocks, new arrivals, store happenings.' },
+  { key: 'blog',        label: 'New blog posts',              help: 'Articles and guides we publish on the site.' },
 ];
 
 function UnsubscribePage({ isMobile }) {
@@ -8055,7 +8110,13 @@ function UnsubscribePage({ isMobile }) {
   // loading | invalid | manage | done_partial | done_all | error
   const [phase, setPhase] = useState('loading');
   const [contact, setContact] = useState(null);
-  const [subs, setSubs] = useState({ vendor_day: true, store_news: true, events: true, blog: true });
+  // Build the default subs object from MARKETING_CATEGORIES so the page
+  // automatically picks up new categories without a separate edit. Default is
+  // opted-in for everything; the hydrate step below pulls the actual DB state.
+  const defaultSubs = MARKETING_CATEGORIES.reduce((acc, cat) => {
+    acc[cat.key] = true; return acc;
+  }, {});
+  const [subs, setSubs] = useState(defaultSubs);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -8068,14 +8129,15 @@ function UnsubscribePage({ isMobile }) {
       if (error || !data || data.length === 0) { setPhase('invalid'); return; }
       const row = data[0];
       setContact(row);
-      // Hydrate checkbox state from current DB state.
+      // Hydrate checkbox state from current DB state — anything explicitly
+      // false is off, anything else (including missing keys for a freshly-
+      // added category) defaults to on.
       const current = row.subscriptions || {};
-      setSubs({
-        vendor_day: current.vendor_day !== false,
-        store_news: current.store_news !== false,
-        events:     current.events     !== false,
-        blog:       current.blog       !== false,
-      });
+      const hydrated = MARKETING_CATEGORIES.reduce((acc, cat) => {
+        acc[cat.key] = current[cat.key] !== false;
+        return acc;
+      }, {});
+      setSubs(hydrated);
       setPhase('manage');
     })();
     return () => { cancelled = true; };
@@ -8113,7 +8175,8 @@ function UnsubscribePage({ isMobile }) {
       setPhase('error');
       return;
     }
-    setSubs({ vendor_day: false, store_news: false, events: false, blog: false });
+    const allOff = MARKETING_CATEGORIES.reduce((acc, cat) => { acc[cat.key] = false; return acc; }, {});
+    setSubs(allOff);
     setPhase('done_all');
   };
 
