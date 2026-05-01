@@ -14,7 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 const FROM_ADDRESS = 'Trainer Center HB <noreply@mysendz.com>'
-const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com']
+const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'Sethmcparty@gmail.com']
 const SITE_URL = 'https://pokemontrainercenter.com'
 
 const corsHeaders = {
