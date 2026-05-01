@@ -5,6 +5,7 @@
 //   - vendor_welcome              (vendor finishes onboarding)
 //   - vendor_profile_approved     (Chef approves the vendor profile; "you're approved, now pick your dates")
 //   - vendor_event_invite_urgent  (admin blast: invite all approved vendors who haven't applied for a specific event)
+//   - vendor_event_day_reminder   (admin blast: morning-of "tonight's the night" reminder to approved lineup)
 //   - member_welcome              (member finishes onboarding)
 //   - application_received        (vendor applies for an event)
 //   - application_decided         (staff approves/declines an event application)
@@ -29,7 +30,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
@@ -254,6 +255,86 @@ Deno.serve(async (req: Request) => {
         }
       }
       return json({ ok: true, sent: sentTo, count: sentTo.length, failed, target_count: targets.length })
+    }
+
+    if (type === 'vendor_event_day_reminder') {
+      // Morning-of "tonight's the night" reminder. Goes to every vendor with
+      // an APPROVED application for the event. Pulls event title, window,
+      // chef note + each vendor's requested time slot live.
+      if (!payload.event_id) return json({ error: 'event_id required' }, 400)
+      const { data: ev, error: eErr } = await supabase.from('events').select('*').eq('id', payload.event_id).single()
+      if (eErr || !ev) return json({ error: eErr?.message || 'event not found' }, 404)
+
+      const { data: apps, error: aErr } = await supabase
+        .from('vendor_applications')
+        .select('id, requested_start_time, requested_end_time, vendor:vendors(id, name, email)')
+        .eq('event_id', payload.event_id)
+        .eq('status', 'approved')
+      if (aErr) return json({ error: aErr.message }, 500)
+
+      const eventTitle = ev.title || 'Vendor Day'
+      const eventDateStr = ev.event_date ? formatEventDate(ev.event_date) : 'today'
+      const window = vendorTimeLine(ev) || ''
+      const chefNote = (ev.vendor_note || '').trim()
+      const lineupUrl = `${SITE_URL}/vendor-day?event=${ev.id}`
+      const subject = `Tonight: ${eventTitle}`
+
+      const sentTo: string[] = []
+      const failed: string[] = []
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+      let firstSend = true
+      for (const app of (apps || [])) {
+        const v = (app as any).vendor
+        if (!v?.email) continue
+        if (!firstSend) await sleep(600)
+        firstSend = false
+
+        // Per-vendor time slot if they specified one when applying.
+        const myStart = formatTime12h((app as any).requested_start_time)
+        const myEnd = formatTime12h((app as any).requested_end_time)
+        const personalWindow = (myStart && myEnd) ? `${myStart} - ${myEnd}` : ''
+
+        const body =
+          `<p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.06em;text-transform:uppercase">Tonight</p>` +
+          `<h2 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#1a1a1a;line-height:1.2">${eventTitle}</h2>` +
+          `<p style="margin:0 0 24px">Hi ${v.name},</p>` +
+          `<p style="margin:0 0 20px">Tonight is the night. Here are the details so you walk in ready.</p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border:1px solid #eee;border-radius:10px;border-collapse:separate;overflow:hidden">` +
+          `  <tr><td style="padding:14px 18px;border-bottom:1px solid #f3f4f6"><span style="font-size:12px;font-weight:700;color:#666;letter-spacing:0.04em;text-transform:uppercase">Date</span><br/><span style="font-size:15px;color:#1a1a1a;font-weight:600">${eventDateStr}</span></td></tr>` +
+          (window ? `  <tr><td style="padding:14px 18px;border-bottom:1px solid #f3f4f6"><span style="font-size:12px;font-weight:700;color:#666;letter-spacing:0.04em;text-transform:uppercase">Event window</span><br/><span style="font-size:15px;color:#1a1a1a;font-weight:600">${window}</span></td></tr>` : '') +
+          (personalWindow ? `  <tr><td style="padding:14px 18px;border-bottom:1px solid #f3f4f6;background:#f0fdf4"><span style="font-size:12px;font-weight:700;color:#15803d;letter-spacing:0.04em;text-transform:uppercase">Your slot</span><br/><span style="font-size:15px;color:#15803d;font-weight:700">${personalWindow}</span></td></tr>` : '') +
+          `  <tr><td style="padding:14px 18px"><span style="font-size:12px;font-weight:700;color:#666;letter-spacing:0.04em;text-transform:uppercase">Address</span><br/><span style="font-size:15px;color:#1a1a1a;font-weight:600">4911 Warner Ave #210<br/>Huntington Beach, CA 92649</span></td></tr>` +
+          `</table>` +
+          (chefNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px"><tr><td style="background:#fff7ed;border-left:4px solid #c2410c;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#9a3412;letter-spacing:0.04em;text-transform:uppercase">Note from Chef</p><p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5;white-space:pre-wrap">${chefNote.replace(/</g,'&lt;')}</p></td></tr></table>` : '') +
+          `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#444">When you arrive, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table. Those go on our public Vendors page.</p>` +
+          `<p style="margin:24px 0 8px;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Open dashboard</a></p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:14px 18px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:12px;font-weight:800;color:#C8102E;letter-spacing:0.04em;text-transform:uppercase">Promote your table</p>` +
+          `  <p style="margin:0 0 8px;color:#1f2937;font-size:14px;line-height:1.5">Your logo and socials are live on the public lineup page. Share with your community before doors open.</p>` +
+          `  <p style="margin:0;font-size:13px"><a href="${lineupUrl}" style="color:#C8102E;font-weight:700;text-decoration:underline">${lineupUrl.replace('https://','')}</a></p>` +
+          `</td></tr></table>`
+
+        const text = `Tonight: ${eventTitle}\n\n` +
+          `Hi ${v.name},\n\n` +
+          `Tonight is the night.\n\n` +
+          `Date: ${eventDateStr}\n` +
+          (window ? `Event window: ${window}\n` : '') +
+          (personalWindow ? `Your slot: ${personalWindow}\n` : '') +
+          `Address: 4911 Warner Ave #210, Huntington Beach, CA 92649\n\n` +
+          (chefNote ? `Note from Chef: ${chefNote}\n\n` : '') +
+          `When you arrive, log in and tap Check in on your dashboard.\n\n` +
+          `Dashboard: ${SITE_URL}/vendors/dashboard\n` +
+          `Promote your table — share the public lineup with your community: ${lineupUrl}\n`
+
+        try {
+          await sendResendEmail([v.email], subject, wrapHtml(body), text)
+          sentTo.push(v.email)
+        } catch (err) {
+          console.error('[vendor_event_day_reminder] failed for', v.email, err)
+          failed.push(v.email)
+        }
+      }
+      return json({ ok: true, sent: sentTo, count: sentTo.length, failed, target_count: (apps || []).length })
     }
 
     if (type === 'member_welcome') {
