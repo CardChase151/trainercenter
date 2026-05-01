@@ -281,6 +281,36 @@ function specialHoursForDate(specialHours, isoDate) {
   return null;
 }
 
+// Single source of truth for "is the shop open right now." Reads from the
+// site_settings.hours map (DB-driven) and applies any special_hours overrides
+// for today. Used by the homepage OpenNowBanner and the Calendar page pill so
+// they can never disagree.
+function computeOpenNowState(siteSettings, specialHours) {
+  if (!siteSettings) return { isOpen: false, effectiveRange: null };
+  const toFractionalHour = (t) => {
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    return h + m / 60;
+  };
+  const hoursMap = siteSettings.hours || {};
+  const dow = new Date().getDay();
+  const todaySpecial = specialHoursForDate(specialHours, todayISO());
+
+  let effectiveRange = null;
+  const regular = hoursMap[dow];
+  if (regular) effectiveRange = [toFractionalHour(regular.open), toFractionalHour(regular.close)];
+  if (todaySpecial) {
+    effectiveRange = todaySpecial.closed
+      ? null
+      : [toFractionalHour(todaySpecial.open_time), toFractionalHour(todaySpecial.close_time)];
+  }
+
+  const now = new Date();
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const isOpen = !!effectiveRange && currentHour >= effectiveRange[0] && currentHour < effectiveRange[1];
+  return { isOpen, effectiveRange };
+}
+
 // Pretty-format "10:00" → "10 AM", "14:30" → "2:30 PM", "Closed" if null
 function formatTime(t) {
   if (!t) return null;
@@ -1725,42 +1755,15 @@ function OpenNowBanner({ isMobile }) {
   const { siteSettings, specialHours } = useSite();
   if (!siteSettings) return null;
 
-  // Convert "12:00" → numeric hours (12.0), "17:30" → 17.5
-  const toFractionalHour = (t) => {
-    if (!t) return null;
-    const [h, m] = t.split(':').map(Number);
-    return h + m / 60;
-  };
   const hoursMap = siteSettings.hours || {};
   const themeFor = (idx) => hoursMap[idx]?.theme || null;
-  const rangeFor = (idx) => {
-    const h = hoursMap[idx];
-    if (!h) return null;
-    return [toFractionalHour(h.open), toFractionalHour(h.close)];
-  };
-
-  const now = new Date();
-  const dow = now.getDay();
-  const todayISOStr = todayISO();
-  const todaySpecial = specialHoursForDate(specialHours, todayISOStr);
-
-  // Effective hours for today: special overrides regular
-  let effectiveRange = rangeFor(dow);
-  if (todaySpecial) {
-    if (todaySpecial.closed) {
-      effectiveRange = null;
-    } else {
-      effectiveRange = [toFractionalHour(todaySpecial.open_time), toFractionalHour(todaySpecial.close_time)];
-    }
-  }
-
-  const currentHour = now.getHours() + now.getMinutes() / 60;
-  const isOpen = effectiveRange && currentHour >= effectiveRange[0] && currentHour < effectiveRange[1];
+  const { isOpen } = computeOpenNowState(siteSettings, specialHours);
 
   // Find next open day with an event (skipping closed days + special-closed days)
   let nextDayName = '';
   let nextTheme = '';
   if (!isOpen) {
+    const now = new Date();
     for (let offset = 1; offset <= 14; offset++) {
       const checkDate = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
       const checkDow = checkDate.getDay();
@@ -2723,6 +2726,7 @@ function BuySellPage({ isMobile }) {
 
 // ─── Calendar Page ────────────────────────────────────────
 function CalendarPage({ isMobile, isAdmin, staff }) {
+  const { siteSettings, specialHours } = useSite();
   const [activeFilter, setActiveFilter] = useState(null);
   const [events, setEvents] = useState([]);
   const calendarRef = useRef(null);
@@ -2924,10 +2928,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
         {/* What's Happening Today / Next Up */}
         {(todayEvents.length > 0 || nextDayEvents.length > 0) && (() => {
-          const STORE_HOURS_CAL = { 0: [10, 17], 1: null, 2: [12, 20], 3: [12, 20], 4: [12, 20], 5: [12, 22], 6: [10, 20] };
-          const nowH = STORE_HOURS_CAL[today.getDay()];
-          const currentHour = today.getHours() + today.getMinutes() / 60;
-          const isOpen = nowH && currentHour >= nowH[0] && currentHour < nowH[1];
+          const { isOpen } = computeOpenNowState(siteSettings, specialHours);
           const hasToday = todayEvents.length > 0;
           const headerLabel = hasToday ? "What's Happening Today" : `Next Up: ${nextDayLabel}`;
           const headerColor = hasToday ? '#C8102E' : '#2563eb';
@@ -4260,14 +4261,18 @@ function VendorEditProfilePage({ isMobile }) {
   const [session, setSession] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigateInternal();
 
+  // useNavigateInternal returns a NEW function on every render, so listing
+  // `navigate` as a dep here triggered an infinite re-fetch loop
+  // (ERR_INSUFFICIENT_RESOURCES). Use a stable inline redirect instead and
+  // run the effect exactly once on mount.
   useEffect(() => {
     let cancelled = false;
+    const goto = (path) => { window.location.href = path; };
     (async () => {
       const { data: { session: s } } = await supabase.auth.getSession();
       if (cancelled) return;
-      if (!s) { navigate('/vendors/apply'); return; }
+      if (!s) { goto('/vendors/apply'); return; }
       setSession(s);
       const { data: v } = await supabase
         .from('vendors')
@@ -4275,12 +4280,14 @@ function VendorEditProfilePage({ isMobile }) {
         .eq('user_id', s.user.id)
         .maybeSingle();
       if (cancelled) return;
-      if (!v) { navigate('/vendors/dashboard'); return; }
+      if (!v) { goto('/vendors/dashboard'); return; }
       setVendor(v);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [navigate]);
+  }, []);
+
+  const navigate = useNavigateInternal();
 
   if (loading || !vendor || !session) {
     return (
