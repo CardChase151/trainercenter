@@ -777,7 +777,7 @@ function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanen
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, events, fetchEvents }) {
+function Calendar({ isStaff, isMobile, staff, activeEventId, calendarRef, events, fetchEvents }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
@@ -834,7 +834,7 @@ function Calendar({ isStaff, isMobile, staff, categoryFilter, calendarRef, event
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    }).filter(ev => !categoryFilter || (ev.categories || []).includes(categoryFilter));
+    }).filter(ev => !activeEventId || ev.id === activeEventId);
   };
 
   const handleDayClick = (day) => {
@@ -2809,25 +2809,6 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
   const formatTime = formatTime12h;
 
-  // Live tally of how many events carry each category in the DB. Counts an
-  // event once per category it has, so a Vendor Day tagged [vendor_day,
-  // big_event] shows up under both chips. Cancelled events are excluded so
-  // the chip count matches what shows on the calendar grid.
-  const categoryCounts = events.reduce((acc, ev) => {
-    if (ev.cancelled) return acc;
-    (ev.categories || []).forEach(c => { acc[c] = (acc[c] || 0) + 1; });
-    return acc;
-  }, {});
-
-  // Filter chips. Driven directly off the CATEGORIES dict so labels +
-  // colors always match the category data. Each chip shows its live count.
-  const FILTER_OPTIONS = [
-    { key: null, label: 'All Events', count: events.filter(e => !e.cancelled).length },
-    ...Object.entries(CATEGORIES).map(([key, { label, color }]) => ({
-      key, label, color, count: categoryCounts[key] || 0
-    })),
-  ];
-
   const handlePrint = () => {
     if (!calendarRef.current) return;
     const printWin = window.open('', '_blank');
@@ -3008,7 +2989,8 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
           );
         })()}
 
-        {/* Weekly Schedule Cards (dynamic from DB) */}
+        {/* Weekly Schedule Cards — also serve as filters. Clicking a card pins
+            the calendar to just that recurring series; clicking again clears. */}
         {weeklyEvents.length > 0 && (
           <div style={{
             display: 'grid',
@@ -3016,21 +2998,50 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             gap: '10px',
             marginBottom: '20px'
           }}>
-            {weeklyEvents.map(ev => (
-              <div key={ev.id} style={{
-                padding: '14px 16px', borderRadius: '10px', backgroundColor: '#ffffff',
-                border: '1px solid #eee',
-                borderLeft: '3px solid ' + (CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'),
-              }}>
-                <p style={{ fontSize: '0.7rem', color: '#999', fontWeight: '700', margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{ev.dayName}</p>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{ev.title}</h4>
-                {ev.description && (
-                  <p style={{ fontSize: '0.7rem', color: '#888', margin: 0, lineHeight: '1.3' }}>
-                    {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
-                  </p>
-                )}
-              </div>
-            ))}
+            {weeklyEvents.map(ev => {
+              const cardColor = CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c';
+              const isActive = activeFilter === ev.id;
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => setActiveFilter(isActive ? null : ev.id)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    backgroundColor: isActive ? cardColor : '#ffffff',
+                    border: `1px solid ${isActive ? cardColor : '#eee'}`,
+                    borderLeft: `3px solid ${cardColor}`,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    transition: 'all 0.15s',
+                    boxShadow: isActive ? `0 4px 12px ${cardColor}33` : 'none',
+                  }}
+                >
+                  <p style={{
+                    fontSize: '0.7rem',
+                    color: isActive ? 'rgba(255,255,255,0.85)' : '#999',
+                    fontWeight: '700', margin: '0 0 2px 0',
+                    textTransform: 'uppercase', letterSpacing: '0.5px'
+                  }}>{ev.dayName}</p>
+                  <h4 style={{
+                    fontSize: '0.85rem', fontWeight: '800',
+                    color: isActive ? '#fff' : '#1a1a1a',
+                    margin: '0 0 2px 0'
+                  }}>{ev.title}</h4>
+                  {ev.description && (
+                    <p style={{
+                      fontSize: '0.7rem',
+                      color: isActive ? 'rgba(255,255,255,0.85)' : '#888',
+                      margin: 0, lineHeight: '1.3'
+                    }}>
+                      {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -3087,36 +3098,23 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
           );
         })()}
 
-        {/* Filter pills + Print button */}
+        {/* Print button row (filtering is handled by the weekly cards above). */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'
         }}>
-          {FILTER_OPTIONS.map(opt => (
+          {activeFilter && (
             <button
-              key={opt.key || 'all'}
-              onClick={() => setActiveFilter(activeFilter === opt.key ? null : opt.key)}
+              type="button"
+              onClick={() => setActiveFilter(null)}
               style={{
                 padding: '6px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '700',
-                cursor: 'pointer', transition: 'all 0.15s',
-                border: activeFilter === opt.key ? '2px solid ' + (opt.color || '#1a1a1a') : '2px solid #e0e0e0',
-                backgroundColor: activeFilter === opt.key ? (opt.color || '#1a1a1a') : '#fff',
-                color: activeFilter === opt.key ? '#fff' : '#666',
-                opacity: opt.count === 0 ? 0.4 : 1,
+                cursor: 'pointer', border: '2px solid #e0e0e0', backgroundColor: '#fff', color: '#666',
                 display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}
-              disabled={opt.count === 0}
-              title={opt.count === 0 ? 'No events in this category yet' : `${opt.count} event${opt.count === 1 ? '' : 's'}`}
             >
-              {opt.label}
-              <span style={{
-                fontSize: '0.65rem',
-                padding: '1px 7px', borderRadius: '10px',
-                backgroundColor: activeFilter === opt.key ? 'rgba(255,255,255,0.25)' : '#f3f4f6',
-                color: activeFilter === opt.key ? '#fff' : '#888',
-                fontWeight: '700'
-              }}>{opt.count}</span>
+              <X size={12} /> Clear filter
             </button>
-          ))}
+          )}
           <div style={{ flex: 1 }} />
           <button
             onClick={handlePrint}
@@ -3150,7 +3148,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             }}
           />
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} categoryFilter={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} activeEventId={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
           </div>
         </div>
       </div>
@@ -3319,7 +3317,7 @@ function VendorAvatar({ vendor, size = 96 }) {
 }
 
 // ─── Vendor card for the vendor-day showcase ──────────────
-function VendorCard({ vendor }) {
+function VendorCard({ vendor, isOwn }) {
   const handles = [
     vendor.ig_handle && {
       platform: 'IG',
@@ -3344,7 +3342,7 @@ function VendorCard({ vendor }) {
   return (
     <div style={{
       backgroundColor: '#fff',
-      border: '1px solid #eee',
+      border: isOwn ? '2px solid #C8102E' : '1px solid #eee',
       borderRadius: '16px',
       padding: '24px 20px 20px',
       display: 'flex',
@@ -3354,10 +3352,22 @@ function VendorCard({ vendor }) {
       gap: '12px',
       transition: 'transform 0.2s, box-shadow 0.2s',
       cursor: 'default',
+      position: 'relative',
     }}
     onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(0,0,0,0.08)'; }}
     onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
+      {isOwn && (
+        <div style={{
+          position: 'absolute', top: '8px', right: '8px',
+          fontSize: '0.62rem', fontWeight: '800', letterSpacing: '0.06em',
+          color: '#C8102E', backgroundColor: '#fff0f0',
+          padding: '3px 8px', borderRadius: '999px',
+          textTransform: 'uppercase',
+        }}>
+          You
+        </div>
+      )}
       <VendorAvatar vendor={vendor} size={104} />
       <div style={{ minWidth: 0, width: '100%' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: '800', color: '#1a1a1a', lineHeight: 1.2 }}>
@@ -3399,6 +3409,18 @@ function VendorCard({ vendor }) {
             </a>
           ))}
         </div>
+      )}
+      {isOwn && (
+        <Link to="/vendors/edit" style={{
+          marginTop: '6px',
+          fontSize: '0.78rem', fontWeight: '700',
+          color: '#fff', backgroundColor: '#1a1a1a',
+          padding: '8px 14px', borderRadius: '8px',
+          textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+        }}>
+          <Edit2 size={13} /> Edit profile
+        </Link>
       )}
     </div>
   );
@@ -3532,6 +3554,7 @@ function NextVendorDayBanner({ isMobile }) {
 function VendorDayPage({ isMobile }) {
   const [allEvents, setAllEvents] = useState([]); // events with vendor_applications joined
   const [loading, setLoading] = useState(true);
+  const [myVendorId, setMyVendorId] = useState(null); // for inline edit-on-own-card affordance
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get('view') === 'list' ? 'list' : 'single';
   const requestedEventId = searchParams.get('event');
@@ -3541,7 +3564,7 @@ function VendorDayPage({ isMobile }) {
     (async () => {
       // Pull every vendor_day event with its approved-vendor lineup. Ordered
       // chronologically; we'll split past/future on the client.
-      const { data, error } = await supabase
+      const eventsP = supabase
         .from('events')
         .select(`
           id, title, event_date, cancelled,
@@ -3552,6 +3575,19 @@ function VendorDayPage({ isMobile }) {
         `)
         .contains('categories', ['vendor_day'])
         .order('event_date', { ascending: true });
+
+      // If a vendor is logged in, look up their vendor row id so we can
+      // surface an inline "Edit profile" button on their own card. Public
+      // visitors get null → no button.
+      const meP = (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return null;
+        const { data } = await supabase
+          .from('vendors').select('id').eq('user_id', session.user.id).maybeSingle();
+        return data?.id || null;
+      })();
+
+      const [{ data, error }, mineId] = await Promise.all([eventsP, meP]);
       if (cancelled) return;
       if (error) console.error('[VendorDayPage] fetch', error);
       // Filter cancelled; keep approved vendors only on each event.
@@ -3565,6 +3601,7 @@ function VendorDayPage({ isMobile }) {
             .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
         }));
       setAllEvents(cleaned);
+      setMyVendorId(mineId);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -3709,13 +3746,13 @@ function VendorDayPage({ isMobile }) {
         </div>
 
         {view === 'single' && selectedEvent && (
-          <VendorDaySingleEvent event={selectedEvent} isMobile={isMobile} />
+          <VendorDaySingleEvent event={selectedEvent} myVendorId={myVendorId} isMobile={isMobile} />
         )}
 
         {view === 'list' && (
           <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '48px' }}>
             {[...futureEvents, ...pastEvents].map(ev => (
-              <VendorDaySingleEvent key={ev.id} event={ev} isMobile={isMobile} compact />
+              <VendorDaySingleEvent key={ev.id} event={ev} myVendorId={myVendorId} isMobile={isMobile} compact />
             ))}
           </div>
         )}
@@ -3726,7 +3763,7 @@ function VendorDayPage({ isMobile }) {
 
 // One Vendor Day section: hero header + grid of approved vendors.
 // Used both as the single-event view and as a row in the list view.
-function VendorDaySingleEvent({ event, isMobile, compact = false }) {
+function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) {
   const d = new Date(event.event_date + 'T12:00:00');
   const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -3792,7 +3829,7 @@ function VendorDaySingleEvent({ event, isMobile, compact = false }) {
           gap: isMobile ? '12px' : '20px',
         }}>
           {vendors.map(v => (
-            <VendorCard key={v.id} vendor={v} />
+            <VendorCard key={v.id} vendor={v} isOwn={myVendorId === v.id} />
           ))}
         </div>
       )}
