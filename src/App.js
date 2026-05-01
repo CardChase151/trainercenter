@@ -2970,13 +2970,13 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {(todayEvents.length > 0 ? todayEvents : nextDayEvents).map((ev, i) => (
                 <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
+                  display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
                 }}>
                   <div style={{
                     width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
                     backgroundColor: CATEGORIES[(ev.categories || [])[0]]?.color || '#ea580c'
                   }} />
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1a1a1a' }}>{ev.title}</span>
                     {ev.start_time && (
                       <span style={{ fontSize: '0.8rem', color: '#888', marginLeft: '8px' }}>
@@ -2984,6 +2984,22 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                       </span>
                     )}
                   </div>
+                  {(ev.categories || []).includes('vendor_day') && (
+                    <Link
+                      to={`/vendor-day?event=${ev.id}`}
+                      style={{
+                        fontSize: '0.7rem', fontWeight: '700',
+                        color: '#16a34a', backgroundColor: '#fff',
+                        padding: '4px 10px', borderRadius: '6px',
+                        textDecoration: 'none',
+                        border: '1px solid #bbf7d0',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      See lineup <ArrowRight size={11} />
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>
@@ -3049,6 +3065,22 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                 <span style={{ fontSize: '0.75rem', color: '#888' }}>
                   · {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
                 </span>
+              )}
+              {(ev.categories || []).includes('vendor_day') && (
+                <Link
+                  to={`/vendor-day?event=${ev.id}`}
+                  style={{
+                    marginLeft: 'auto',
+                    fontSize: '0.75rem', fontWeight: '700',
+                    color: '#fff', backgroundColor: tone.color,
+                    padding: '5px 12px', borderRadius: '6px',
+                    textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  See lineup <ArrowRight size={13} />
+                </Link>
               )}
             </div>
           );
