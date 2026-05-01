@@ -4645,8 +4645,14 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         </span>
       );
     } else {
-      // Future approved
-      actionEl = <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700' }}>Approved — see you there</span>;
+      // Future approved — surface the start time so the vendor knows when
+      // to show up. Falls back to a generic message if no start_time set.
+      const startStr = formatTime12h(event.start_time);
+      actionEl = (
+        <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700' }}>
+          {startStr ? `Approved — starts ${startStr}` : 'Approved — see you there'}
+        </span>
+      );
     }
   }
 
