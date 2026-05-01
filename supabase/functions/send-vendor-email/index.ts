@@ -2,12 +2,13 @@
 // Resend-backed transactional emails for the vendor + member system.
 //
 // Types:
-//   - vendor_welcome           (vendor finishes onboarding)
-//   - vendor_profile_approved  (Chef approves the vendor profile in All Vendors tab)
-//   - member_welcome           (member finishes onboarding)
-//   - application_received     (vendor applies for an event)
-//   - application_decided      (staff approves/declines an event application)
-//   - event_cancelled          (staff cancels a Vendor Day; emails every applicant)
+//   - vendor_welcome              (vendor finishes onboarding)
+//   - vendor_profile_approved     (Chef approves the vendor profile; "you're approved, now pick your dates")
+//   - vendor_event_invite_urgent  (admin blast: invite all approved vendors who haven't applied for a specific event)
+//   - member_welcome              (member finishes onboarding)
+//   - application_received        (vendor applies for an event)
+//   - application_decided         (staff approves/declines an event application)
+//   - event_cancelled             (staff cancels a Vendor Day; emails every applicant)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
@@ -28,7 +29,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
   vendor_id?: string
   member_id?: string
   application_id?: string
@@ -122,15 +123,102 @@ Deno.serve(async (req: Request) => {
       if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
       const { data: v, error: vErr } = await supabase.from('vendors').select('*').eq('id', payload.vendor_id).single()
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
-      const subject = "You're an approved Trainer Center HB vendor partner!"
-      const body = `<p>Hi ${v.name},</p>` +
-        `<p><strong>Welcome to the Trainer Center HB vendor family.</strong> Chef just approved your profile, which means you're a recognized partner with the shop.</p>` +
-        `<p>This isn't an approval for any specific Vendor Day yet — it's the partnership tier. The next step is up to you: head to your dashboard and pick which Vendor Days you'd like to be at. Each one still needs a quick per-event confirmation from Chef, but with your profile already approved, applying takes about two clicks.</p>` +
-        `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Pick your Vendor Days</a></p>` +
-        `<p style="margin-top:20px;font-size:13px;color:#666">Vendor Days happen the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
-      await sendResendEmail([v.email], subject, wrapHtml(body),
-        `You're an approved Trainer Center HB vendor partner!\n\nThis is the partnership tier — not an approval for a specific Vendor Day yet. Head to your dashboard to pick which Vendor Days you want to be at: ${SITE_URL}/vendors/dashboard`)
+      const subject = "Action required: You're a Trainer Center HB vendor — pick your dates"
+      const body =
+        `<p style="font-size:15px;color:#16a34a;font-weight:700;margin:0 0 4px">✓ Approved as a vendor partner</p>` +
+        `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
+        `<p style="margin:0 0 24px">You're now a recognized Trainer Center HB vendor partner. Welcome.</p>` +
+        `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:18px 22px;border-radius:6px">` +
+        `  <p style="margin:0 0 8px;font-size:13px;font-weight:800;color:#92400e;letter-spacing:0.04em">⚠  YOU'RE NOT DONE YET</p>` +
+        `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">Being approved as a partner does <strong>not</strong> put you on a Vendor Day automatically. You still need to pick which dates you want to be at.</p>` +
+        `</td></tr></table>` +
+        `<p style="margin:0 0 12px;font-weight:700">Each Vendor Day requires a quick per-event sign-up:</p>` +
+        `<ol style="margin:0 0 24px;padding-left:20px;color:#444;font-size:14px;line-height:1.7">` +
+        `  <li>Open your dashboard</li>` +
+        `  <li>Pick the Vendor Days you want</li>` +
+        `  <li>Chef confirms each one within a day or two</li>` +
+        `</ol>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your Vendor Days  →</a></p>` +
+        `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Vendor Days happen the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
+      const text = `Action required: You're a Trainer Center HB vendor — pick your dates\n\n` +
+        `Hi ${v.name},\n\n` +
+        `You're now a recognized Trainer Center HB vendor partner. Welcome.\n\n` +
+        `YOU'RE NOT DONE YET — being approved as a partner does NOT put you on a Vendor Day automatically. You still need to pick which dates you want to be at.\n\n` +
+        `Each Vendor Day requires a quick per-event sign-up:\n` +
+        `  1. Open your dashboard\n` +
+        `  2. Pick the Vendor Days you want\n` +
+        `  3. Chef confirms each one within a day or two\n\n` +
+        `Pick your Vendor Days: ${SITE_URL}/vendors/dashboard\n\n` +
+        `Vendor Days happen the last Friday of every month at the shop.`
+      await sendResendEmail([v.email], subject, wrapHtml(body), text)
       return json({ ok: true, sent: ['vendor'] })
+    }
+
+    if (type === 'vendor_event_invite_urgent') {
+      // Admin-triggered: invite all approved vendors who haven't applied for the
+      // given event yet. Used for the May 1 backfill (vendors approved before
+      // the partnership-approved email existed) and reusable for any future
+      // Vendor Day where the lineup is light.
+      if (!payload.event_id) return json({ error: 'event_id required' }, 400)
+      const { data: ev, error: eErr } = await supabase.from('events').select('*').eq('id', payload.event_id).single()
+      if (eErr || !ev) return json({ error: eErr?.message || 'event not found' }, 404)
+
+      // Approved vendors with no application row for this event
+      const { data: approvedVendors, error: vErr } = await supabase
+        .from('vendors')
+        .select('id, name, email, ig_handle')
+        .eq('status', 'approved')
+      if (vErr) return json({ error: vErr.message }, 500)
+      const { data: existingApps } = await supabase
+        .from('vendor_applications')
+        .select('vendor_id')
+        .eq('event_id', payload.event_id)
+      const appliedSet = new Set((existingApps || []).map(a => a.vendor_id))
+      const targets = (approvedVendors || []).filter(v => !appliedSet.has(v.id))
+
+      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'the next Vendor Day'
+      const eventTitle = ev.title || 'Vendor Day'
+      // Detect "tomorrow" for urgency framing in subject
+      const today = new Date(); today.setHours(0,0,0,0)
+      const evDate = new Date((ev.event_date || '') + 'T12:00:00')
+      const dayDiff = Math.round((evDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      const isTomorrow = dayDiff === 1
+      const isSoon = dayDiff >= 0 && dayDiff <= 7
+      const urgencyLabel = isTomorrow ? 'TOMORROW' : (isSoon ? 'THIS WEEK' : 'COMING UP')
+
+      const subject = isTomorrow
+        ? `Action required: Apply for tomorrow — ${eventTitle}`
+        : `Action required: Apply for ${dateStr} — ${eventTitle}`
+
+      const sentTo: string[] = []
+      const failed: string[] = []
+      for (const v of targets) {
+        if (!v.email) continue
+        const body =
+          `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
+          `<p style="margin:0 0 24px">You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.</p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:20px 22px;border-radius:6px">` +
+          `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#92400e;letter-spacing:0.06em">⏰ ${urgencyLabel}: ${dateStr.toUpperCase()}</p>` +
+          `  <p style="margin:0 0 8px;font-size:18px;font-weight:800;color:#1f2937">${eventTitle}</p>` +
+          `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">If you want a spot, you need to apply from your dashboard. Two clicks.</p>` +
+          `</td></tr></table>` +
+          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
+          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Your dashboard also has every future Vendor Day — pick any one. Vendor Days happen the last Friday of every month at the shop.</p>`
+        const text = `Action required: Apply for ${dateStr} — ${eventTitle}\n\n` +
+          `Hi ${v.name},\n\n` +
+          `You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.\n\n` +
+          `${urgencyLabel}: ${dateStr} — ${eventTitle}\n\n` +
+          `If you want a spot, you need to apply from your dashboard:\n${SITE_URL}/vendors/dashboard\n\n` +
+          `Can't make this date? The dashboard also lists every future Vendor Day. Vendor Days happen the last Friday of every month at the shop.`
+        try {
+          await sendResendEmail([v.email], subject, wrapHtml(body), text)
+          sentTo.push(v.email)
+        } catch (err) {
+          console.error('[vendor_event_invite_urgent] failed for', v.email, err)
+          failed.push(v.email)
+        }
+      }
+      return json({ ok: true, sent: sentTo, count: sentTo.length, failed, target_count: targets.length })
     }
 
     if (type === 'member_welcome') {

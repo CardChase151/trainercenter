@@ -6230,6 +6230,40 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 function EventRosterList({ events, attendance, allVendors, onDecide, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
+  const [inviting, setInviting] = useState(null); // event id currently sending invites
+
+  const inviteApprovedNotApplied = async (ev, count) => {
+    if (!window.confirm(
+      `Email ${count} approved vendor${count === 1 ? '' : 's'} who haven't applied for ${ev.title || 'this event'} yet?\n\n` +
+      `They'll get a "you're approved, apply for this date" email with a link to their dashboard.`
+    )) return;
+    setInviting(ev.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-vendor-email`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ type: 'vendor_event_invite_urgent', event_id: ev.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert('Error: ' + (result?.error || res.status));
+      } else {
+        const sent = result.count || 0;
+        const failed = (result.failed || []).length;
+        alert(`Sent ${sent} invite${sent === 1 ? '' : 's'}.${failed > 0 ? ` ${failed} failed — check console.` : ''}`);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setInviting(null);
+    }
+  };
 
   if (events.length === 0) {
     return (
@@ -6273,26 +6307,47 @@ function EventRosterList({ events, attendance, allVendors, onDecide, onChange, s
                   }}>
                     Cancelled
                   </span>
-                ) : (
-                  <>
-                    <button onClick={() => setAddingTo(ev)} style={{
-                      backgroundColor: '#16a34a', color: '#fff', border: 'none',
-                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                      fontSize: '0.78rem', cursor: 'pointer',
-                      display: 'inline-flex', alignItems: 'center', gap: '4px'
-                    }}>
-                      <Plus size={13} /> Add vendor
-                    </button>
-                    <button onClick={() => setCancelling(ev)} style={{
-                      backgroundColor: '#fff', color: '#dc2626',
-                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                      fontSize: '0.78rem', cursor: 'pointer',
-                      border: '1px solid #fecaca'
-                    }}>
-                      Cancel event
-                    </button>
-                  </>
-                )}
+                ) : (() => {
+                  const appliedVendorIds = new Set(apps.map(a => a.vendor_id));
+                  const notAppliedCount = (allVendors || []).filter(v => v.status === 'approved' && !appliedVendorIds.has(v.id)).length;
+                  return (
+                    <>
+                      {notAppliedCount > 0 && (
+                        <button
+                          onClick={() => inviteApprovedNotApplied(ev, notAppliedCount)}
+                          disabled={inviting === ev.id}
+                          style={{
+                            backgroundColor: '#fff', color: '#92400e',
+                            padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                            fontSize: '0.78rem', cursor: inviting === ev.id ? 'wait' : 'pointer',
+                            border: '1px solid #fde68a',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            opacity: inviting === ev.id ? 0.6 : 1
+                          }}
+                          title={`Email ${notAppliedCount} approved vendors who haven't applied for this event`}
+                        >
+                          <Mail size={13} /> {inviting === ev.id ? 'Sending…' : `Invite ${notAppliedCount} approved`}
+                        </button>
+                      )}
+                      <button onClick={() => setAddingTo(ev)} style={{
+                        backgroundColor: '#16a34a', color: '#fff', border: 'none',
+                        padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                        fontSize: '0.78rem', cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px'
+                      }}>
+                        <Plus size={13} /> Add vendor
+                      </button>
+                      <button onClick={() => setCancelling(ev)} style={{
+                        backgroundColor: '#fff', color: '#dc2626',
+                        padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                        fontSize: '0.78rem', cursor: 'pointer',
+                        border: '1px solid #fecaca'
+                      }}>
+                        Cancel event
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
             {apps.length === 0 ? (
