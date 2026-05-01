@@ -1150,7 +1150,7 @@ function VisitUsSection({ isMobile }) {
   const igUrl = s.ig_handle ? `https://www.instagram.com/${s.ig_handle}/` : null;
   const phoneTel = s.phone ? `tel:+1${s.phone.replace(/\D/g, '')}` : null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const upcomingBlocks = (specialHours || []).filter(sh => sh.end_date >= today).slice(0, 5);
 
   return (
@@ -1472,7 +1472,7 @@ function SiteSettingsEditModal({ panel, settings, onClose, onSaved }) {
 // Shows list of upcoming special hours blocks + Add/Edit/Delete UI.
 function SpecialHoursAdminPanel({ specialHours, onChange }) {
   const [editing, setEditing] = useState(null); // null | 'new' | row object
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const upcoming = (specialHours || []).filter(sh => sh.end_date >= today);
 
   const handleDelete = async (id) => {
@@ -1741,7 +1741,7 @@ function OpenNowBanner({ isMobile }) {
 
   const now = new Date();
   const dow = now.getDay();
-  const todayISOStr = now.toISOString().slice(0, 10);
+  const todayISOStr = todayISO();
   const todaySpecial = specialHoursForDate(specialHours, todayISOStr);
 
   // Effective hours for today: special overrides regular
@@ -3416,7 +3416,7 @@ function NextVendorDayBanner({ isMobile }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const { data } = await supabase
         .from('events')
         .select('id, title, event_date, cancelled, vendor_applications(id, status)')
@@ -3570,7 +3570,7 @@ function VendorDayPage({ isMobile }) {
   }, []);
 
   // Determine which event to show in single-view mode.
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
   const futureEvents = allEvents.filter(e => e.event_date >= todayStr);
   const pastEvents = allEvents.filter(e => e.event_date < todayStr).slice().reverse();
   const defaultEvent = futureEvents[0] || pastEvents[0] || null;
@@ -5152,8 +5152,16 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// Trainer Center HB is in Huntington Beach, CA. event_date is stored as a
+// calendar date with no timezone, and the store cares about the LOCAL date.
+// Using toISOString() returns UTC, which flips forward several hours early
+// for PST evenings — that's why "Check in" lit up the night before an event.
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  return fmt.format(new Date()); // 'en-CA' yields YYYY-MM-DD
 }
 
 // ─── Vendor check-in modal ────────────────────────────────
