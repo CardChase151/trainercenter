@@ -3921,20 +3921,33 @@ function VendorDayPage({ isMobile }) {
       if (cancelled) return;
       if (error) console.error('[VendorDayPage] fetch', error);
       // Filter cancelled; keep approved vendors only on each event.
+      // Showcase order: vendors with uploaded logos lead the lineup so the
+      // page reads as a wall of brand marks instead of a sea of initials.
+      // Within each tier (logo / no-logo) the order is shuffled per page
+      // load so no one gets a permanent #1 slot. Stable within a single
+      // render — `Math.random` runs once at fetch time, not on every paint.
+      const shuffle = (arr) => {
+        const out = arr.slice();
+        for (let i = out.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        return out;
+      };
       const cleaned = (data || [])
         .filter(ev => !ev.cancelled)
-        .map(ev => ({
-          ...ev,
-          // Each entry is the vendor row + the time window they requested.
-          approved_vendors: (ev.vendor_applications || [])
+        .map(ev => {
+          const all = (ev.vendor_applications || [])
             .filter(a => a.status === 'approved' && a.vendor)
             .map(a => ({
               ...a.vendor,
               requested_start_time: a.requested_start_time,
               requested_end_time: a.requested_end_time,
-            }))
-            .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
-        }));
+            }));
+          const withLogo = shuffle(all.filter(v => !!v.avatar_url));
+          const noLogo = shuffle(all.filter(v => !v.avatar_url));
+          return { ...ev, approved_vendors: [...withLogo, ...noLogo] };
+        });
       setAllEvents(cleaned);
       setMyVendorId(mineId);
       setLoading(false);
