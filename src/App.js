@@ -5738,7 +5738,7 @@ function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
 // Gated by staff?.isAdmin. Two tabs: Pending Applications (approve/decline)
 // and Roster (per-event view of who applied + status + attendance).
 function StaffVendorsPage({ isMobile, staff }) {
-  const [tab, setTab] = useState('pending');
+  const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
   const [allVendors, setAllVendors] = useState([]);
   const [events, setEvents] = useState([]);
@@ -5883,8 +5883,11 @@ function StaffVendorsPage({ isMobile, staff }) {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', maxWidth: '1100px', margin: '0 auto 24px', flexWrap: 'wrap' }}>
+          <button onClick={() => setTab('new')} style={tabBtnStyle(tab === 'new')}>
+            Newly applying ({allVendors.filter(v => v.status === 'pending').length})
+          </button>
           <button onClick={() => setTab('pending')} style={tabBtnStyle(tab === 'pending')}>
-            Pending applications ({pending.length})
+            Pending requests ({pending.length})
           </button>
           <button onClick={() => setTab('roster')} style={tabBtnStyle(tab === 'roster')}>
             Event roster
@@ -5902,6 +5905,14 @@ function StaffVendorsPage({ isMobile, staff }) {
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
               <Loader2 size={20} className="spin" /> Loading...
             </div>
+          )}
+
+          {!loading && tab === 'new' && (
+            <NewlyApplyingVendorsList
+              vendors={allVendors.filter(v => v.status === 'pending')}
+              onStatusChange={setVendorStatus}
+              isMobile={isMobile}
+            />
           )}
 
           {!loading && tab === 'pending' && (
@@ -6572,6 +6583,88 @@ function ApplicationStatusBadge({ status }) {
 }
 
 // ─── All vendors tab ──────────────────────────────────────
+// ─── Newly applying vendors (vendors.status === 'pending') ─
+// Brand-new signups awaiting partner approval. Distinct from "Pending requests"
+// which are already-approved vendors applying to a specific event date.
+function NewlyApplyingVendorsList({ vendors, onStatusChange, isMobile }) {
+  if (vendors.length === 0) {
+    return (
+      <div style={{
+        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+      }}>
+        No new vendor applications. When someone signs up to become a vendor, they'll show up here.
+      </div>
+    );
+  }
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {vendors.map(v => (
+        <div key={v.id} style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
+          padding: '14px 16px', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
+        }}>
+          <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: '0.95rem' }}>{v.name}</strong>
+              <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
+                Applied {fmtDate(v.created_at)}
+              </span>
+            </div>
+            <div style={{ marginTop: '4px', color: '#555' }}>
+              {v.email}
+              {v.phone && <span style={{ color: '#888' }}> · {v.phone}</span>}
+            </div>
+            {v.specialty && (
+              <div style={{ marginTop: '4px', color: '#555' }}>
+                <span style={{ color: '#888' }}>Specialty: </span>{v.specialty}
+              </div>
+            )}
+            {v.bio && (
+              <div style={{ marginTop: '4px', color: '#555', whiteSpace: 'pre-wrap' }}>
+                {v.bio}
+              </div>
+            )}
+            {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
+              <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
+                {v.ig_handle && <span>IG: {v.ig_handle}</span>}
+                {v.tiktok_handle && <span>{v.ig_handle ? ' · ' : ''}TikTok: {v.tiktok_handle}</span>}
+                {v.fb_handle && <span>{(v.ig_handle || v.tiktok_handle) ? ' · ' : ''}FB: {v.fb_handle}</span>}
+              </div>
+            )}
+            {(v.heard_from || v.referred_by_name) && (
+              <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
+                {v.heard_from && <span>Heard from: {v.heard_from}</span>}
+                {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button onClick={() => onStatusChange(v.id, 'approved')} style={{
+              fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+              border: 'none', padding: '6px 14px', borderRadius: '6px',
+              fontWeight: '700', cursor: 'pointer'
+            }}>Approve</button>
+            <button onClick={() => {
+              if (window.confirm(`Decline ${v.name} as a vendor?`)) onStatusChange(v.id, 'suspended');
+            }} style={{
+              fontSize: '0.8rem', backgroundColor: '#fff', color: '#991b1b',
+              border: '1px solid #fecaca', padding: '6px 14px', borderRadius: '6px',
+              fontWeight: '700', cursor: 'pointer'
+            }}>Decline</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AllVendorsList({ vendors, onStatusChange, isMobile }) {
   if (vendors.length === 0) {
     return (
