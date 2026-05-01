@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
-import { Link, Routes, Route, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Routes, Route, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3 } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import './App.css';
 
@@ -2018,6 +2018,9 @@ function HomePage({ isMobile }) {
           </div>
         </div>
 
+        {/* ── NEXT VENDOR DAY BANNER ── */}
+        <NextVendorDayBanner isMobile={isMobile} />
+
         {/* ── CARDS ── */}
         <div id="cards" style={{ marginBottom: '64px' }}>
           <SectionHeader title="Cards" subtitle="We carry Pokemon cards from every era" />
@@ -3234,6 +3237,533 @@ function BlogPostPage({ isMobile }) {
         })}
       </div>
     </PageWrapper>
+  );
+}
+
+// ─── Vendor avatar (logo or initials fallback) ────────────
+// Vendors don't always upload a logo. When they do, render it. When they
+// don't, render a colored circle with their initials. Color is hashed from
+// the vendor name so the same person always gets the same color.
+function VendorAvatar({ vendor, size = 96 }) {
+  const palette = ['#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#c026d3'];
+  const hash = (vendor?.name || '?').split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+  const color = palette[Math.abs(hash) % palette.length];
+  const initials = (vendor?.name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0]?.toUpperCase())
+    .join('') || '?';
+
+  if (vendor?.avatar_url) {
+    return (
+      <img
+        src={vendor.avatar_url}
+        alt={vendor.name}
+        style={{
+          width: size, height: size, borderRadius: '50%',
+          objectFit: 'cover', display: 'block',
+          border: '3px solid #fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          backgroundColor: '#f3f4f6'
+        }}
+        loading="lazy"
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      backgroundColor: color, color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontWeight: '800', fontSize: Math.round(size * 0.38),
+      letterSpacing: '0.02em',
+      border: '3px solid #fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      flexShrink: 0
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+// ─── Vendor card for the vendor-day showcase ──────────────
+function VendorCard({ vendor }) {
+  const handles = [
+    vendor.ig_handle && {
+      platform: 'IG',
+      handle: vendor.ig_handle,
+      href: `https://instagram.com/${vendor.ig_handle.replace(/^@/, '')}`,
+      bg: 'linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',
+    },
+    vendor.tiktok_handle && {
+      platform: 'TikTok',
+      handle: vendor.tiktok_handle,
+      href: `https://tiktok.com/@${vendor.tiktok_handle.replace(/^@/, '')}`,
+      bg: '#000',
+    },
+    vendor.fb_handle && {
+      platform: 'FB',
+      handle: vendor.fb_handle,
+      href: `https://facebook.com/${vendor.fb_handle.replace(/^@/, '')}`,
+      bg: '#1877f2',
+    },
+  ].filter(Boolean);
+
+  return (
+    <div style={{
+      backgroundColor: '#fff',
+      border: '1px solid #eee',
+      borderRadius: '16px',
+      padding: '24px 20px 20px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      textAlign: 'center',
+      gap: '12px',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+      cursor: 'default',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(0,0,0,0.08)'; }}
+    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <VendorAvatar vendor={vendor} size={104} />
+      <div style={{ minWidth: 0, width: '100%' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: '800', color: '#1a1a1a', lineHeight: 1.2 }}>
+          {vendor.name}
+        </h3>
+        {vendor.specialty && (
+          <span style={{
+            display: 'inline-block', fontSize: '0.7rem', fontWeight: '700',
+            color: '#C8102E', backgroundColor: '#fff0f0', padding: '3px 10px',
+            borderRadius: '999px', letterSpacing: '0.04em', textTransform: 'uppercase'
+          }}>
+            {vendor.specialty}
+          </span>
+        )}
+      </div>
+      {vendor.bio && (
+        <p style={{
+          margin: 0, fontSize: '0.85rem', color: '#555', lineHeight: 1.5,
+          fontStyle: 'italic'
+        }}>
+          "{vendor.bio}"
+        </p>
+      )}
+      {handles.length > 0 && (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
+          {handles.map(h => (
+            <a key={h.platform} href={h.href} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: '0.72rem', fontWeight: '700',
+              padding: '5px 10px', borderRadius: '6px',
+              color: '#fff', textDecoration: 'none',
+              background: h.bg,
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              maxWidth: '100%',
+            }}>
+              <span>{h.platform}</span>
+              <span style={{ opacity: 0.85, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                @{h.handle.replace(/^@/, '')}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Home page banner: next Vendor Day promo ──────────────
+// Pulls the next future event with category 'vendor_day' (not cancelled),
+// shows the dynamic title + date + approved-vendor count, links to the
+// public showcase. If there are no upcoming Vendor Days, renders nothing.
+function NextVendorDayBanner({ isMobile }) {
+  const [event, setEvent] = useState(null);
+  const [vendorCount, setVendorCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from('events')
+        .select('id, title, event_date, cancelled, vendor_applications(id, status)')
+        .contains('categories', ['vendor_day'])
+        .gte('event_date', today)
+        .order('event_date', { ascending: true })
+        .limit(1);
+      if (cancelled) return;
+      const ev = (data || []).find(e => !e.cancelled);
+      if (ev) {
+        setEvent(ev);
+        const approved = (ev.vendor_applications || []).filter(a => a.status === 'approved').length;
+        setVendorCount(approved);
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading || !event) return null;
+
+  const d = new Date(event.event_date + 'T12:00:00');
+  const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dayDiff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  const relativeLabel = dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : (dayDiff <= 7 ? 'THIS WEEK' : 'COMING UP');
+
+  return (
+    <div
+      onClick={() => navigate('/vendor-day')}
+      style={{
+        marginBottom: '64px',
+        background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
+        borderRadius: '20px',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        position: 'relative',
+        boxShadow: '0 12px 40px rgba(200,16,46,0.25)',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 48px rgba(200,16,46,0.35)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(200,16,46,0.25)'; }}
+    >
+      <div style={{
+        padding: isMobile ? '28px 24px' : '40px 48px',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        justifyContent: 'space-between',
+        gap: '20px',
+        color: '#fff',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: 'inline-block',
+            fontSize: '0.7rem', fontWeight: '800',
+            letterSpacing: '0.12em',
+            color: '#fff',
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            padding: '5px 12px',
+            borderRadius: '999px',
+            marginBottom: '12px',
+            border: '1px solid rgba(255,255,255,0.25)',
+          }}>
+            {relativeLabel} · {dateStr.toUpperCase()}
+          </div>
+          <h2 style={{
+            margin: '0 0 8px',
+            fontSize: isMobile ? '1.6rem' : '2.2rem',
+            fontWeight: '900',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.1,
+          }}>
+            {event.title || 'Vendor Day'}
+          </h2>
+          <p style={{
+            margin: 0,
+            fontSize: '0.95rem',
+            color: 'rgba(255,255,255,0.85)',
+            lineHeight: 1.5,
+          }}>
+            {vendorCount > 0
+              ? `${vendorCount} vendor${vendorCount === 1 ? '' : 's'} confirmed. Tap to see who's setting up.`
+              : `Vendor lineup coming together. Tap to see who's confirmed.`}
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          backgroundColor: '#fff',
+          color: '#C8102E',
+          padding: '12px 22px',
+          borderRadius: '12px',
+          fontSize: '0.95rem',
+          fontWeight: '800',
+          flexShrink: 0,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          See the lineup <ArrowRight size={18} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Public Vendor Day Showcase Page ──────────────────────
+// /vendor-day — promotes who's vending. Two views:
+//   default: one event at a time (date selector at top)
+//   ?view=list: every vendor_day event in a long scrollable list
+// Event title is dynamic from events.title — never hardcoded.
+function VendorDayPage({ isMobile }) {
+  const [allEvents, setAllEvents] = useState([]); // events with vendor_applications joined
+  const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view') === 'list' ? 'list' : 'single';
+  const requestedEventId = searchParams.get('event');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Pull every vendor_day event with its approved-vendor lineup. Ordered
+      // chronologically; we'll split past/future on the client.
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          id, title, event_date, cancelled,
+          vendor_applications (
+            id, status,
+            vendor:vendors ( id, name, avatar_url, specialty, bio, ig_handle, tiktok_handle, fb_handle )
+          )
+        `)
+        .contains('categories', ['vendor_day'])
+        .order('event_date', { ascending: true });
+      if (cancelled) return;
+      if (error) console.error('[VendorDayPage] fetch', error);
+      // Filter cancelled; keep approved vendors only on each event.
+      const cleaned = (data || [])
+        .filter(ev => !ev.cancelled)
+        .map(ev => ({
+          ...ev,
+          approved_vendors: (ev.vendor_applications || [])
+            .filter(a => a.status === 'approved' && a.vendor)
+            .map(a => a.vendor)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+        }));
+      setAllEvents(cleaned);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Determine which event to show in single-view mode.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const futureEvents = allEvents.filter(e => e.event_date >= todayStr);
+  const pastEvents = allEvents.filter(e => e.event_date < todayStr).slice().reverse();
+  const defaultEvent = futureEvents[0] || pastEvents[0] || null;
+  const selectedEvent = (requestedEventId && allEvents.find(e => e.id === requestedEventId)) || defaultEvent;
+
+  const setEvent = (id) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set('event', id); else next.delete('event');
+    setSearchParams(next);
+  };
+
+  const setView = (next) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === 'list') sp.set('view', 'list'); else sp.delete('view');
+    setSearchParams(sp);
+  };
+
+  if (loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#999' }}>
+          <Loader2 size={24} className="spin" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (allEvents.length === 0) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '640px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="Vendor Day" subtitle="Coming soon" />
+          <p style={{ color: '#666' }}>No Vendor Day events scheduled yet. Check back soon.</p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        {/* Top control bar: event picker + view toggle */}
+        <div style={{
+          maxWidth: '1100px', margin: '0 auto 24px',
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'stretch' : 'center',
+          justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+        }}>
+          {view === 'single' && (
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <label style={{
+                position: 'absolute', top: '-9px', left: '14px',
+                fontSize: '0.65rem', fontWeight: '800',
+                color: '#666', backgroundColor: '#fff',
+                padding: '0 6px', letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                Select other dates
+              </label>
+              <select
+                value={selectedEvent?.id || ''}
+                onChange={(e) => setEvent(e.target.value)}
+                style={{
+                  width: '100%', padding: '14px 18px',
+                  fontSize: '0.95rem', fontWeight: '700',
+                  color: '#1a1a1a',
+                  border: '2px solid #1a1a1a', borderRadius: '10px',
+                  backgroundColor: '#fff',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 16px center',
+                  backgroundSize: '14px',
+                  paddingRight: '44px',
+                }}
+              >
+                {futureEvents.length > 0 && (
+                  <optgroup label="Upcoming">
+                    {futureEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {' — '}{ev.title || 'Vendor Day'}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {pastEvents.length > 0 && (
+                  <optgroup label="Past">
+                    {pastEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>
+                        {new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                        {' — '}{ev.title || 'Vendor Day'}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          )}
+          <div style={{
+            display: 'flex', gap: '0',
+            border: '2px solid #1a1a1a', borderRadius: '10px',
+            overflow: 'hidden', flexShrink: 0,
+            alignSelf: isMobile ? 'stretch' : 'auto',
+          }}>
+            <button
+              onClick={() => setView('single')}
+              style={{
+                padding: '14px 18px', border: 'none',
+                backgroundColor: view === 'single' ? '#1a1a1a' : '#fff',
+                color: view === 'single' ? '#fff' : '#1a1a1a',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: 'pointer', flex: isMobile ? 1 : 'initial',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              }}
+            >
+              <Grid3x3 size={15} /> One date
+            </button>
+            <button
+              onClick={() => setView('list')}
+              style={{
+                padding: '14px 18px', border: 'none',
+                backgroundColor: view === 'list' ? '#1a1a1a' : '#fff',
+                color: view === 'list' ? '#fff' : '#1a1a1a',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: 'pointer', flex: isMobile ? 1 : 'initial',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                borderLeft: '2px solid #1a1a1a',
+              }}
+            >
+              <List size={15} /> List all
+            </button>
+          </div>
+        </div>
+
+        {view === 'single' && selectedEvent && (
+          <VendorDaySingleEvent event={selectedEvent} isMobile={isMobile} />
+        )}
+
+        {view === 'list' && (
+          <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '48px' }}>
+            {[...futureEvents, ...pastEvents].map(ev => (
+              <VendorDaySingleEvent key={ev.id} event={ev} isMobile={isMobile} compact />
+            ))}
+          </div>
+        )}
+      </div>
+    </PageWrapper>
+  );
+}
+
+// One Vendor Day section: hero header + grid of approved vendors.
+// Used both as the single-event view and as a row in the list view.
+function VendorDaySingleEvent({ event, isMobile, compact = false }) {
+  const d = new Date(event.event_date + 'T12:00:00');
+  const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dayDiff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  const isPast = dayDiff < 0;
+  const relativeLabel = isPast ? 'PAST' : dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : (dayDiff <= 7 ? 'THIS WEEK' : 'COMING UP');
+  const vendors = event.approved_vendors || [];
+
+  return (
+    <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+      <div style={{
+        textAlign: 'center',
+        marginBottom: compact ? '24px' : '40px',
+        padding: compact ? '0' : '0 16px',
+      }}>
+        <div style={{
+          display: 'inline-block',
+          fontSize: '0.7rem', fontWeight: '800',
+          letterSpacing: '0.12em',
+          color: isPast ? '#666' : '#C8102E',
+          backgroundColor: isPast ? '#f3f4f6' : '#fff0f0',
+          padding: '5px 14px',
+          borderRadius: '999px',
+          marginBottom: '12px',
+        }}>
+          {relativeLabel} · {dateStr.toUpperCase()}
+        </div>
+        <h1 style={{
+          margin: '0 0 6px',
+          fontSize: compact ? (isMobile ? '1.5rem' : '1.9rem') : (isMobile ? '2rem' : '2.8rem'),
+          fontWeight: '900',
+          letterSpacing: '-0.02em',
+          color: '#1a1a1a',
+          lineHeight: 1.1,
+        }}>
+          {event.title || 'Vendor Day'}
+        </h1>
+        <p style={{
+          margin: 0,
+          fontSize: '0.95rem',
+          color: '#666',
+        }}>
+          {vendors.length > 0
+            ? `${vendors.length} vendor${vendors.length === 1 ? '' : 's'} ${isPast ? 'set up' : 'confirmed'}`
+            : (isPast ? 'No vendors recorded for this date.' : 'Lineup coming together.')}
+        </p>
+      </div>
+
+      {vendors.length === 0 ? (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+          padding: '48px 20px', textAlign: 'center', color: '#888',
+          maxWidth: '520px', margin: '0 auto',
+        }}>
+          {isPast ? 'No vendors recorded for this date.' : "No vendors confirmed yet — check back soon."}
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile
+            ? 'repeat(auto-fill, minmax(160px, 1fr))'
+            : 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: isMobile ? '12px' : '20px',
+        }}>
+          {vendors.map(v => (
+            <VendorCard key={v.id} vendor={v} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -7274,6 +7804,7 @@ function App() {
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
+        <Route path="/vendor-day" element={<VendorDayPage isMobile={isMobile} />} />
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
