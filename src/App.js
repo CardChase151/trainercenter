@@ -334,7 +334,7 @@ const CATEGORIES = {
   game_day:     { label: 'Game Day',     color: '#0891b2', description: 'Video games, board games, TCG. Bring your stuff or play what is at the shop.' },
   crafts:       { label: 'Crafts & Art', color: '#ec4899', description: 'Family-friendly. Paint Pokemon, do crafts, hang out.' },
   consultation: { label: 'Consultations',color: '#059669', description: 'Book 1-on-1 with Chef for appraisals, strategy, or learn the TCG.' },
-  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Off-site shows we are at, plus signings and special days.' },
+  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Card shows at Trainer Center and the ones we are at on the road, plus signings and special days.' },
   other:        { label: 'Other',        color: '#ea580c', description: 'Everything else on the schedule.' },
 };
 
@@ -8098,7 +8098,7 @@ const MARKETING_CATEGORIES = [
   { key: 'tournament',  label: 'Tournament announcements',    help: 'TCG, video, and board-game tournaments.' },
   { key: 'game_day',    label: 'Game Day reminders',          help: 'Weekly games hangout and special game days.' },
   { key: 'crafts',      label: 'Crafts & Art days',           help: 'Family-friendly painting and creative events.' },
-  { key: 'card_show',   label: 'Card shows + special days',   help: 'Off-site shows we are at, plus signings and special days.' },
+  { key: 'card_show',   label: 'Card shows + special days',   help: 'Card shows at Trainer Center and the ones we are at on the road, plus signings and special days.' },
   { key: 'store_news',  label: 'Store news and updates',      help: 'Hours, restocks, new arrivals, store happenings.' },
   { key: 'blog',        label: 'New blog posts',              help: 'Articles and guides we publish on the site.' },
 ];
