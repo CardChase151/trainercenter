@@ -6,6 +6,7 @@
 //   - vendor_profile_approved     (Chef approves the vendor profile; "you're approved, now pick your dates")
 //   - vendor_event_invite_urgent  (admin blast: invite all approved vendors who haven't applied for a specific event)
 //   - vendor_event_day_reminder   (admin blast: morning-of "tonight's the night" reminder to approved lineup)
+//   - customer_appreciation       (admin blast: marketing email to a single marketing_contacts row)
 //   - member_welcome              (member finishes onboarding)
 //   - application_received        (vendor applies for an event)
 //   - application_decided         (staff approves/declines an event application)
@@ -30,10 +31,11 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
+  contact_id?: string
   application_id?: string
   event_id?: string
   reason?: string
@@ -335,6 +337,78 @@ Deno.serve(async (req: Request) => {
         }
       }
       return json({ ok: true, sent: sentTo, count: sentTo.length, failed, target_count: (apps || []).length })
+    }
+
+    if (type === 'customer_appreciation') {
+      // Single-recipient marketing blast to a marketing_contacts row.
+      // Caller is responsible for throttling (the script loops with delay).
+      if (!payload.contact_id) return json({ error: 'contact_id required' }, 400)
+      const { data: c, error: cErr } = await supabase
+        .from('marketing_contacts')
+        .select('id, email, first_name, unsubscribe_token, unsubscribed_at')
+        .eq('id', payload.contact_id)
+        .single()
+      if (cErr || !c) return json({ error: cErr?.message || 'contact not found' }, 404)
+      if (!c.email) return json({ error: 'contact has no email' }, 400)
+      if (c.unsubscribed_at) return json({ ok: true, skipped: 'already unsubscribed' })
+
+      const greeting = (c.first_name && c.first_name.trim())
+        ? `Hi ${c.first_name.trim()},`
+        : 'Hi there,'
+      const unsubUrl = c.unsubscribe_token
+        ? `${SITE_URL}/unsubscribe?token=${c.unsubscribe_token}`
+        : null
+      const lineupUrl = `${SITE_URL}/vendor-day`
+      const applyUrl = `${SITE_URL}/vendors/apply`
+      const subject = 'Card Show Today in HB'
+
+      const body =
+        `<p style="margin:0 0 16px">${greeting}</p>` +
+        // Lead headline — plain bold black text, no box, no red. Reads as
+        // timely info rather than ad copy and doesn't fight Gmail's promo
+        // classifier with stacked color blocks.
+        `<p style="margin:0 0 4px;font-size:20px;font-weight:900;color:#1a1a1a;letter-spacing:0.02em">CARD SHOW TODAY</p>` +
+        `<p style="margin:0 0 24px;font-size:14px;font-weight:700;color:#1a1a1a;letter-spacing:0.04em;text-transform:uppercase">12 PM – 8 PM · Huntington Beach</p>` +
+        `<p style="margin:0 0 16px;line-height:1.6">We appreciate you. Whether you have stopped by once or you are a regular, we are glad you are part of the community.</p>` +
+        `<p style="margin:0 0 16px;line-height:1.6">Tonight is our monthly Beach City Trade Night — vendors set up across the shop from <strong>12 PM to 8 PM</strong>. Cards, sealed product, slabs. Come hang out.</p>` +
+        `<p style="margin:0 0 24px;line-height:1.6">See the full lineup on our website <a href="${lineupUrl}" style="color:#C8102E;font-weight:700">Trainer Center HB</a>.</p>` +
+
+        // Vendor callout — bordered box with red CTA button
+        `<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;border:2px solid #1a1a1a;border-radius:10px"><tr><td style="padding:20px 22px">` +
+        `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#C8102E;letter-spacing:0.06em;text-transform:uppercase">Vendors — A Few Last-Minute Spots</p>` +
+        `  <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1a1a">The lineup is full, but we have a few open tables for tonight's show. Free vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.</p>` +
+        `  <p style="margin:0;text-align:center"><a href="${applyUrl}" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply to vend at tonight's show  →</a></p>` +
+        `</td></tr></table>` +
+
+        `<p style="margin:24px 0 8px;line-height:1.6">4911 Warner Ave #210<br/>Huntington Beach, CA 92649</p>` +
+        `<p style="margin:0 0 24px;line-height:1.6">Follow us <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E;font-weight:700">@trainercenter.pokemon</a> for what's next.</p>` +
+        `<p style="margin:0;font-weight:700">— TC HB</p>` +
+        (unsubUrl ? `<p style="margin:24px 0 0;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:14px">Don't want emails like this? <a href="${unsubUrl}" style="color:#888">Unsubscribe</a>.</p>` : '')
+
+      const text = `${greeting}\n\n` +
+        `CARD SHOW TODAY — 12 PM to 8 PM, Huntington Beach.\n\n` +
+        `We appreciate you. Whether you have stopped by once or you are a regular, we are glad you are part of the community.\n\n` +
+        `Tonight is our monthly Beach City Trade Night — vendors set up across the shop from 12 PM to 8 PM. Cards, sealed product, slabs. Come hang out.\n\n` +
+        `See the full lineup on our website: ${lineupUrl}\n\n` +
+        `VENDORS — A FEW LAST-MINUTE SPOTS\n` +
+        `The lineup is full, but we have a few open tables for tonight's show. Free vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.\n` +
+        `Apply: ${applyUrl}\n\n` +
+        `4911 Warner Ave #210, Huntington Beach, CA 92649\n` +
+        `Follow us @trainercenter.pokemon for what's next.\n\n` +
+        `— TC HB\n` +
+        (unsubUrl ? `\nUnsubscribe: ${unsubUrl}\n` : '')
+
+      try {
+        await sendResendEmail([c.email], subject, wrapHtml(body), text)
+        // Stamp the contact so a re-run of the blast script skips this row.
+        // Best-effort: a stamping failure doesn't undo the email that just sent.
+        await supabase.from('marketing_contacts')
+          .update({ appreciation_blast_2026_05_01_sent_at: new Date().toISOString() })
+          .eq('id', c.id)
+        return json({ ok: true, sent: [c.email] })
+      } catch (err) {
+        return json({ error: (err as Error).message }, 500)
+      }
     }
 
     if (type === 'member_welcome') {
