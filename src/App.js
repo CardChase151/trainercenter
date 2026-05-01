@@ -328,7 +328,6 @@ const CATEGORIES = {
   trade_night: { label: 'Trade Night', color: '#C8102E' },
   tournament: { label: 'Tournament', color: '#2563eb' },
   big_event: { label: 'Big Event', color: '#7c3aed' },
-  vendor_day: { label: 'Vendor Day', color: '#16a34a' },
   other: { label: 'Other', color: '#ea580c' }
 };
 
@@ -1186,6 +1185,26 @@ function Calendar({ isStaff, isMobile, staff, activeEventId, calendarRef, events
                         {formatTime(event.start_time)} - {formatTime(event.end_time)}
                         {event.location && ` | ${event.location}`}
                       </div>
+                      {event.has_vendors && (event.vendor_start_time || event.vendor_end_time) && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+                          marginTop: '6px', fontSize: '0.78rem', color: '#16a34a', fontWeight: '700'
+                        }}>
+                          <span>Vendors: {formatTime(event.vendor_start_time)} - {formatTime(event.vendor_end_time)}</span>
+                          <Link
+                            to={`/vendor-day?event=${event.id}`}
+                            style={{
+                              fontSize: '0.7rem', fontWeight: '700',
+                              color: '#fff', backgroundColor: '#16a34a',
+                              padding: '3px 10px', borderRadius: '6px',
+                              textDecoration: 'none',
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            }}
+                          >
+                            See lineup <ArrowRight size={11} />
+                          </Link>
+                        </div>
+                      )}
                       {event.description && (
                         <div className="event-md" style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: '1.4' }}>
                           <ReactMarkdown
@@ -2844,12 +2863,12 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     })
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
-  // Derive special events (vendor days, big events)
+  // Derive special events (vendor-bearing or big events).
   // Pull non-recurring "headline" events for the top-of-calendar callout.
-  // Anything tagged either `vendor_day` or `big_event` qualifies, sorted by
-  // soonest first so the upcoming Vendor Day surfaces ahead of older callouts.
+  // Anything with `has_vendors=true` or tagged `big_event` qualifies, sorted
+  // by soonest first so the upcoming lineup surfaces ahead of older callouts.
   const specialEvents = events
-    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.categories || []).some(c => c === 'vendor_day' || c === 'big_event'))
+    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.has_vendors || (ev.categories || []).includes('big_event')))
     .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Get today's events
@@ -2945,7 +2964,6 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .day-num { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
         .event-title { background: #f5f5f5; border-radius: 4px; padding: 2px 6px; margin: 2px 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-title.trade_night { border-left: 3px solid #C8102E; }
-        .event-title.vendor_day { border-left: 3px solid #16a34a; }
         .event-title.big_event { border-left: 3px solid #7c3aed; }
         .event-title.tournament { border-left: 3px solid #2563eb; }
         .event-title.other { border-left: 3px solid #ea580c; }
@@ -3054,8 +3072,13 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                         {formatTime(ev.start_time)}{ev.end_time ? ` - ${formatTime(ev.end_time)}` : ''}
                       </span>
                     )}
+                    {ev.has_vendors && (ev.vendor_start_time || ev.vendor_end_time) && (
+                      <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
+                        Vendors: {formatTime(ev.vendor_start_time)} - {formatTime(ev.vendor_end_time)}
+                      </div>
+                    )}
                   </div>
-                  {(ev.categories || []).includes('vendor_day') && (
+                  {ev.has_vendors && (
                     <Link
                       to={`/vendor-day?event=${ev.id}`}
                       style={{
@@ -3137,8 +3160,11 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         {/* Special Events callout (dynamic, color matches primary category) */}
         {specialEvents.length > 0 && (() => {
           const ev = specialEvents[0];
-          const primaryKey = (ev.categories || []).find(c => c === 'vendor_day') || (ev.categories || [])[0] || 'big_event';
-          const tone = CATEGORIES[primaryKey] || CATEGORIES.big_event;
+          // Vendor-bearing events read green; otherwise pick the first category.
+          const primaryKey = ev.has_vendors ? 'vendor' : ((ev.categories || [])[0] || 'big_event');
+          const tone = primaryKey === 'vendor'
+            ? { color: '#16a34a', label: 'Vendors' }
+            : (CATEGORIES[primaryKey] || CATEGORIES.big_event);
           // Tint the bg with a transparent overlay of the category color so red,
           // green, blue, purple, etc. all read like soft callouts in their hue.
           const bg = tone.color + '12';
@@ -3154,7 +3180,10 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
                 backgroundColor: tone.color + '1f', padding: '2px 8px',
                 borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em'
               }}>
-                {(ev.categories || []).map(c => CATEGORIES[c]?.label || c).join(' · ')}
+                {[
+                  ...(ev.categories || []).map(c => CATEGORIES[c]?.label || c),
+                  ev.has_vendors ? 'Vendors' : null,
+                ].filter(Boolean).join(' · ')}
               </span>
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: tone.color }}>
                 {ev.title}
@@ -3162,12 +3191,17 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
               <span style={{ fontSize: '0.75rem', color: '#888' }}>
                 {new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
+              {ev.has_vendors && (ev.vendor_start_time || ev.vendor_end_time) && (
+                <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700' }}>
+                  Vendors {formatTime(ev.vendor_start_time)} - {formatTime(ev.vendor_end_time)}
+                </span>
+              )}
               {ev.description && (
                 <span style={{ fontSize: '0.75rem', color: '#888' }}>
                   · {ev.description.length > 80 ? ev.description.slice(0, 80) + '...' : ev.description}
                 </span>
               )}
-              {(ev.categories || []).includes('vendor_day') && (
+              {ev.has_vendors && (
                 <Link
                   to={`/vendor-day?event=${ev.id}`}
                   style={{
@@ -3544,7 +3578,7 @@ function NextVendorDayBanner({ isMobile }) {
       const { data } = await supabase
         .from('events')
         .select('id, title, event_date, cancelled, vendor_applications(id, status)')
-        .contains('categories', ['vendor_day'])
+        .eq('has_vendors', true)
         .gte('event_date', today)
         .order('event_date', { ascending: true })
         .limit(1);
@@ -3674,7 +3708,7 @@ function VendorDayPage({ isMobile }) {
             vendor:vendors ( id, name, avatar_url, specialty, bio, ig_handle, tiktok_handle, fb_handle )
           )
         `)
-        .contains('categories', ['vendor_day'])
+        .eq('has_vendors', true)
         .order('event_date', { ascending: true });
 
       // If a vendor is logged in, look up their vendor row id so we can
@@ -4479,7 +4513,7 @@ function VendorDashboardPage({ isMobile }) {
     Promise.all([
       supabase.from('events')
         .select('*')
-        .contains('categories', ['vendor_day'])
+        .eq('has_vendors', true)
         .gte('event_date', fromISO)
         .order('event_date', { ascending: true })
         .limit(20),
@@ -5686,12 +5720,14 @@ function VendorReviewPage({ isMobile }) {
   const [vendorsForEvent, setVendorsForEvent] = useState([]);
   const [existingVotes, setExistingVotes] = useState({}); // keyed by category
 
-  // Fetch today's Vendor Day event (if any)
+  // Fetch today's vendor-bearing event (if any). The legacy query referenced
+  // a `category` column that was renamed to `categories` (text[]) and then
+  // replaced with `has_vendors` — both prior versions were silently broken.
   useEffect(() => {
     setEventLoading(true);
     supabase.from('events')
       .select('*')
-      .eq('category', 'vendor_day')
+      .eq('has_vendors', true)
       .eq('event_date', todayISO())
       .maybeSingle()
       .then(({ data }) => {
@@ -6807,7 +6843,7 @@ function StaffVendorsPage({ isMobile, staff }) {
       // Upcoming Vendor Day events with their applications
       supabase.from('events')
         .select('*, vendor_applications(*, vendor:vendors(*))')
-        .contains('categories', ['vendor_day'])
+        .eq('has_vendors', true)
         .order('event_date', { ascending: true })
         .limit(6),
       supabase.from('vendor_attendance').select('*'),
@@ -7853,7 +7889,7 @@ const NAV_ITEMS = [
 // recipient turn individual category subscriptions on/off, or unsubscribe
 // from everything in one click.
 const MARKETING_CATEGORIES = [
-  { key: 'vendor_day', label: 'Vendor Day announcements', help: 'Monthly Vendor Day reminders and lineup previews.' },
+  { key: 'vendor_day', label: 'Vendor lineup announcements', help: 'Reminders and lineup previews for events with vendors.' },
   { key: 'events',     label: 'Other events',             help: 'Tournaments, set releases, signings, special days.' },
   { key: 'store_news', label: 'Store news and updates',   help: 'Hours, restocks, new arrivals, store happenings.' },
   { key: 'blog',       label: 'New blog posts',           help: 'Articles and guides we publish on the site.' },

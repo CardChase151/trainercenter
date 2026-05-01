@@ -65,6 +65,28 @@ function formatEventDate(eventDate: string) {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
+// "18:00:00" → "6 PM", "18:30:00" → "6:30 PM". Used in vendor-facing emails so
+// vendors see the vendor window (events.vendor_start_time / vendor_end_time),
+// which can differ from the public event window.
+function formatTime12h(t: string | null | undefined) {
+  if (!t) return ''
+  const [h, m] = t.slice(0, 5).split(':')
+  const hour = parseInt(h, 10)
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
+  return m === '00' ? `${h12} ${ampm}` : `${h12}:${m} ${ampm}`
+}
+
+// Build a vendor-facing time line for an event: prefers vendor_start_time/
+// vendor_end_time, falls back to start_time/end_time. Returns "" if neither
+// pair is present.
+function vendorTimeLine(ev: { start_time?: string|null; end_time?: string|null; vendor_start_time?: string|null; vendor_end_time?: string|null }) {
+  const s = ev.vendor_start_time || ev.start_time
+  const e = ev.vendor_end_time || ev.end_time
+  if (!s && !e) return ''
+  return `${formatTime12h(s)} - ${formatTime12h(e)}`
+}
+
 function wrapHtml(inner: string) {
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f6f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:32px 16px"><tr><td align="center">
@@ -184,6 +206,7 @@ Deno.serve(async (req: Request) => {
 
       const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'the next Vendor Day'
       const eventTitle = ev.title || 'Vendor Day'
+      const vendorTimes = vendorTimeLine(ev)
       // Detect "tomorrow" for urgency framing in subject
       const today = new Date(); today.setHours(0,0,0,0)
       const evDate = new Date((ev.event_date || '') + 'T12:00:00')
@@ -211,6 +234,7 @@ Deno.serve(async (req: Request) => {
           `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:20px 22px;border-radius:6px">` +
           `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#92400e;letter-spacing:0.06em">⏰ ${urgencyLabel}: ${dateStr.toUpperCase()}</p>` +
           `  <p style="margin:0 0 8px;font-size:18px;font-weight:800;color:#1f2937">${eventTitle}</p>` +
+          (vendorTimes ? `  <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#166534">Vendor window: ${vendorTimes}</p>` : '') +
           `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">If you want a spot, you need to apply from your dashboard. Two clicks.</p>` +
           `</td></tr></table>` +
           `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
@@ -280,8 +304,11 @@ Deno.serve(async (req: Request) => {
       if (status === 'approved') {
         const subject = `You're in for ${dateStr}`
         const lineupUrl = `${SITE_URL}/vendor-day?event=${app.event_id}`
+        const vendorTimes = vendorTimeLine(e || {})
+        const vendorNote = e?.vendor_note || ''
         const body = `<p>Hi ${v.name},</p>` +
-          `<p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p>` +
+          `<p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>${vendorTimes ? ` from <strong>${vendorTimes}</strong>` : ''}.</p>` +
+          (vendorNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:11px;font-weight:800;color:#166534;letter-spacing:0.06em">FROM CHEF</p><p style="margin:0;font-size:14px;color:#166534;line-height:1.5">${vendorNote}</p></td></tr></table>` : '') +
           `<p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>` +
           (app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : '') +
           `<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:18px 22px;border-radius:6px">` +
@@ -290,7 +317,8 @@ Deno.serve(async (req: Request) => {
           `  <p style="margin:0;font-size:13px"><a href="${lineupUrl}" style="color:#C8102E;font-weight:700;text-decoration:underline">${lineupUrl.replace('https://', '')}</a></p>` +
           `</td></tr></table>` +
           `<p style="margin-top:8px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
-        const text = `Approved for ${eventTitle} on ${dateStr}.\n\n` +
+        const text = `Approved for ${eventTitle} on ${dateStr}${vendorTimes ? ` from ${vendorTimes}` : ''}.\n\n` +
+          (vendorNote ? `From Chef: ${vendorNote}\n\n` : '') +
           `Promote your table — your logo and socials are live on the public lineup page. Share with your community:\n${lineupUrl}\n\n` +
           `Dashboard: ${SITE_URL}/vendors/dashboard`
         await sendResendEmail([v.email], subject, wrapHtml(body), text)
