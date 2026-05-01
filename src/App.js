@@ -342,6 +342,10 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
   const [categories, setCategories] = useState(['other']);
   const [recurrence, setRecurrence] = useState('none');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
+  const [hasVendors, setHasVendors] = useState(false);
+  const [vendorStartTime, setVendorStartTime] = useState('');
+  const [vendorEndTime, setVendorEndTime] = useState('');
+  const [vendorNote, setVendorNote] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
 
@@ -349,7 +353,9 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
 
   const resetForm = () => {
     setTitle(''); setDescription(''); setStartTime('18:00'); setEndTime('20:00');
-    setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate(''); setEditingEvent(null);
+    setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate('');
+    setHasVendors(false); setVendorStartTime(''); setVendorEndTime(''); setVendorNote('');
+    setEditingEvent(null);
   };
 
   const loadEvent = (event) => {
@@ -362,6 +368,21 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
     setCategories(event.categories?.length ? event.categories : ['other']);
     setRecurrence(event.recurrence || 'none');
     setRecurrenceEndDate(event.recurrence_end_date || '');
+    setHasVendors(!!event.has_vendors);
+    setVendorStartTime(event.vendor_start_time?.slice(0, 5) || '');
+    setVendorEndTime(event.vendor_end_time?.slice(0, 5) || '');
+    setVendorNote(event.vendor_note || '');
+  };
+
+  // When Add Vendors flips on, default the vendor window to the event's
+  // current start/end so staff don't retype the common case (vendor window
+  // matches the event window). They can override after.
+  const toggleHasVendors = (next) => {
+    setHasVendors(next);
+    if (next) {
+      if (!vendorStartTime) setVendorStartTime(startTime);
+      if (!vendorEndTime) setVendorEndTime(endTime);
+    }
   };
 
   const clearRecurrence = () => {
@@ -381,7 +402,11 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
       location: location.trim() || null,
       categories: categories.length > 0 ? categories : ['other'],
       recurrence,
-      recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null
+      recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null,
+      has_vendors: hasVendors,
+      vendor_start_time: hasVendors ? (vendorStartTime || startTime) : null,
+      vendor_end_time: hasVendors ? (vendorEndTime || endTime) : null,
+      vendor_note: hasVendors ? (vendorNote.trim() || null) : null,
     };
     if (editingEvent?.id) {
       eventData.id = editingEvent.id;
@@ -636,6 +661,70 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
             <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} style={inputStyle} />
           </>
         )}
+
+        {/* Vendor block. Any event can opt-in to having vendors; toggle drives
+            the public-facing "Vendors will be there X to Y" line, the See lineup
+            link, and notifies approved vendors so they can apply. */}
+        <div style={{
+          marginTop: '4px', marginBottom: '4px', padding: '14px 16px',
+          borderRadius: '10px', border: '1px solid #e5e7eb',
+          backgroundColor: hasVendors ? '#f0fdf4' : '#fafafa',
+          transition: 'background-color 0.15s'
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: '10px',
+            cursor: 'pointer', userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={hasVendors}
+              onChange={e => toggleHasVendors(e.target.checked)}
+              style={{ marginTop: '3px', width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#1a1a1a' }}>
+                Add Vendors
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: '1.4' }}>
+                Vendors will be notified of this event to apply.
+              </div>
+            </div>
+          </label>
+
+          {hasVendors && (
+            <div style={{ marginTop: '14px' }}>
+              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>What time do vendors participate?</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="time"
+                    value={vendorStartTime}
+                    onChange={e => setVendorStartTime(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="time"
+                    value={vendorEndTime}
+                    onChange={e => setVendorEndTime(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>
+                Note for vendors (optional, only vendors see this)
+              </label>
+              <textarea
+                placeholder='e.g. "DM people on IG to show up" or "Long day, bring food"'
+                value={vendorNote}
+                onChange={e => setVendorNote(e.target.value)}
+                style={{ ...textareaStyle, minHeight: '70px' }}
+              />
+            </div>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
           <button onClick={handleSave} style={{
@@ -3382,6 +3471,18 @@ function VendorCard({ vendor, isOwn }) {
             {vendor.specialty}
           </span>
         )}
+        {(vendor.requested_start_time || vendor.requested_end_time) && (
+          <div style={{
+            marginTop: '6px',
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            fontSize: '0.72rem', fontWeight: '700',
+            color: '#15803d', backgroundColor: '#f0fdf4',
+            padding: '3px 10px', borderRadius: '999px',
+          }}>
+            <Clock size={11} />
+            {formatTime12h(vendor.requested_start_time) || '?'} – {formatTime12h(vendor.requested_end_time) || '?'}
+          </div>
+        )}
       </div>
       {vendor.bio && (
         <p style={{
@@ -3569,7 +3670,7 @@ function VendorDayPage({ isMobile }) {
         .select(`
           id, title, event_date, cancelled,
           vendor_applications (
-            id, status,
+            id, status, requested_start_time, requested_end_time,
             vendor:vendors ( id, name, avatar_url, specialty, bio, ig_handle, tiktok_handle, fb_handle )
           )
         `)
@@ -3595,9 +3696,14 @@ function VendorDayPage({ isMobile }) {
         .filter(ev => !ev.cancelled)
         .map(ev => ({
           ...ev,
+          // Each entry is the vendor row + the time window they requested.
           approved_vendors: (ev.vendor_applications || [])
             .filter(a => a.status === 'approved' && a.vendor)
-            .map(a => a.vendor)
+            .map(a => ({
+              ...a.vendor,
+              requested_start_time: a.requested_start_time,
+              requested_end_time: a.requested_end_time,
+            }))
             .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
         }));
       setAllEvents(cleaned);
@@ -4576,8 +4682,7 @@ function VendorStatusBadge({ status }) {
 
 // ─── Per-event card on vendor dashboard ───────────────────
 function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
-  const [applying, setApplying] = useState(false);
-  const [error, setError] = useState('');
+  const [showApply, setShowApply] = useState(false); // open the apply modal
   const [showCheckIn, setShowCheckIn] = useState(false);
 
   const eventDate = new Date(event.event_date + 'T12:00:00');
@@ -4587,26 +4692,26 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   const isToday = event.event_date === today;
   const isPast = event.event_date < today;
 
-  const handleApply = async () => {
-    setApplying(true);
-    setError('');
+  const submitApplication = async ({ requested_start_time, requested_end_time, vendor_note }) => {
     const { data, error: insertError } = await supabase
       .from('vendor_applications')
-      .insert({ vendor_id: vendorId, event_id: event.id })
+      .insert({
+        vendor_id: vendorId,
+        event_id: event.id,
+        requested_start_time: requested_start_time || null,
+        requested_end_time: requested_end_time || null,
+        vendor_note: vendor_note || null,
+      })
       .select()
       .single();
-    setApplying(false);
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
+    if (insertError) throw insertError;
     onApplied(data);
-    // Fire-and-forget: email vendor + notify staff
     sendVendorEmail({
       type: 'application_received',
       application_id: data.id,
       is_first_time: !!isFirstApplication,
     });
+    return data;
   };
 
   // Determine the action area content for this event card based on status,
@@ -4631,13 +4736,13 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       );
     } else {
       actionEl = (
-        <button onClick={handleApply} disabled={applying} style={{
+        <button onClick={() => setShowApply(true)} style={{
           backgroundColor: '#C8102E', color: '#fff',
           padding: '10px 18px', borderRadius: '8px',
           fontSize: '0.9rem', fontWeight: '700',
-          border: 'none', cursor: applying ? 'wait' : 'pointer'
+          border: 'none', cursor: 'pointer'
         }}>
-          {applying ? 'Applying...' : 'Apply for this date'}
+          Apply for this date
         </button>
       );
     }
@@ -4757,9 +4862,15 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         </div>
         <div>
           {actionEl}
-          {error && <div style={{ fontSize: '0.8rem', color: '#dc2626', marginTop: '4px' }}>{error}</div>}
         </div>
       </div>
+      {showApply && (
+        <ApplyForEventModal
+          event={event}
+          onClose={() => setShowApply(false)}
+          onSubmit={submitApplication}
+        />
+      )}
       {showCheckIn && (
         <VendorCheckInModal
           vendorId={vendorId}
@@ -5212,6 +5323,142 @@ function todayISO() {
     year: 'numeric', month: '2-digit', day: '2-digit',
   });
   return fmt.format(new Date()); // 'en-CA' yields YYYY-MM-DD
+}
+
+// ─── Apply-for-event modal ────────────────────────────────
+// Shown when a logged-in approved vendor clicks "Apply for this date" on
+// their dashboard. Collects:
+//   - Requested time slot (defaulted to the event's full window)
+//   - Optional vendor_note explaining the slot or anything else for chef
+// Both fields are persisted on vendor_applications so the public showcase
+// can render the time and the chef can see context when approving.
+function ApplyForEventModal({ event, onClose, onSubmit }) {
+  const [startTime, setStartTime] = useState((event.start_time || '12:00:00').slice(0, 5));
+  const [endTime, setEndTime] = useState((event.end_time || '20:00:00').slice(0, 5));
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const eventStartLabel = formatTime12h(event.start_time) || '12 PM';
+  const eventEndLabel = formatTime12h(event.end_time) || '8 PM';
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (endTime <= startTime) {
+      setError('End time must be after start time.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      await onSubmit({
+        requested_start_time: startTime,
+        requested_end_time: endTime,
+        vendor_note: note.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      setSubmitting(false);
+      setError(err.message || 'Something went wrong.');
+    }
+  };
+
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.95rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    boxSizing: 'border-box', fontFamily: 'inherit',
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px', zIndex: 1000,
+    }} onClick={onClose}>
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          padding: '24px', maxWidth: '440px', width: '100%',
+          maxHeight: '90vh', overflow: 'auto',
+        }}
+      >
+        <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+          Apply for {event.title || 'Vendor Day'}
+        </h3>
+        <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: '#666' }}>
+          Event runs {eventStartLabel} – {eventEndLabel}. Pick the window you want to be there.
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelCss}>Arrive at</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              required
+              style={inputCss}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelCss}>Leave at</label>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              required
+              style={inputCss}
+            />
+          </div>
+        </div>
+
+        <label style={labelCss}>Notes for chef (optional)</label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          placeholder="Anything chef should know? Setup needs, what you'll bring, why these hours, etc."
+          style={{ ...inputCss, resize: 'vertical', marginBottom: '16px' }}
+        />
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+            color: '#dc2626', borderRadius: '8px', padding: '10px 12px',
+            fontSize: '0.85rem', marginBottom: '14px',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button type="button" onClick={onClose} disabled={submitting} style={{
+            flex: 1, padding: '12px',
+            backgroundColor: '#fff', color: '#666',
+            border: '1px solid #ddd', borderRadius: '10px',
+            fontSize: '0.95rem', fontWeight: '700',
+            cursor: submitting ? 'wait' : 'pointer',
+          }}>
+            Cancel
+          </button>
+          <button type="submit" disabled={submitting} style={{
+            flex: 2, padding: '12px',
+            backgroundColor: submitting ? '#999' : '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '10px',
+            fontSize: '0.95rem', fontWeight: '700',
+            cursor: submitting ? 'wait' : 'pointer',
+          }}>
+            {submitting ? 'Submitting…' : 'Submit application'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 // ─── Vendor check-in modal ────────────────────────────────
@@ -6963,6 +7210,18 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
             <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
               For: <strong>{ev.title || 'Vendor Day'}</strong> · {eventDate}
             </div>
+            {(app.requested_start_time || app.requested_end_time) && (
+              <div style={{
+                marginTop: '6px',
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontSize: '0.78rem', fontWeight: '700',
+                color: '#15803d', backgroundColor: '#f0fdf4',
+                padding: '4px 10px', borderRadius: '999px',
+              }}>
+                <Clock size={11} />
+                Requested: {formatTime12h(app.requested_start_time) || '?'} – {formatTime12h(app.requested_end_time) || '?'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -7132,6 +7391,26 @@ function EventRosterList({ events, attendance, allVendors, profilesById, onDecid
                       <div>
                         <strong>{v.name}</strong>
                         {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
+                        {(a.requested_start_time || a.requested_end_time) && (
+                          <span style={{
+                            marginLeft: '8px',
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            fontSize: '0.7rem', fontWeight: '700',
+                            color: '#15803d', backgroundColor: '#f0fdf4',
+                            padding: '2px 8px', borderRadius: '999px',
+                          }}>
+                            <Clock size={10} />
+                            {formatTime12h(a.requested_start_time) || '?'}–{formatTime12h(a.requested_end_time) || '?'}
+                          </span>
+                        )}
+                        {a.vendor_note && (
+                          <div style={{
+                            fontSize: '0.78rem', color: '#444', marginTop: '4px',
+                            fontStyle: 'italic', maxWidth: '480px',
+                          }}>
+                            "{a.vendor_note}"
+                          </div>
+                        )}
                         {apprLabel && (
                           <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
                             {apprLabel}
