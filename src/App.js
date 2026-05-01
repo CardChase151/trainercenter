@@ -443,34 +443,94 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
     padding: isMobile ? '0' : '24px'
   };
 
-  const sheetStyle = isMobile
+  // Container is a flex column. Header + footer are flex-shrink:0; body
+  // takes the remaining space and scrolls. overflow:hidden on the container
+  // makes the rounded corners actually clip the inner content (otherwise the
+  // scrolling area paints over the corners).
+  const containerStyle = isMobile
     ? {
         backgroundColor: '#fff',
         width: '100%',
         height: '100%',
-        padding: '20px',
-        paddingBottom: '40px',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch'
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
       }
     : {
-        backgroundColor: '#fff', borderRadius: '16px', padding: '28px',
-        width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-        maxHeight: '90vh', overflowY: 'auto'
+        backgroundColor: '#fff', borderRadius: '16px',
+        width: '100%', maxWidth: '480px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        maxHeight: '90vh',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
       };
+  const headerStyle = {
+    padding: isMobile ? '16px 20px 12px' : '22px 28px 14px',
+    borderBottom: '1px solid #f0f0f0',
+    flexShrink: 0,
+    backgroundColor: '#fff',
+  };
+  const bodyStyle = {
+    flex: 1,
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    padding: isMobile ? '14px 20px' : '16px 28px',
+  };
+  const footerStyle = {
+    padding: isMobile ? '12px 20px 24px' : '14px 28px 22px',
+    borderTop: '1px solid #f0f0f0',
+    flexShrink: 0,
+    backgroundColor: '#fff',
+    display: 'flex',
+    gap: '8px',
+  };
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={sheetStyle} onClick={e => e.stopPropagation()}>
-        {/* Header with close button on mobile */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>{dateStr}</h2>
-            <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
-              {editingEvent ? 'Editing event' : 'Add a new event'}
-            </p>
-          </div>
-          {isMobile && (
+      <div style={containerStyle} onClick={e => e.stopPropagation()}>
+        {/* Sticky header — title swaps between Add and Edit modes so it's
+            always obvious which event the form is targeting. */}
+        <div style={headerStyle}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {editingEvent ? (
+                <>
+                  <button onClick={resetForm} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#666', fontSize: '0.78rem', fontWeight: '700',
+                    padding: 0, marginBottom: '4px',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  }}>
+                    ← Back to events on this day
+                  </button>
+                  <p style={{ fontSize: '0.7rem', color: '#C8102E', fontWeight: '800', margin: '0 0 2px 0', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    Editing
+                  </p>
+                  <h2 style={{
+                    fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a',
+                    margin: '0 0 2px 0',
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {editingEvent.title}
+                  </h2>
+                  <p style={{ fontSize: '0.78rem', color: '#888', margin: 0 }}>
+                    {dateStr}
+                    {editingEvent.start_time && ` · ${formatTime12h(editingEvent.start_time)} – ${formatTime12h(editingEvent.end_time)}`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 2px 0' }}>
+                    {dateStr}
+                  </h2>
+                  <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>
+                    {existingEvents.length > 0 ? `${existingEvents.length} event${existingEvents.length === 1 ? '' : 's'} on this day · Add another` : 'Add a new event'}
+                  </p>
+                </>
+              )}
+            </div>
             <button onClick={onClose} style={{
               background: '#f0f0f0', border: 'none', borderRadius: '50%',
               width: '36px', height: '36px', cursor: 'pointer',
@@ -479,9 +539,10 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
             }} aria-label="Close">
               <X size={18} />
             </button>
-          )}
+          </div>
         </div>
 
+        <div style={bodyStyle}>
         {/* Audit info — only when editing */}
         {editingEvent && (editingEvent.created_by_name || editingEvent.updated_by_name) && (
           <div style={{
@@ -725,13 +786,8 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-          <button onClick={handleSave} style={{
-            flex: 1, padding: '14px', backgroundColor: '#C8102E', color: '#fff',
-            border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer'
-          }}>
-            {editingEvent ? 'Update Event' : 'Add Event'}
-          </button>
+        </div>
+        <div style={footerStyle}>
           {editingEvent && (
             <button onClick={resetForm} style={{
               padding: '14px 18px', backgroundColor: '#f0f0f0', color: '#666',
@@ -740,6 +796,12 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
               Cancel
             </button>
           )}
+          <button onClick={handleSave} style={{
+            flex: 1, padding: '14px', backgroundColor: '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer'
+          }}>
+            {editingEvent ? 'Save changes' : 'Add Event'}
+          </button>
         </div>
       </div>
       {eventToDelete && (
@@ -1185,24 +1247,56 @@ function Calendar({ isStaff, isMobile, staff, activeEventId, calendarRef, events
                         {formatTime(event.start_time)} - {formatTime(event.end_time)}
                         {event.location && ` | ${event.location}`}
                       </div>
-                      {event.has_vendors && (event.vendor_start_time || event.vendor_end_time) && (
+                      {event.has_vendors && (
                         <div style={{
-                          display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
-                          marginTop: '6px', fontSize: '0.78rem', color: '#16a34a', fontWeight: '700'
+                          marginTop: '12px',
+                          padding: '12px 14px',
+                          backgroundColor: '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          borderRadius: '10px',
                         }}>
-                          <span>Vendors: {formatTime(event.vendor_start_time)} - {formatTime(event.vendor_end_time)}</span>
-                          <Link
-                            to={`/vendor-day?event=${event.id}`}
-                            style={{
-                              fontSize: '0.7rem', fontWeight: '700',
-                              color: '#fff', backgroundColor: '#16a34a',
-                              padding: '3px 10px', borderRadius: '6px',
-                              textDecoration: 'none',
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            }}
-                          >
-                            See lineup <ArrowRight size={11} />
-                          </Link>
+                          <div style={{
+                            fontSize: '0.62rem', fontWeight: '800',
+                            color: '#15803d', textTransform: 'uppercase',
+                            letterSpacing: '0.08em', marginBottom: '4px'
+                          }}>
+                            Vendors
+                          </div>
+                          {(event.vendor_start_time || event.vendor_end_time) && (
+                            <div style={{
+                              fontSize: '0.9rem', fontWeight: '700',
+                              color: '#166534', marginBottom: '10px'
+                            }}>
+                              {formatTime(event.vendor_start_time)} – {formatTime(event.vendor_end_time)}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <Link
+                              to={`/vendor-day?event=${event.id}`}
+                              style={{
+                                fontSize: '0.72rem', fontWeight: '700',
+                                color: '#166534', backgroundColor: '#fff',
+                                padding: '7px 14px', borderRadius: '8px',
+                                textDecoration: 'none',
+                                border: '1px solid #bbf7d0',
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              }}
+                            >
+                              See lineup <ArrowRight size={12} />
+                            </Link>
+                            <Link
+                              to="/vendors/apply"
+                              style={{
+                                fontSize: '0.72rem', fontWeight: '700',
+                                color: '#fff', backgroundColor: '#16a34a',
+                                padding: '7px 14px', borderRadius: '8px',
+                                textDecoration: 'none',
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              }}
+                            >
+                              Apply <ArrowRight size={12} />
+                            </Link>
+                          </div>
                         </div>
                       )}
                       {event.description && (
@@ -3681,6 +3775,60 @@ function NextVendorDayBanner({ isMobile }) {
   );
 }
 
+// CTA banner shown on /vendor-day pointing prospective vendors at the apply
+// flow. Reused by both the populated and empty states of the page.
+function ApplyToVendBanner({ isMobile }) {
+  return (
+    <div style={{
+      maxWidth: '1100px',
+      margin: '0 auto 28px',
+      padding: isMobile ? '18px 18px' : '20px 24px',
+      background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+      border: '1px solid #bbf7d0',
+      borderRadius: '12px',
+      display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
+      alignItems: isMobile ? 'stretch' : 'center',
+      justifyContent: 'space-between',
+      gap: '14px',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '0.65rem', fontWeight: '800',
+          color: '#15803d', textTransform: 'uppercase',
+          letterSpacing: '0.1em', marginBottom: '4px'
+        }}>
+          For vendors
+        </div>
+        <div style={{
+          fontSize: isMobile ? '1rem' : '1.05rem',
+          fontWeight: '800', color: '#14532d',
+          lineHeight: '1.35'
+        }}>
+          Want to vend at Trainer Center events?
+        </div>
+        <div style={{ fontSize: '0.85rem', color: '#166534', marginTop: '2px' }}>
+          Apply once and pick the dates you want.
+        </div>
+      </div>
+      <Link
+        to="/vendors/apply"
+        style={{
+          fontSize: '0.9rem', fontWeight: '700',
+          color: '#fff', backgroundColor: '#16a34a',
+          padding: '12px 22px', borderRadius: '10px',
+          textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}
+      >
+        Apply to vend <ArrowRight size={15} />
+      </Link>
+    </div>
+  );
+}
+
 // ─── Public Vendor Day Showcase Page ──────────────────────
 // /vendor-day — promotes who's vending. Two views:
 //   default: one event at a time (date selector at top)
@@ -3781,7 +3929,8 @@ function VendorDayPage({ isMobile }) {
       <PageWrapper isMobile={isMobile}>
         <div style={{ marginBottom: '64px', maxWidth: '640px', margin: '0 auto', textAlign: 'center' }}>
           <SectionHeader title="Vendor Day" subtitle="Coming soon" />
-          <p style={{ color: '#666' }}>No Vendor Day events scheduled yet. Check back soon.</p>
+          <p style={{ color: '#666', marginBottom: '24px' }}>No Vendor Day events scheduled yet. Check back soon.</p>
+          <ApplyToVendBanner isMobile={isMobile} />
         </div>
       </PageWrapper>
     );
@@ -3790,6 +3939,10 @@ function VendorDayPage({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
+        {/* Apply-to-vend CTA — shown above the lineup so anyone scrolling the
+            roster sees the on-ramp without having to hunt for it. */}
+        <ApplyToVendBanner isMobile={isMobile} />
+
         {/* Top control bar: event picker + view toggle */}
         <div style={{
           maxWidth: '1100px', margin: '0 auto 24px',
