@@ -279,8 +279,21 @@ Deno.serve(async (req: Request) => {
       const status = app.status
       if (status === 'approved') {
         const subject = `You're in for ${dateStr}`
-        const body = `<p>Hi ${v.name},</p><p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p><p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : ''}<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
-        await sendResendEmail([v.email], subject, wrapHtml(body), `Approved for ${eventTitle} on ${dateStr}.\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
+        const lineupUrl = `${SITE_URL}/vendor-day?event=${app.event_id}`
+        const body = `<p>Hi ${v.name},</p>` +
+          `<p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p>` +
+          `<p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>` +
+          (app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : '') +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:18px 22px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.04em">📣 PROMOTE YOUR TABLE</p>` +
+          `  <p style="margin:0 0 10px;color:#1f2937;font-size:14px;line-height:1.5">Your logo and socials are live on the public lineup page. Share the link with your community to drive traffic to your table that day.</p>` +
+          `  <p style="margin:0;font-size:13px"><a href="${lineupUrl}" style="color:#C8102E;font-weight:700;text-decoration:underline">${lineupUrl.replace('https://', '')}</a></p>` +
+          `</td></tr></table>` +
+          `<p style="margin-top:8px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
+        const text = `Approved for ${eventTitle} on ${dateStr}.\n\n` +
+          `Promote your table — your logo and socials are live on the public lineup page. Share with your community:\n${lineupUrl}\n\n` +
+          `Dashboard: ${SITE_URL}/vendors/dashboard`
+        await sendResendEmail([v.email], subject, wrapHtml(body), text)
       } else if (status === 'declined') {
         const subject = `About your Vendor Day application`
         const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center HB.</p>`
