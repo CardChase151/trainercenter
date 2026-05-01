@@ -6495,6 +6495,7 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [attendance, setAttendance] = useState({}); // { event_id: { vendor_id: row } }
   const [memberVisits, setMemberVisits] = useState([]); // raw rows joined with member + vendor
   const [voteCounts, setVoteCounts] = useState({}); // { event_id: [{category, vendor_id, vendor_name, vote_count}] }
+  const [profilesById, setProfilesById] = useState({}); // staff lookup for approver-name display
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -6524,15 +6525,22 @@ function StaffVendorsPage({ isMobile, staff }) {
         .select('*, member:members(id, first_name, last_name, email), attributed_vendor:vendors(id, name), event:events(id, title, event_date)')
         .order('checked_in_at', { ascending: false })
         .limit(200),
-    ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes]) => {
+      // Staff profiles, used to display approver names alongside the
+      // approved_by / decided_by uuids on vendors and applications.
+      supabase.from('profiles').select('id, name, email'),
+    ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes, profRes]) => {
       if (pendRes.error) console.error('[StaffVendors] pending', pendRes.error);
       if (vendRes.error) console.error('[StaffVendors] vendors', vendRes.error);
       if (evRes.error)   console.error('[StaffVendors] events', evRes.error);
       if (attRes.error)  console.error('[StaffVendors] attendance', attRes.error);
       if (visitsRes.error) console.error('[StaffVendors] visits', visitsRes.error);
+      if (profRes.error) console.error('[StaffVendors] profiles', profRes.error);
       setPending(pendRes.data || []);
       setAllVendors(vendRes.data || []);
       setEvents(evRes.data || []);
+      const profMap = {};
+      (profRes.data || []).forEach(p => { profMap[p.id] = p; });
+      setProfilesById(profMap);
       const att = {};
       (attRes.data || []).forEach(a => {
         if (!att[a.event_id]) att[a.event_id] = {};
@@ -6576,7 +6584,16 @@ function StaffVendorsPage({ isMobile, staff }) {
     // Capture the previous status so we only fire the partnership-approved
     // email on a real pending → approved transition.
     const prev = allVendors.find(v => v.id === vendorId)?.status;
-    const { error } = await supabase.from('vendors').update({ status }).eq('id', vendorId);
+    // Stamp who approved when status flips to approved — same pattern as
+    // vendor_applications.decided_by/decided_at. Don't overwrite when the
+    // status was already approved (a no-op admin click shouldn't shift the
+    // historical approver).
+    const updates = { status };
+    if (status === 'approved' && prev !== 'approved') {
+      updates.approved_by = staff.id;
+      updates.approved_at = new Date().toISOString();
+    }
+    const { error } = await supabase.from('vendors').update(updates).eq('id', vendorId);
     if (error) {
       alert('Error: ' + error.message);
       return;
@@ -6587,7 +6604,7 @@ function StaffVendorsPage({ isMobile, staff }) {
     // Suspending cascades — cancel this vendor's approved applications on
     // any FUTURE events. Past attendance records are left alone.
     if (status === 'suspended') {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const { data: futureEvents } = await supabase
         .from('events').select('id').gte('event_date', today);
       const futureIds = (futureEvents || []).map(e => e.id);
@@ -6670,11 +6687,11 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} onDecide={decideApplication} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} onDecide={decideApplication} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} onStatusChange={setVendorStatus} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} onStatusChange={setVendorStatus} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -6977,7 +6994,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
-function EventRosterList({ events, attendance, allVendors, onDecide, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, onDecide, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
 
@@ -7052,6 +7069,16 @@ function EventRosterList({ events, attendance, allVendors, onDecide, onChange, s
                 {apps.map(a => {
                   const checkedIn = evAttend[a.vendor_id];
                   const v = a.vendor || {};
+                  // Per-event approver — only when approved + decided_by recorded
+                  let apprLabel = null;
+                  if (a.status === 'approved' && a.decided_by) {
+                    const p = (profilesById || {})[a.decided_by];
+                    const who = p?.name || p?.email || 'staff';
+                    const when = a.decided_at
+                      ? new Date(a.decided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      : null;
+                    apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
+                  }
                   return (
                     <div key={a.id} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -7061,6 +7088,11 @@ function EventRosterList({ events, attendance, allVendors, onDecide, onChange, s
                       <div>
                         <strong>{v.name}</strong>
                         {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
+                        {apprLabel && (
+                          <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
+                            {apprLabel}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <ApplicationStatusBadge status={a.status} />
@@ -7415,7 +7447,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, isMobile }) {
   );
 }
 
-function AllVendorsList({ vendors, onStatusChange, isMobile }) {
+function AllVendorsList({ vendors, profilesById, onStatusChange, isMobile }) {
   if (vendors.length === 0) {
     return (
       <div style={{
@@ -7426,38 +7458,55 @@ function AllVendorsList({ vendors, onStatusChange, isMobile }) {
       </div>
     );
   }
+  const approverLabel = (v) => {
+    if (v.status !== 'approved' || !v.approved_by) return null;
+    const p = (profilesById || {})[v.approved_by];
+    const who = p?.name || p?.email || 'staff';
+    const when = v.approved_at
+      ? new Date(v.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+    return when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {vendors.map(v => (
-        <div key={v.id} style={{
-          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
-          padding: '12px 16px', display: 'flex', justifyContent: 'space-between',
-          alignItems: 'center', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
-        }}>
-          <div>
-            <strong>{v.name}</strong>
-            <span style={{ color: '#888' }}> · {v.email}</span>
-            {v.specialty && <span style={{ color: '#888' }}> · {v.specialty}</span>}
+      {vendors.map(v => {
+        const apprLabel = approverLabel(v);
+        return (
+          <div key={v.id} style={{
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
+            padding: '12px 16px', display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
+          }}>
+            <div>
+              <strong>{v.name}</strong>
+              <span style={{ color: '#888' }}> · {v.email}</span>
+              {v.specialty && <span style={{ color: '#888' }}> · {v.specialty}</span>}
+              {apprLabel && (
+                <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: '700', marginTop: '4px' }}>
+                  {apprLabel}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <VendorStatusBadge status={v.status} />
+              {v.status !== 'approved' && (
+                <button onClick={() => onStatusChange(v.id, 'approved')} style={{
+                  fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
+                  border: 'none', padding: '4px 10px', borderRadius: '6px',
+                  fontWeight: '700', cursor: 'pointer'
+                }}>Approve</button>
+              )}
+              {v.status !== 'suspended' && (
+                <button onClick={() => onStatusChange(v.id, 'suspended')} style={{
+                  fontSize: '0.75rem', backgroundColor: '#fff', color: '#991b1b',
+                  border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px',
+                  fontWeight: '700', cursor: 'pointer'
+                }}>Suspend</button>
+              )}
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <VendorStatusBadge status={v.status} />
-            {v.status !== 'approved' && (
-              <button onClick={() => onStatusChange(v.id, 'approved')} style={{
-                fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
-                border: 'none', padding: '4px 10px', borderRadius: '6px',
-                fontWeight: '700', cursor: 'pointer'
-              }}>Approve</button>
-            )}
-            {v.status !== 'suspended' && (
-              <button onClick={() => onStatusChange(v.id, 'suspended')} style={{
-                fontSize: '0.75rem', backgroundColor: '#fff', color: '#991b1b',
-                border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px',
-                fontWeight: '700', cursor: 'pointer'
-              }}>Suspend</button>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
