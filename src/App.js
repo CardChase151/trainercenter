@@ -2190,6 +2190,9 @@ function HomePage({ isMobile }) {
 
       {/* Mission section + Visit Us + Footer */}
       <main style={{ maxWidth: '1100px', margin: '0 auto', padding: isMobile ? '40px 16px' : '60px 24px' }}>
+        {/* ── NEXT VENDOR DAY BANNER (above mission) ── */}
+        <NextVendorDayBanner isMobile={isMobile} />
+
         <div id="mission" style={{ marginBottom: '64px' }}>
           <SectionHeader title="Our Mission" />
           <div style={{
@@ -2229,9 +2232,6 @@ function HomePage({ isMobile }) {
             </p>
           </div>
         </div>
-
-        {/* ── NEXT VENDOR DAY BANNER ── */}
-        <NextVendorDayBanner isMobile={isMobile} />
 
         {/* ── CARDS ── */}
         <div id="cards" style={{ marginBottom: '64px' }}>
@@ -3743,9 +3743,21 @@ function NextVendorDayBanner({ isMobile }) {
   const dayDiff = Math.round((d.getTime() - today.getTime()) / 86400000);
   const relativeLabel = dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : (dayDiff <= 7 ? 'THIS WEEK' : 'COMING UP');
 
+  // Hot mode: lineup is built enough or close enough that the count + lineup
+  // page are the right surface. Cold mode: we don't want to show "1 vendor
+  // confirmed" while it builds, so we route to the educational about page
+  // instead and lead with what the event IS, not who's there.
+  const HOT_VENDOR_THRESHOLD = 15;
+  const hotMode = dayDiff <= 7 || vendorCount >= HOT_VENDOR_THRESHOLD;
+  const ctaTo = hotMode ? `/vendor-day?event=${event.id}` : '/vendor-day/about';
+  const ctaLabel = hotMode ? 'See the lineup' : 'What is this?';
+  const subline = hotMode
+    ? `${vendorCount} vendor${vendorCount === 1 ? '' : 's'} confirmed. Tap to see who's setting up.`
+    : 'A platform for vendors. A community for collectors. Tap to learn how it works.';
+
   return (
     <div
-      onClick={() => navigate('/vendor-day')}
+      onClick={() => navigate(ctaTo)}
       style={{
         marginBottom: '64px',
         background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
@@ -3797,9 +3809,7 @@ function NextVendorDayBanner({ isMobile }) {
             color: 'rgba(255,255,255,0.85)',
             lineHeight: 1.5,
           }}>
-            {vendorCount > 0
-              ? `${vendorCount} vendor${vendorCount === 1 ? '' : 's'} confirmed. Tap to see who's setting up.`
-              : `Vendor lineup coming together. Tap to see who's confirmed.`}
+            {subline}
           </p>
         </div>
         <div style={{
@@ -3815,7 +3825,7 @@ function NextVendorDayBanner({ isMobile }) {
           flexShrink: 0,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         }}>
-          See the lineup <ArrowRight size={18} />
+          {ctaLabel} <ArrowRight size={18} />
         </div>
       </div>
     </div>
@@ -3877,6 +3887,111 @@ function ApplyToVendBanner({ isMobile }) {
 }
 
 // ─── Public Vendor Day Showcase Page ──────────────────────
+// ─── Vendor Day "About" / educational page ───────────────
+// /vendor-day/about — what these events ARE, why they exist, how vendors
+// get involved. Linked from the home banner during cold periods (more than
+// a week out, fewer than 15 confirmed) so first-time visitors learn the
+// program before they see counts that are still building.
+function VendorDayAboutPage({ isMobile }) {
+  const [nextEvent, setNextEvent] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const today = todayISO();
+      const { data } = await supabase
+        .from('events')
+        .select('id, title, event_date, cancelled')
+        .eq('has_vendors', true)
+        .gte('event_date', today)
+        .order('event_date', { ascending: true })
+        .limit(1);
+      if (cancelled) return;
+      const ev = (data || []).find(e => !e.cancelled);
+      setNextEvent(ev || null);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const para = { fontSize: '1rem', color: '#333', lineHeight: 1.75, margin: '0 0 16px 0' };
+  const h2 = { fontSize: isMobile ? '1.25rem' : '1.4rem', fontWeight: '800', color: '#1a1a1a', margin: '32px 0 12px 0', letterSpacing: '-0.01em' };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '760px', margin: '0 auto' }}>
+        <SectionHeader
+          title="What are TC's Beach City Trade Nights?"
+          subtitle="A platform for vendors. A community for collectors."
+        />
+
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '16px',
+          padding: isMobile ? '24px 18px' : '40px',
+        }}>
+          <p style={para}>
+            Once a month, Trainer Center HB hosts our biggest event: a Vendor Day where Pokemon vendors set up tables across the shop. Collectors come through, swap cards, talk shop, and walk out with the binder they have been chasing.
+          </p>
+          <p style={para}>
+            New to trading? Even better. Plenty of regulars are happy to walk you through fair values and what to look for.
+          </p>
+
+          <h2 style={h2}>What makes it different</h2>
+          <p style={para}>
+            <strong>About 90% of our Vendor Days are completely free for vendors.</strong> No table fees. No gatekeeping. We provide the room, the foot traffic, and the platform. Vendors bring their inventory.
+          </p>
+          <p style={para}>
+            We do this because the Pokemon community is built on warm relationships and word of mouth, not algorithms or ads. Every vendor we grow grows the whole scene. Every collector who walks in finds something they could not get on eBay.
+          </p>
+
+          <h2 style={h2}>How vending here works</h2>
+          <ol style={{ ...para, paddingLeft: '20px', margin: '0 0 16px 0' }}>
+            <li style={{ marginBottom: '12px' }}>
+              <strong>Apply once to partner.</strong> Short application. We review profiles to keep the room healthy: no flippers, no shady dealers.
+            </li>
+            <li style={{ marginBottom: '12px' }}>
+              <strong>Pick the dates you want.</strong> Once approved, every Vendor Day on the calendar shows up in your dashboard. Apply for the dates you want with two taps.
+            </li>
+            <li style={{ marginBottom: '12px' }}>
+              <strong>Show up. Sell. Trade. Build relationships.</strong> Bring what you specialize in. Singles, sealed, slabs, vintage, Japanese — whatever you bring real value with.
+            </li>
+            <li style={{ marginBottom: '12px' }}>
+              <strong>Boost your IG.</strong> After the event, post on your IG. Share Trainer Center's posts via DM with friends. The IG algorithm rewards DM-shares more than likes — that is how a low-volume page like ours grows. We don't try to play the algo with daily posts. We let the community do the talking.
+            </li>
+          </ol>
+
+          <h2 style={h2}>Coming up</h2>
+          {nextEvent ? (
+            <p style={para}>
+              Next event: <strong>{nextEvent.title || 'Vendor Day'}</strong> on{' '}
+              <strong>{new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</strong>.
+            </p>
+          ) : (
+            <p style={para}>Check the calendar for the next one. They generally run the last Friday of every month.</p>
+          )}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '28px' }}>
+            <Link to="/vendor-day" style={{
+              backgroundColor: '#C8102E', color: '#fff',
+              padding: '12px 22px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+            }}>
+              See upcoming Vendor Days <ArrowRight size={16} />
+            </Link>
+            <Link to="/vendors/apply" style={{
+              backgroundColor: '#1a1a1a', color: '#fff',
+              padding: '12px 22px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+            }}>
+              Apply to vend <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
 // /vendor-day — promotes who's vending. Two views:
 //   default: one event at a time (date selector at top)
 //   ?view=list: every vendor_day event in a long scrollable list
@@ -9063,6 +9178,7 @@ function App() {
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
         <Route path="/vendor-day" element={<VendorDayPage isMobile={isMobile} />} />
+        <Route path="/vendor-day/about" element={<VendorDayAboutPage isMobile={isMobile} />} />
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
