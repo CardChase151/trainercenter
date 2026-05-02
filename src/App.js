@@ -2936,7 +2936,14 @@ function BuySellPage({ isMobile }) {
 // ─── Calendar Page ────────────────────────────────────────
 function CalendarPage({ isMobile, isAdmin, staff }) {
   const { siteSettings, specialHours } = useSite();
-  const [activeFilter, setActiveFilter] = useState(null);
+  const [searchParams] = useSearchParams();
+  // Read the initial filter from the URL so deep links from elsewhere on the
+  // site (the about-page calendar CTA, the See-lineup chips on the calendar
+  // header, etc.) can land users in a pre-filtered state.
+  const initialFilter = searchParams.get('filter');
+  const [activeFilter, setActiveFilter] = useState(
+    initialFilter && CATEGORIES[initialFilter] ? initialFilter : null
+  );
   const [events, setEvents] = useState([]);
   const calendarRef = useRef(null);
 
@@ -2949,6 +2956,18 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
   }, []);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  // When a filter was passed via the URL, smooth-scroll to the calendar grid
+  // once the events are in. View Transitions on the source page handles the
+  // morph; this finishes the journey by landing the user on the grid.
+  useEffect(() => {
+    if (initialFilter && events.length > 0 && calendarRef.current) {
+      const id = requestAnimationFrame(() => {
+        calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [initialFilter, events.length]);
 
   // Derive weekly schedule from recurring weekly events
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -3893,6 +3912,7 @@ function ApplyToVendBanner({ isMobile }) {
 // a week out, fewer than 15 confirmed) so first-time visitors learn the
 // program before they see counts that are still building.
 function VendorDayAboutPage({ isMobile }) {
+  const navigate = useNavigate();
   const [nextEvent, setNextEvent] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -3985,17 +4005,74 @@ function VendorDayAboutPage({ isMobile }) {
               <strong>{new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</strong>.
             </p>
           ) : (
-            <p style={para}>Check the calendar for the next one. They generally run the last Friday of every month.</p>
+            <p style={para}>They generally run the last Friday of every month.</p>
           )}
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '28px' }}>
+          {/* Hero calendar CTA — Chase wants this loud since the calendar
+              is the answer to "when is the next one and the one after that".
+              Click triggers a View Transitions morph (where supported) and
+              hands off to /calendar with ?filter=card_show pre-applied. */}
+          <button
+            type="button"
+            onClick={() => {
+              // View Transitions API gives a free cross-fade/morph on
+              // browsers that support it (Chrome/Edge/Safari). Falls back
+              // cleanly to instant SPA navigation in Firefox.
+              const go = () => navigate('/calendar?filter=card_show');
+              if (typeof document !== 'undefined' && document.startViewTransition) {
+                document.startViewTransition(() => go());
+              } else {
+                go();
+              }
+            }}
+            style={{
+              width: '100%', marginTop: '20px',
+              background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
+              color: '#fff',
+              padding: isMobile ? '20px 22px' : '24px 28px',
+              border: 'none', borderRadius: '14px',
+              fontSize: isMobile ? '1rem' : '1.05rem', fontWeight: '800',
+              cursor: 'pointer', textAlign: 'left',
+              fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: '14px',
+              boxShadow: '0 12px 40px rgba(200,16,46,0.25)',
+              transition: 'transform 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 48px rgba(200,16,46,0.35)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(200,16,46,0.25)'; }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+              <div style={{
+                width: '42px', height: '42px', borderRadius: '10px',
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <CalendarIcon size={20} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85, marginBottom: '4px' }}>
+                  Pick a date that works
+                </div>
+                <div style={{ fontSize: isMobile ? '1rem' : '1.1rem', fontWeight: '900', letterSpacing: '-0.01em' }}>
+                  See every Vendor Day on the calendar
+                </div>
+              </div>
+            </div>
+            <ArrowRight size={20} style={{ flexShrink: 0 }} />
+          </button>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '20px' }}>
             <Link to="/vendor-day" style={{
-              backgroundColor: '#C8102E', color: '#fff',
+              backgroundColor: '#fff', color: '#1a1a1a',
               padding: '12px 22px', borderRadius: '10px',
               fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: '8px',
+              border: '1px solid #ddd',
             }}>
-              See upcoming Vendor Days <ArrowRight size={16} />
+              See current vendor lineup <ArrowRight size={16} />
             </Link>
             <Link to="/vendors/apply" style={{
               backgroundColor: '#1a1a1a', color: '#fff',
@@ -4011,6 +4088,7 @@ function VendorDayAboutPage({ isMobile }) {
     </PageWrapper>
   );
 }
+
 
 // /vendor-day — promotes who's vending. Two views:
 //   default: one event at a time (date selector at top)
