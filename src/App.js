@@ -935,9 +935,16 @@ function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanen
 }
 
 // ─── Calendar Component ───────────────────────────────────
-function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, events, fetchEvents }) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDay, setSelectedDay] = useState(null);
+function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, events, fetchEvents, initialDate }) {
+  // initialDate (a 'YYYY-MM-DD' string) deep-links into a specific day so a
+  // CTA elsewhere on the site (e.g. /vendor-day/about) can land users on a
+  // pre-selected day exactly as if they had clicked that grid cell.
+  const initialDateObj = (() => {
+    if (!initialDate || !/^\d{4}-\d{2}-\d{2}$/.test(initialDate)) return null;
+    return new Date(initialDate + 'T12:00:00');
+  })();
+  const [currentDate, setCurrentDate] = useState(initialDateObj || new Date());
+  const [selectedDay, setSelectedDay] = useState(initialDateObj ? initialDateObj.getDate() : null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalDate, setModalDate] = useState(null);
   const detailPanelRef = useRef(null);
@@ -2969,17 +2976,19 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
-  // When a filter was passed via the URL, smooth-scroll to the calendar grid
-  // once the events are in. View Transitions on the source page handles the
-  // morph; this finishes the journey by landing the user on the grid.
+  // When a filter or specific date was passed via the URL, smooth-scroll to
+  // the calendar grid once the events are in. View Transitions on the source
+  // page handles the morph; this finishes the journey by landing the user on
+  // the grid (with the deep-linked day already selected).
+  const initialDateParam = searchParams.get('date');
   useEffect(() => {
-    if (initialFilter && events.length > 0 && calendarRef.current) {
+    if ((initialFilter || initialDateParam) && events.length > 0 && calendarRef.current) {
       const id = requestAnimationFrame(() => {
         calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
       return () => cancelAnimationFrame(id);
     }
-  }, [initialFilter, events.length]);
+  }, [initialFilter, initialDateParam, events.length]);
 
   // Derive weekly schedule from recurring weekly events
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -3504,7 +3513,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             }}
           />
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} activeCategory={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} />
+            <Calendar isStaff={isAdmin} isMobile={isMobile} staff={staff} activeCategory={activeFilter} calendarRef={calendarRef} events={events} fetchEvents={fetchEvents} initialDate={searchParams.get('date')} />
           </div>
         </div>
       </div>
@@ -4005,8 +4014,27 @@ function VendorDayAboutPage({ isMobile }) {
     return () => { cancelled = true; };
   }, []);
 
-  const para = { fontSize: '1rem', color: '#333', lineHeight: 1.75, margin: '0 0 16px 0' };
-  const h2 = { fontSize: isMobile ? '1.25rem' : '1.4rem', fontWeight: '800', color: '#1a1a1a', margin: '32px 0 12px 0', letterSpacing: '-0.01em' };
+  const para = { fontSize: '1rem', color: '#333', lineHeight: 1.7, margin: '0 0 14px 0' };
+  const h2 = { fontSize: isMobile ? '1.15rem' : '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '28px 0 10px 0', letterSpacing: '-0.01em' };
+  const nextDateStr = nextEvent
+    ? new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : null;
+
+  // Hero CTA at the top of the page. Click sends the visitor to the calendar
+  // with the next vendor-bearing event's exact date pre-selected — like they
+  // landed on /calendar and clicked that day to expand the details panel.
+  // View Transitions API gives a cross-fade morph on Chrome/Edge/Safari.
+  const goToCalendar = () => {
+    const target = nextEvent
+      ? `/calendar?date=${nextEvent.event_date}`
+      : '/calendar';
+    const go = () => navigate(target);
+    if (typeof document !== 'undefined' && document.startViewTransition) {
+      document.startViewTransition(() => go());
+    } else {
+      go();
+    }
+  };
 
   return (
     <PageWrapper isMobile={isMobile}>
@@ -4016,140 +4044,107 @@ function VendorDayAboutPage({ isMobile }) {
           subtitle="A platform for vendors. A community for collectors."
         />
 
+        {/* TOP CTA: jumps to the actual next event on the calendar */}
+        <button
+          type="button"
+          onClick={goToCalendar}
+          style={{
+            width: '100%', marginBottom: '24px',
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
+            color: '#fff',
+            padding: isMobile ? '20px 22px' : '24px 28px',
+            border: 'none', borderRadius: '14px',
+            cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '14px',
+            boxShadow: '0 12px 40px rgba(200,16,46,0.25)',
+            transition: 'transform 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 48px rgba(200,16,46,0.35)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(200,16,46,0.25)'; }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '10px',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <CalendarIcon size={22} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85, marginBottom: '4px' }}>
+                {nextEvent ? 'Next event' : 'Calendar'}
+              </div>
+              <div style={{ fontSize: isMobile ? '1rem' : '1.1rem', fontWeight: '900', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+                {nextEvent
+                  ? `${nextEvent.title || 'Vendor Day'} · ${nextDateStr}`
+                  : 'See every event on the calendar'}
+              </div>
+            </div>
+          </div>
+          <ArrowRight size={20} style={{ flexShrink: 0 }} />
+        </button>
+
         <div style={{
           backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '16px',
-          padding: isMobile ? '24px 18px' : '40px',
+          padding: isMobile ? '22px 18px' : '32px 36px',
         }}>
-          <p style={para}>
-            Once a month, Trainer Center HB hosts our biggest event: a Vendor Day where Pokemon vendors set up tables across the shop. Collectors come through, swap cards, talk shop, and walk out with the binder they have been chasing.
-          </p>
-          <p style={para}>
-            New to trading? Even better. Plenty of regulars are happy to walk you through fair values and what to look for.
+          <p style={{ ...para, fontSize: '1.05rem' }}>
+            Once a month, Trainer Center HB hosts a Vendor Day. Pokemon vendors set up tables across the shop. Collectors come through, swap cards, talk shop, and walk out with the binder they have been chasing. New to trading? Even better — regulars are happy to walk you through fair values.
           </p>
 
           <h2 style={h2}>What makes it different</h2>
           <p style={para}>
-            <strong>About 90% of our Vendor Days are completely free for vendors.</strong> No table fees. No gatekeeping. We provide the room, the foot traffic, and the platform. Vendors bring their inventory.
+            <strong>About 90% of our Vendor Days are completely free for vendors.</strong> No table fees, no gatekeeping. We provide the room, the foot traffic, and the platform.
           </p>
-
-          <h2 style={h2}>Beyond Vendor Day — what else we do</h2>
-          <p style={para}>
-            Vendor Day is one night a month. The rest of the time we're still working with the same vendors and collectors:
-          </p>
-          <ul style={{ ...para, paddingLeft: '20px', margin: '0 0 16px 0' }}>
-            <li style={{ marginBottom: '10px' }}>
-              <strong>Consignment</strong> — drop off inventory any time of the month and we'll move it for you.{' '}
-              <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>Talk to Chef →</Link>
-            </li>
-            <li style={{ marginBottom: '10px' }}>
-              <strong>Buy &amp; sell</strong> — we buy collections and singles, and we keep stock on hand to sell back to the community.{' '}
-              <Link to="/buy-sell" style={{ color: '#C8102E', fontWeight: '700' }}>Buy / sell with us →</Link>
-            </li>
-            <li style={{ marginBottom: '10px' }}>
-              <strong>Grading</strong> — we run submissions out and walk you through what to send, when, and why.{' '}
-              <Link to="/grading" style={{ color: '#C8102E', fontWeight: '700' }}>How grading works →</Link>
-            </li>
-            <li style={{ marginBottom: '10px' }}>
-              <strong>1-on-1 consultations</strong> — appraisals, collecting strategy, learning the TCG. Book a slot with Chef.{' '}
-              <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>Book a consultation →</Link>
-            </li>
-          </ul>
 
           <h2 style={h2}>How vending here works</h2>
-          <ol style={{ ...para, paddingLeft: '20px', margin: '0 0 16px 0' }}>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Apply once to partner.</strong> Short application. We review profiles to keep the room healthy: no flippers, no shady dealers.
+          <ol style={{ ...para, paddingLeft: '18px', margin: '0 0 14px 0' }}>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Apply once to partner.</strong> A short application — we review profiles to keep the room healthy.
             </li>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Pick the dates you want.</strong> Once approved, every Vendor Day on the calendar shows up in your dashboard. Apply for the dates you want with two taps.
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Pick your dates.</strong> Approved partners apply for any Vendor Day in two taps from their dashboard.
             </li>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Show up. Sell. Trade. Build relationships.</strong> Bring what you specialize in. Singles, sealed, slabs, vintage, Japanese — whatever you bring real value with.
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Show up. Sell. Trade.</strong> Bring what you specialize in — singles, sealed, slabs, vintage, Japanese.
             </li>
-            <li style={{ marginBottom: '12px' }}>
-              <strong>Boost your IG.</strong> After the event, post on your IG. Share Trainer Center's posts via DM with friends. The IG algorithm rewards DM-shares more than likes — that is how a low-volume page like ours grows. We don't try to play the algo with daily posts. We let the community do the talking.
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Boost your IG.</strong> Post on your account after. DM-share TC posts to friends — the IG algorithm rewards DM-shares more than likes, and that is how a low-volume page like ours grows.
             </li>
           </ol>
 
-          <h2 style={h2}>Coming up</h2>
-          {nextEvent ? (
-            <p style={para}>
-              Next event: <strong>{nextEvent.title || 'Vendor Day'}</strong> on{' '}
-              <strong>{new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</strong>.
-            </p>
-          ) : (
-            <p style={para}>They generally run the last Friday of every month.</p>
-          )}
-
-          {/* Hero calendar CTA — Chase wants this loud since the calendar
-              is the answer to "when is the next one and the one after that".
-              Click triggers a View Transitions morph (where supported) and
-              hands off to /calendar with ?filter=card_show pre-applied. */}
-          <button
-            type="button"
-            onClick={() => {
-              // View Transitions API gives a free cross-fade/morph on
-              // browsers that support it (Chrome/Edge/Safari). Falls back
-              // cleanly to instant SPA navigation in Firefox.
-              const go = () => navigate('/calendar?filter=vendors');
-              if (typeof document !== 'undefined' && document.startViewTransition) {
-                document.startViewTransition(() => go());
-              } else {
-                go();
-              }
-            }}
-            style={{
-              width: '100%', marginTop: '20px',
-              background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
-              color: '#fff',
-              padding: isMobile ? '20px 22px' : '24px 28px',
-              border: 'none', borderRadius: '14px',
-              fontSize: isMobile ? '1rem' : '1.05rem', fontWeight: '800',
-              cursor: 'pointer', textAlign: 'left',
-              fontFamily: 'inherit',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              gap: '14px',
-              boxShadow: '0 12px 40px rgba(200,16,46,0.25)',
-              transition: 'transform 0.15s, box-shadow 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 16px 48px rgba(200,16,46,0.35)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(200,16,46,0.25)'; }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-              <div style={{
-                width: '42px', height: '42px', borderRadius: '10px',
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
+          <h2 style={h2}>Beyond Vendor Day</h2>
+          <p style={para}>
+            Vendor Day is one night a month. The rest of the time we are still working with the same community:
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 8px 0' }}>
+            {[
+              { t: 'Consignment', d: 'Drop off inventory any time. We move it for you.', to: '/consultation' },
+              { t: 'Buy & sell', d: 'We buy collections and singles, and we keep stock on hand.', to: '/buy-sell' },
+              { t: 'Grading', d: 'We run submissions out and walk you through what to send.', to: '/grading' },
+              { t: '1-on-1 consultations', d: 'Appraisals, collecting strategy, learning the TCG.', to: '/consultation' },
+            ].map(item => (
+              <li key={item.t} style={{
+                display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                gap: '12px', padding: '10px 0', borderBottom: '1px solid #f3f4f6',
+                fontSize: '0.95rem', lineHeight: 1.5, color: '#444',
+                flexWrap: 'wrap',
               }}>
-                <CalendarIcon size={20} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85, marginBottom: '4px' }}>
-                  Pick a date that works
-                </div>
-                <div style={{ fontSize: isMobile ? '1rem' : '1.1rem', fontWeight: '900', letterSpacing: '-0.01em' }}>
-                  See every Vendor Day on the calendar
-                </div>
-              </div>
-            </div>
-            <ArrowRight size={20} style={{ flexShrink: 0 }} />
-          </button>
+                <span><strong style={{ color: '#1a1a1a' }}>{item.t}</strong> — {item.d}</span>
+                <Link to={item.to} style={{ color: '#C8102E', fontWeight: '700', whiteSpace: 'nowrap', textDecoration: 'none' }}>
+                  Learn more →
+                </Link>
+              </li>
+            ))}
+          </ul>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '20px' }}>
-            <Link to="/vendor-day" style={{
-              backgroundColor: '#fff', color: '#1a1a1a',
-              padding: '12px 22px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              border: '1px solid #ddd',
-            }}>
-              See current vendor lineup <ArrowRight size={16} />
-            </Link>
+          <div style={{ marginTop: '28px', textAlign: 'center' }}>
             <Link to="/vendors/apply" style={{
               backgroundColor: '#1a1a1a', color: '#fff',
-              padding: '12px 22px', borderRadius: '10px',
+              padding: '14px 28px', borderRadius: '10px',
               fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: '8px',
             }}>
