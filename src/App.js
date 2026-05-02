@@ -324,9 +324,9 @@ function formatTime(t) {
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ─── Category Colors ──────────────────────────────────────
-// The 7 locked-in event categories. These drive: calendar grid colors, the
+// The 8 locked-in event categories. These drive: calendar grid colors, the
 // "Check out our events" filter chips above the calendar, calendar event tags,
-// and (for the 6 marked subscribable below) per-category email subscriptions.
+// and (for the marked subscribable ones below) per-category email subs.
 // `description` is shown as the chip subtitle and used for SEO meta copy.
 const CATEGORIES = {
   trade_night:  { label: 'Trade Night',  color: '#C8102E', description: 'Bring cards. Trade with the community. Walk out with the binder you have been chasing.' },
@@ -334,7 +334,8 @@ const CATEGORIES = {
   game_day:     { label: 'Game Day',     color: '#0891b2', description: 'Video games, board games, TCG. Bring your stuff or play what is at the shop.' },
   crafts:       { label: 'Crafts & Art', color: '#ec4899', description: 'Family-friendly. Paint Pokemon, do crafts, hang out.' },
   consultation: { label: 'Consultations',color: '#059669', description: 'Book 1-on-1 with Chef for appraisals, strategy, or learn the TCG.' },
-  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Card shows at Trainer Center and the ones we are at on the road, plus signings and special days.' },
+  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Card shows we host at Trainer Center, plus signings and in-store special days.' },
+  on_the_road:  { label: 'On the Road',  color: '#d97706', description: 'Off-site shows where you can find us — Front Row, conventions, regional trade days.' },
   other:        { label: 'Other',        color: '#ea580c', description: 'Everything else on the schedule.' },
 };
 
@@ -991,7 +992,15 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    }).filter(ev => !activeCategory || (ev.categories || []).includes(activeCategory));
+    }).filter(ev => {
+      if (!activeCategory) return true;
+      // Virtual filter: 'vendors' isn't a category, it's the has_vendors
+      // flag. Used by the about-page CTA and the Vendors chip on the
+      // calendar header so visitors can find every vendor-bearing event
+      // regardless of which category it lives under.
+      if (activeCategory === 'vendors') return !!ev.has_vendors;
+      return (ev.categories || []).includes(activeCategory);
+    });
   };
 
   const handleDayClick = (day) => {
@@ -2941,8 +2950,11 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
   // site (the about-page calendar CTA, the See-lineup chips on the calendar
   // header, etc.) can land users in a pre-filtered state.
   const initialFilter = searchParams.get('filter');
+  // 'vendors' is the virtual has_vendors filter; the rest must match a
+  // real CATEGORIES key. Anything else is ignored.
   const [activeFilter, setActiveFilter] = useState(
-    initialFilter && CATEGORIES[initialFilter] ? initialFilter : null
+    initialFilter === 'vendors' || (initialFilter && CATEGORIES[initialFilter])
+      ? initialFilter : null
   );
   const [events, setEvents] = useState([]);
   const calendarRef = useRef(null);
@@ -3096,6 +3108,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .event-title.game_day { border-left: 3px solid #0891b2; }
         .event-title.crafts { border-left: 3px solid #ec4899; }
         .event-title.consultation { border-left: 3px solid #059669; }
+        .event-title.on_the_road { border-left: 3px solid #d97706; }
         .event-title.tournament { border-left: 3px solid #2563eb; }
         .event-title.other { border-left: 3px solid #ea580c; }
         .empty { background: #fafafa; }
@@ -3254,6 +3267,66 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: '10px',
           }}>
+            {/* Virtual chip: Vendors. Filters by has_vendors flag, not by
+                category, so it surfaces every vendor-bearing event no
+                matter which category they're tagged with. */}
+            {(() => {
+              const vendorCount = events.filter(e => !e.cancelled && e.has_vendors).length;
+              const isActive = activeFilter === 'vendors';
+              const dim = vendorCount === 0;
+              const vendorColor = '#16a34a';
+              const description = 'Events with vendors set up — Vendor Days and special trade nights.';
+              return (
+                <button
+                  key="vendors"
+                  type="button"
+                  onClick={() => setActiveFilter(isActive ? null : 'vendors')}
+                  disabled={dim}
+                  title={dim ? 'No vendor events on the calendar yet' : description}
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: isActive ? vendorColor : '#fff',
+                    border: `1px solid ${isActive ? vendorColor : '#eee'}`,
+                    borderLeft: `3px solid ${vendorColor}`,
+                    cursor: dim ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                    opacity: dim ? 0.55 : 1,
+                    transition: 'all 0.15s',
+                    boxShadow: isActive ? `0 4px 12px ${vendorColor}33` : 'none',
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <h4 style={{
+                      fontSize: '0.88rem', fontWeight: '800',
+                      color: isActive ? '#fff' : '#1a1a1a',
+                      margin: 0, flex: 1, minWidth: 0,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      Vendors
+                    </h4>
+                    {vendorCount > 0 && (
+                      <span style={{
+                        fontSize: '0.65rem', fontWeight: '800',
+                        color: isActive ? '#fff' : vendorColor,
+                        backgroundColor: isActive ? 'rgba(255,255,255,0.22)' : vendorColor + '1a',
+                        padding: '2px 7px', borderRadius: '999px',
+                        flexShrink: 0,
+                      }}>{vendorCount}</span>
+                    )}
+                  </div>
+                  <p style={{
+                    fontSize: '0.72rem',
+                    color: isActive ? 'rgba(255,255,255,0.9)' : '#666',
+                    margin: 0, lineHeight: '1.35',
+                  }}>
+                    {description}
+                  </p>
+                </button>
+              );
+            })()}
             {Object.entries(CATEGORIES).map(([key, cat]) => {
               const isActive = activeFilter === key;
               const count = categoryCounts[key] || 0;
@@ -4018,7 +4091,7 @@ function VendorDayAboutPage({ isMobile }) {
               // View Transitions API gives a free cross-fade/morph on
               // browsers that support it (Chrome/Edge/Safari). Falls back
               // cleanly to instant SPA navigation in Firefox.
-              const go = () => navigate('/calendar?filter=card_show');
+              const go = () => navigate('/calendar?filter=vendors');
               if (typeof document !== 'undefined' && document.startViewTransition) {
                 document.startViewTransition(() => go());
               } else {
