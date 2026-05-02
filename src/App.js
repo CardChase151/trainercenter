@@ -17,6 +17,14 @@ const IgIcon = ({ size = 16 }) => (
 
 // ─── Time formatting helper (shared) ──────────────────────
 // Converts "18:00" or "18:00:00" → "6:00 PM"
+// True on devices with a real mouse (desktop). On touch-only devices iOS
+// fires mouseenter on tap and never fires mouseleave, leaving inline hover
+// transforms stuck. Components that use onMouseEnter/Leave for lift effects
+// gate them on this so taps on iOS don't leave residue.
+const HAS_HOVER = typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(hover: hover)').matches;
+
 const formatTime12h = (t) => {
   if (!t) return '';
   const [h, m] = t.slice(0, 5).split(':');
@@ -539,9 +547,9 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
                 </>
               )}
             </div>
-            <button onClick={onClose} style={{
+            <button onClick={onClose} className="icon-tap" style={{
               background: '#f0f0f0', border: 'none', borderRadius: '50%',
-              width: '36px', height: '36px', cursor: 'pointer',
+              cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0
             }} aria-label="Close">
@@ -853,7 +861,7 @@ function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanen
 
   return (
     <div style={modalBackdropStyle} onClick={onClose}>
-      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+      <div className="modal-safe-bottom smooth-scroll" style={{...modalCardStyle, maxHeight: "calc(100vh - 40px)", overflowY: "auto"}} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0', color: '#dc2626' }}>
           Delete "{event.title}"?
         </h3>
@@ -1851,7 +1859,7 @@ function SpecialHoursEditModal({ row, onClose, onSaved }) {
 
   return (
     <div style={modalBackdropStyle} onClick={onClose}>
-      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+      <div className="modal-safe-bottom smooth-scroll" style={{...modalCardStyle, maxHeight: "calc(100vh - 40px)", overflowY: "auto"}} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 14px 0' }}>
           {row?.id ? 'Edit block' : 'Add a block of days'}
         </h3>
@@ -2184,9 +2192,9 @@ function OpenNowBanner({ isMobile }) {
 function HomePage({ isMobile }) {
   return (
     <>
-      {/* Hero - Full Viewport */}
-      <header style={{
-        height: '100vh',
+      {/* Hero - Full Viewport. Class drives iOS-aware 100dvh height so the
+          hero doesn't push past Safari's URL bar on first paint. */}
+      <header className="hero-fullscreen" style={{
         position: 'relative',
         overflow: 'hidden',
         display: 'flex',
@@ -5547,14 +5555,15 @@ function PartnershipJourney({ vendorStatus, isMobile }) {
           type="button"
           onClick={() => setShowWhy(s => !s)}
           aria-label="Why this matters"
+          className="icon-tap"
           style={{
-            width: '36px', height: '36px', borderRadius: '50%',
+            borderRadius: '50%',
             backgroundColor: showWhy ? '#1a1a1a' : '#fff',
             color: showWhy ? '#fff' : '#666',
             border: '1px solid #ddd',
             cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1rem', fontWeight: '900',
+            fontSize: '1.05rem', fontWeight: '900',
             fontFamily: 'inherit',
             flexShrink: 0,
           }}
@@ -5650,17 +5659,22 @@ function PartnershipJourney({ vendorStatus, isMobile }) {
 
 // Reusable button-row card for dashboard quick actions (Check in, Apply, etc.)
 function DashboardActionRow({ accentBg, accentFg, title, subtitle, icon, onClick, isMobile }) {
+  // tap-row class makes the CSS gate the hover-lift on touch devices and
+  // adds an :active scale press for iOS feedback. JS hover handlers are
+  // also gated via HAS_HOVER so they don't fire on iOS taps.
+  const handleEnter = HAS_HOVER ? e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'; } : undefined;
+  const handleLeave = HAS_HOVER ? e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; } : undefined;
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} className="tap-row" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
       padding: isMobile ? '14px 16px' : '16px 20px',
       width: '100%', textAlign: 'left', cursor: 'pointer',
-      fontFamily: 'inherit',
+      fontFamily: 'inherit', minHeight: '64px',
       transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+    onMouseEnter={handleEnter}
+    onMouseLeave={handleLeave}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         <div style={{
@@ -6403,9 +6417,10 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
+        className="modal-safe-bottom smooth-scroll"
         style={{
           backgroundColor: '#fff', borderRadius: '14px',
-          padding: '24px', maxWidth: '440px', width: '100%',
+          padding: '24px 24px 24px 24px', maxWidth: '440px', width: '100%',
           maxHeight: '90vh', overflow: 'auto',
         }}
       >
@@ -6560,7 +6575,7 @@ function VendorCheckInModal({ vendorId, eventId, onClose, onCheckedIn }) {
 
   return (
     <div style={modalBackdropStyle} onClick={onClose}>
-      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+      <div className="modal-safe-bottom smooth-scroll" style={{...modalCardStyle, maxHeight: "calc(100vh - 40px)", overflowY: "auto"}} onClick={e => e.stopPropagation()}>
         {stage === 'priming' && (
           <>
             <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 8px 0' }}>Check in for today</h3>
@@ -8622,7 +8637,7 @@ function CancelEventModal({ event, onClose, onCancelled }) {
 
   return (
     <div style={modalBackdropStyle} onClick={onClose}>
-      <div style={modalCardStyle} onClick={e => e.stopPropagation()}>
+      <div className="modal-safe-bottom smooth-scroll" style={{...modalCardStyle, maxHeight: "calc(100vh - 40px)", overflowY: "auto"}} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0', color: '#dc2626' }}>
           Cancel {event.title || 'Vendor Day'}?
         </h3>

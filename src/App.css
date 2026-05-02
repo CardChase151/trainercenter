@@ -17,3 +17,56 @@
     font-size: 16px !important;
   }
 }
+
+/* ─── iOS / touch-device polish ────────────────────────────────────── */
+
+/* Heroes that fill the viewport hit the Safari URL bar issue on iOS where
+   100vh = "tallest possible viewport including hidden chrome", causing
+   layout to push past the visible area. dvh tracks the dynamic viewport.
+   Browsers without dvh fall through to the inline 100vh fallback. */
+.hero-fullscreen {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Body-scroll lock used when a modal is open. Prevents iOS from scrolling
+   the page underneath the modal when the user pans. */
+.body-scroll-locked {
+  overflow: hidden !important;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+
+/* Modal action area sits above the home indicator. env() falls back to 0
+   on devices without a safe-area, so this is harmless on desktop. */
+.modal-safe-bottom {
+  padding-bottom: max(16px, env(safe-area-inset-bottom)) !important;
+}
+
+/* Hover lift effects (transform/shadow) are inappropriate on touch devices
+   because :hover sticks after a tap. Marker class for elements that use
+   inline hover styling — pairs with conditional onMouseEnter/Leave below
+   in JS. We also kill the stuck-hover via CSS as a belt-and-suspenders. */
+@media (hover: none) {
+  .tap-row, .tap-row:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .tap-row:active {
+    transform: scale(0.985);
+    transition: transform 0.08s ease-out;
+  }
+}
+
+/* Icon-only buttons need 44x44 minimum to be comfortable to tap (Apple HIG). */
+.icon-tap {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Smooth momentum scrolling — Safari needs this for any scrollable area
+   inside fixed/positioned containers. */
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+}
