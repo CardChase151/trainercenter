@@ -1968,35 +1968,114 @@ function PageWrapper({ children, isMobile }) {
 }
 
 // ─── Home Page ────────────────────────────────────────────
+// Reads the calendar live and renders today's actual lineup as category
+// pills (Trade Night, Tournament, etc.). Open-state shows closing time +
+// today's pills (or a generic "come hang out" if today is empty). Closed-
+// state respects Monday-closed + special-hour block dates and falls forward
+// to the next open day with events.
 function OpenNowBanner({ isMobile }) {
   const { siteSettings, specialHours } = useSite();
+  const [events, setEvents] = useState([]);
+  useEffect(() => {
+    supabase.from('events').select('*').then(({ data }) => setEvents(data || []));
+  }, []);
+
   if (!siteSettings) return null;
 
   const hoursMap = siteSettings.hours || {};
-  const themeFor = (idx) => hoursMap[idx]?.theme || null;
-  const { isOpen } = computeOpenNowState(siteSettings, specialHours);
+  const { isOpen, effectiveRange } = computeOpenNowState(siteSettings, specialHours);
+  const today = new Date();
+  const todayDow = today.getDay();
+  const todayStr = todayISO();
+  const todaySpecial = specialHoursForDate(specialHours, todayStr);
+  const todayClosed = todaySpecial?.closed === true || (!hoursMap[todayDow] && !todaySpecial);
 
-  // Find next open day with an event (skipping closed days + special-closed days)
-  let nextDayName = '';
-  let nextTheme = '';
-  if (!isOpen) {
-    const now = new Date();
-    for (let offset = 1; offset <= 14; offset++) {
-      const checkDate = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
-      const checkDow = checkDate.getDay();
-      const checkISO = checkDate.toISOString().slice(0, 10);
-      const checkSpecial = specialHoursForDate(specialHours, checkISO);
-      if (checkSpecial?.closed) continue;
-      if (!hoursMap[checkDow] && !checkSpecial) continue;
-      const theme = checkSpecial?.title || themeFor(checkDow);
-      if (theme) {
-        nextDayName = DAY_LABELS[checkDow];
-        nextTheme = theme;
+  // Compute the events firing on a given date (one-off + recurring).
+  const eventsOnDate = (date) => {
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return events.filter(ev => {
+      if (ev.cancelled) return false;
+      if (ev.event_date === iso) return true;
+      if (ev.recurrence === 'none') return false;
+      const evDate = new Date(ev.event_date + 'T00:00:00');
+      if (date < evDate) return false;
+      if (ev.recurrence_end_date && date > new Date(ev.recurrence_end_date + 'T00:00:00')) return false;
+      const diffDays = Math.floor((date - evDate) / 86400000);
+      if (ev.recurrence === 'weekly') return diffDays % 7 === 0;
+      if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
+      if (ev.recurrence === 'monthly') return evDate.getDate() === date.getDate();
+      return false;
+    });
+  };
+
+  // Unique category keys across a list of events, ordered by their position
+  // in the CATEGORIES dict so the visual reads consistently.
+  const uniqueCategoryKeys = (evList) => {
+    const seen = new Set();
+    evList.forEach(ev => (ev.categories || []).forEach(c => seen.add(c)));
+    return Object.keys(CATEGORIES).filter(k => seen.has(k));
+  };
+
+  const todayEvents = eventsOnDate(today);
+  const todayCats = uniqueCategoryKeys(todayEvents);
+
+  // Find the next open day (with events preferred). Walks up to 14 days out,
+  // skipping Monday-closed and special-closed dates.
+  let nextDayLabel = '';
+  let nextEvents = [];
+  if (!isOpen || todayClosed) {
+    for (let offset = todayClosed ? 1 : 1; offset <= 14; offset++) {
+      const d = new Date(today.getTime() + offset * 86400000);
+      const dDow = d.getDay();
+      const dISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dSpecial = specialHoursForDate(specialHours, dISO);
+      if (dSpecial?.closed) continue;
+      if (!hoursMap[dDow] && !dSpecial) continue;
+      const evs = eventsOnDate(d);
+      if (evs.length > 0) {
+        nextDayLabel = offset === 1 ? 'Tomorrow' : DAY_LABELS[dDow];
+        nextEvents = evs;
         break;
+      }
+      // No events but at least it's open — keep first such day as a fallback.
+      if (!nextDayLabel) {
+        nextDayLabel = offset === 1 ? 'Tomorrow' : DAY_LABELS[dDow];
+        nextEvents = [];
       }
     }
   }
+  const nextCats = uniqueCategoryKeys(nextEvents);
 
+  // Render a row of category pills.
+  const CatPills = ({ keys, dark }) => (
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {keys.map(k => {
+        const cat = CATEGORIES[k];
+        if (!cat) return null;
+        return (
+          <span key={k} style={{
+            fontSize: '0.7rem', fontWeight: '800',
+            color: dark ? '#fff' : cat.color,
+            backgroundColor: dark ? `${cat.color}40` : `${cat.color}1a`,
+            border: `1px solid ${dark ? `${cat.color}80` : `${cat.color}33`}`,
+            padding: '3px 9px', borderRadius: '999px',
+            letterSpacing: '0.02em',
+          }}>{cat.label}</span>
+        );
+      })}
+    </div>
+  );
+
+  const formatHr = (h) => {
+    if (h == null) return '';
+    const whole = Math.floor(h);
+    const min = Math.round((h - whole) * 60);
+    const ampm = whole >= 12 ? 'PM' : 'AM';
+    const h12 = whole === 0 ? 12 : whole > 12 ? whole - 12 : whole;
+    return min === 0 ? `${h12} ${ampm}` : `${h12}:${String(min).padStart(2, '0')} ${ampm}`;
+  };
+
+  // ─── OPEN ────────────────────────────────────────────────
   if (isOpen) {
     return (
       <Link to="/calendar" style={{ textDecoration: 'none' }}>
@@ -2010,56 +2089,91 @@ function OpenNowBanner({ isMobile }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: '14px',
           cursor: 'pointer',
-          transition: 'all 0.15s',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e',
-              boxShadow: '0 0 6px rgba(34,197,94,0.5)',
-            }} />
-            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#166534' }}>
-              We're open right now
-            </span>
-            <span style={{ fontSize: '0.8rem', color: '#15803d' }}>
-              See what's happening today
-            </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e', boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} />
+              <span style={{ fontSize: '0.9rem', fontWeight: '800', color: '#166534' }}>
+                We're open
+              </span>
+              {effectiveRange && (
+                <span style={{ fontSize: '0.78rem', color: '#15803d' }}>
+                  until {formatHr(effectiveRange[1])}
+                </span>
+              )}
+            </div>
+            {todayCats.length > 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#15803d' }}>Today:</span>
+                <CatPills keys={todayCats} />
+              </div>
+            ) : (
+              <span style={{ fontSize: '0.78rem', color: '#15803d' }}>
+                Come hang out at the shop today
+              </span>
+            )}
           </div>
-          <span style={{ fontSize: '1.1rem', color: '#22c55e', fontWeight: '700' }}>&#8250;</span>
+          <span style={{ fontSize: '1.1rem', color: '#22c55e', fontWeight: '700', flexShrink: 0 }}>&#8250;</span>
         </div>
       </Link>
     );
   }
 
-  // Closed -- show next event
+  // ─── CLOSED ──────────────────────────────────────────────
+  // Three sub-states:
+  //   1. Today is fully closed (Monday or special-closed) → "Closed today"
+  //   2. Today is open later → "Closed right now · Opens at X"
+  //   3. Otherwise (after hours of an open day) → "Currently closed"
+  const opensLaterToday = !todayClosed && effectiveRange && (today.getHours() + today.getMinutes() / 60) < effectiveRange[0];
+  const headline = todayClosed
+    ? 'Closed today'
+    : opensLaterToday
+      ? `Closed right now · Opens at ${formatHr(effectiveRange[0])}`
+      : 'Currently closed';
+
   return (
     <Link to="/calendar" style={{ textDecoration: 'none' }}>
       <div style={{
         background: 'linear-gradient(135deg, #1a1a1a, #2d2d2d)',
         borderRadius: '16px',
-        padding: isMobile ? '20px' : '24px 32px',
+        padding: isMobile ? '18px 18px' : '22px 28px',
         margin: isMobile ? '24px 16px 32px' : '40px auto 48px',
         maxWidth: '1100px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         cursor: 'pointer',
-        transition: 'all 0.2s',
+        gap: '14px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       }}>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444',
-            }} />
-            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Currently closed
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
+            <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#fbbfbf', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {headline}
             </span>
           </div>
-          {nextTheme && (
-            <span style={{ fontSize: isMobile ? '1rem' : '1.1rem', fontWeight: '700', color: '#fff' }}>
-              Up next: <span style={{ color: '#C8102E' }}>{nextTheme}</span> on {nextDayName}
-            </span>
+          {/* Today pills if today is open later */}
+          {opensLaterToday && todayCats.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>Today:</span>
+              <CatPills keys={todayCats} dark />
+            </div>
+          )}
+          {/* Up next preview */}
+          {nextDayLabel && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>
+                Up next · <span style={{ color: '#fbbfbf' }}>{nextDayLabel}:</span>
+              </span>
+              {nextCats.length > 0 ? (
+                <CatPills keys={nextCats} dark />
+              ) : (
+                <span style={{ fontSize: '0.78rem', color: '#bbb', fontStyle: 'italic' }}>shop's open</span>
+              )}
+            </div>
           )}
         </div>
         <div style={{
