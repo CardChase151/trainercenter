@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
-import { Link, Routes, Route, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
@@ -4193,6 +4193,10 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
 // ─── Vendors Page ─────────────────────────────────────────
 function VendorsPage({ isMobile, staff }) {
   const isAdmin = !!staff?.isAdmin;
+  // Auth-aware fast path: if the viewer is already a logged-in vendor or
+  // member/guest, skip the public landing and drop them straight into their
+  // dashboard. `replace` keeps the back button from looping back to /vendors.
+  const { vendor, member, isLoading: authLoading } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [feedLoading, setFeedLoading] = useState(true);
   const [winners, setWinners] = useState(null);
@@ -4218,6 +4222,15 @@ function VendorsPage({ isMobile, staff }) {
       if (w && w.length > 0) setWinners({ event: ev, winners: w });
     });
   }, []);
+
+  // Wait for auth state to settle before deciding — otherwise the public
+  // page flashes for a frame on logged-in users while the session resolves.
+  if (!authLoading && vendor) {
+    return <Navigate to="/vendors/dashboard" replace />;
+  }
+  if (!authLoading && member && !vendor) {
+    return <Navigate to="/vendors/review" replace />;
+  }
 
   return (
     <PageWrapper isMobile={isMobile}>
