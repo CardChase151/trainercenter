@@ -5491,13 +5491,14 @@ function PartnershipJourney({ vendorStatus, isMobile }) {
   const STEPS = [
     { num: 1, label: 'Partner status', desc: 'Apply to partner with Trainer Center HB.' },
     { num: 2, label: 'Pick events', desc: 'Apply for the Vendor Days you want to be at.' },
-    { num: 3, label: 'Promote before', desc: 'DM-share TC posts to friends. The IG algo rewards DMs more than likes — that is how a low-volume page like ours grows.' },
+    { num: 3, label: 'Promote before', desc: 'DM the next event in line to 3-10 people each cycle, plus 1 IG post tagging Trainer Center HB.' },
     { num: 4, label: 'Capture during', desc: 'Take photos and a short clip from your table.' },
-    { num: 5, label: 'Upload after', desc: 'Post freely on your IG. Then upload here so it shows on our public Vendors page.' },
+    { num: 5, label: 'Upload after', desc: 'Post freely on your IG and tag Trainer Center HB as often as you like. Then upload here so it shows on our public Vendors page.' },
   ];
   const isApproved = vendorStatus === 'approved';
   const isPending = vendorStatus === 'pending';
   const isSuspended = vendorStatus === 'suspended';
+  const [showWhy, setShowWhy] = useState(false);
 
   // Step 1 takes the partner-status color. Steps 2-5 are dimmed unless approved.
   const step1Color = isApproved ? '#16a34a' : isSuspended ? '#dc2626' : '#c2410c';
@@ -5519,13 +5520,70 @@ function PartnershipJourney({ vendorStatus, isMobile }) {
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto 24px' }}>
-      <h3 style={{
-        fontSize: '0.78rem', fontWeight: '800', color: '#666',
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        margin: '0 0 12px 6px',
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: '12px', flexWrap: 'wrap', marginBottom: '14px',
       }}>
-        Your Trainer Center HB partnership · 5 steps
-      </h3>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 style={{
+            fontSize: isMobile ? '1.3rem' : '1.6rem',
+            fontWeight: '900',
+            color: '#1a1a1a',
+            margin: '0 0 4px 0',
+            letterSpacing: '-0.02em',
+          }}>
+            Partnership: Want more followers?
+          </h2>
+          <p style={{
+            fontSize: isMobile ? '0.95rem' : '1rem',
+            fontWeight: '700',
+            color: '#C8102E',
+            margin: 0,
+          }}>
+            Follow the steps exactly.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowWhy(s => !s)}
+          aria-label="Why this matters"
+          style={{
+            width: '36px', height: '36px', borderRadius: '50%',
+            backgroundColor: showWhy ? '#1a1a1a' : '#fff',
+            color: showWhy ? '#fff' : '#666',
+            border: '1px solid #ddd',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1rem', fontWeight: '900',
+            fontFamily: 'inherit',
+            flexShrink: 0,
+          }}
+          title="Why this matters"
+        >
+          i
+        </button>
+      </div>
+
+      {showWhy && (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '12px',
+          padding: isMobile ? '14px 16px' : '16px 20px',
+          marginBottom: '14px',
+          fontSize: '0.88rem', color: '#333', lineHeight: 1.7,
+        }}>
+          <p style={{ margin: '0 0 8px' }}>
+            <strong>Why this matters.</strong> As part of our relationship, all the traffic from our site can be funneled to promote you over time as well.
+          </p>
+          <p style={{ margin: '0 0 8px' }}>
+            <strong>The IG algo rewards behind-the-scenes DMs</strong> more than public likes. Don't spam — genuine shares can be daily and by the dozens — but at minimum we ask for <strong>3-10 DMs per month</strong> for the next upcoming event.
+          </p>
+          <p style={{ margin: 0 }}>
+            Tagging us and uploading after places you on our site at{' '}
+            <Link to="/vendors" style={{ color: '#C8102E', fontWeight: '700' }}>pokemontrainercenter.com/vendors</Link>{' '}
+            to drive traffic to you too. Make the posts great.
+          </p>
+        </div>
+      )}
       <div style={{
         display: 'flex',
         flexDirection: isMobile ? 'column' : 'row',
