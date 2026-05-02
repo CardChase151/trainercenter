@@ -3973,20 +3973,41 @@ function ApplyToVendBanner({ isMobile }) {
 function VendorDayAboutPage({ isMobile }) {
   const navigate = useNavigate();
   const [nextEvent, setNextEvent] = useState(null);
+  // Most recent past event WITH vendors — drives the 'See last event'
+  // deep-link near the gallery so logged-in vendors (who get redirected
+  // off /vendors) still have a path to recent lineups.
+  const [lastEvent, setLastEvent] = useState(null);
+  // Recent submissions feed reuses the same data shape as /vendors so
+  // VendorSubmissionCard renders unchanged. Limited to 6 for this page —
+  // it's a teaser, the full feed lives at /vendors for logged-out folks.
+  const [submissions, setSubmissions] = useState([]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const today = todayISO();
-      const { data } = await supabase
-        .from('events')
-        .select('id, title, event_date, cancelled')
-        .eq('has_vendors', true)
-        .gte('event_date', today)
-        .order('event_date', { ascending: true })
-        .limit(1);
+      const [nextRes, lastRes, subsRes] = await Promise.all([
+        supabase.from('events')
+          .select('id, title, event_date, cancelled')
+          .eq('has_vendors', true)
+          .gte('event_date', today)
+          .order('event_date', { ascending: true })
+          .limit(1),
+        supabase.from('events')
+          .select('id, title, event_date, cancelled')
+          .eq('has_vendors', true)
+          .lt('event_date', today)
+          .order('event_date', { ascending: false })
+          .limit(1),
+        supabase.from('vendor_submissions')
+          .select('*, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
+          .eq('visible', true)
+          .order('submitted_at', { ascending: false })
+          .limit(6),
+      ]);
       if (cancelled) return;
-      const ev = (data || []).find(e => !e.cancelled);
-      setNextEvent(ev || null);
+      setNextEvent((nextRes.data || []).find(e => !e.cancelled) || null);
+      setLastEvent((lastRes.data || []).find(e => !e.cancelled) || null);
+      setSubmissions(subsRes.data || []);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -4117,6 +4138,57 @@ function VendorDayAboutPage({ isMobile }) {
               </li>
             ))}
           </ul>
+
+          {/* Last event deep-link — surfaces the most recent past vendor
+              event so visitors (especially logged-in vendors who get
+              redirected off /vendors) can see the previous lineup. */}
+          {lastEvent && (
+            <Link
+              to={`/vendor-day?event=${lastEvent.id}`}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginTop: '24px',
+                padding: isMobile ? '14px 16px' : '16px 20px',
+                backgroundColor: '#f9fafb', border: '1px solid #eee',
+                borderRadius: '12px', textDecoration: 'none', color: '#1a1a1a',
+                gap: '12px',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: '800', color: '#666', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Last event
+                </div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '800' }}>
+                  {lastEvent.title} · {new Date(lastEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '2px' }}>
+                  See the full lineup that set up
+                </div>
+              </div>
+              <ArrowRight size={18} color="#999" style={{ flexShrink: 0 }} />
+            </Link>
+          )}
+
+          {/* Recent vendor uploads gallery — same shape as /vendors used to
+              run, just lives here now since /vendors is a promo page. */}
+          {submissions.length > 0 && (
+            <>
+              <h2 style={h2}>Recent posts from our vendors</h2>
+              <p style={{ ...para, marginBottom: '20px' }}>
+                What our vendors brought + posted from past Vendor Days.
+              </p>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+                gap: '14px',
+                marginBottom: '8px',
+              }}>
+                {submissions.map(sub => (
+                  <VendorSubmissionCard key={sub.id} submission={sub} />
+                ))}
+              </div>
+            </>
+          )}
 
           <div style={{ marginTop: '28px', textAlign: 'center' }}>
             <Link to="/vendors/apply" style={{
@@ -4455,23 +4527,9 @@ function VendorsPage({ isMobile, staff }) {
   // member/guest, skip the public landing and drop them straight into their
   // dashboard. `replace` keeps the back button from looping back to /vendors.
   const { vendor, member, isLoading: authLoading } = useAuth();
-  const [submissions, setSubmissions] = useState([]);
-  const [feedLoading, setFeedLoading] = useState(true);
   const [winners, setWinners] = useState(null);
 
   useEffect(() => {
-    supabase
-      .from('vendor_submissions')
-      .select('*, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
-      .eq('visible', true)
-      .order('submitted_at', { ascending: false })
-      .limit(24)
-      .then(({ data, error }) => {
-        if (error) console.error('[VendorsPage] feed fetch', error);
-        setSubmissions(data || []);
-        setFeedLoading(false);
-      });
-
     // Fetch last Vendor Day winners (most recent past event with at least one vote)
     supabase.rpc('get_last_voted_vendor_day').then(async ({ data }) => {
       if (!data || data.length === 0) return;
@@ -4604,38 +4662,24 @@ function VendorsPage({ isMobile, staff }) {
           </div>
         )}
 
-        {/* Recent vendor submissions feed */}
+        {/* Pointer to the gallery, which now lives on /vendor-day/about. */}
         <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
-            Recent Vendor Posts
-          </h3>
-          {feedLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#999' }}>
-              <Loader2 size={20} className="spin" />
+          <Link to="/vendor-day/about" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: isMobile ? '14px 16px' : '16px 20px',
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+            textDecoration: 'none', color: '#1a1a1a', gap: '12px',
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: '800' }}>
+                See recent vendor posts + last event lineup
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+                Photos and clips vendors uploaded after past Vendor Days
+              </div>
             </div>
-          ) : submissions.length === 0 ? (
-            <div style={{
-              backgroundColor: '#fafafa',
-              border: '1px dashed #ddd',
-              borderRadius: '12px',
-              padding: '40px 24px',
-              textAlign: 'center',
-              color: '#888',
-              fontSize: '0.9rem'
-            }}>
-              Vendor posts from past Vendor Days will appear here once vendors start uploading after events.
-            </div>
-          ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: '16px'
-            }}>
-              {submissions.map(sub => (
-                <VendorSubmissionCard key={sub.id} submission={sub} />
-              ))}
-            </div>
-          )}
+            <ArrowRight size={18} color="#999" style={{ flexShrink: 0 }} />
+          </Link>
         </div>
       </div>
     </PageWrapper>
