@@ -5026,8 +5026,11 @@ function VendorDashboardPage({ isMobile }) {
   const session = user ? { user } : null; // shape compatibility with downstream forms
   const authReady = !authRolesLoading;
   const vendorLoading = authRolesLoading;
+  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [applications, setApplications] = useState({}); // keyed by event_id
+  // When set, renders the VendorCheckInModal for that event id.
+  const [checkingInEventId, setCheckingInEventId] = useState(null);
 
   // Fetch Vendor Day events (recent + upcoming) + applications + attendance
   // Past 14 days included so vendors can upload content after the event.
@@ -5208,7 +5211,7 @@ function VendorDashboardPage({ isMobile }) {
           </Link>
         </div>
 
-        {/* Check in to today's event — only when there is one to check into. */}
+        {/* Check in to today's event — opens the check-in modal directly. */}
         {isApproved && todayEvent && (
           <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
             <DashboardActionRow
@@ -5217,28 +5220,38 @@ function VendorDashboardPage({ isMobile }) {
               title={`Check in to today's event`}
               subtitle={`${todayEvent.title || 'Vendor Day'} · ${new Date(todayEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
               icon={<CheckCircle2 size={18} />}
-              onClick={() => {
-                const el = document.getElementById('upcoming-events');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
+              onClick={() => setCheckingInEventId(todayEvent.id)}
               isMobile={isMobile}
             />
           </div>
         )}
 
-        {/* Apply for more events — only useful when there are unapplied future events. */}
-        {isApproved && events.some(e => e.event_date >= todayStr && !applications[e.id]) && (
+        {/* View events & apply — opens the events sub-page with apply flow. */}
+        {isApproved && (
           <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
             <DashboardActionRow
               accentBg="#fff0f0"
               accentFg="#C8102E"
-              title="Apply for more events"
-              subtitle="Pick the upcoming Vendor Days you want to be at"
+              title="View events & apply"
+              subtitle="See upcoming Vendor Days, apply, manage your applications"
               icon={<CalendarIcon size={18} />}
-              onClick={() => {
-                const el = document.getElementById('upcoming-events');
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
+              onClick={() => navigate('/vendors/events')}
+              isMobile={isMobile}
+            />
+          </div>
+        )}
+
+        {/* Upload event content — opens the upload event-picker. Surfaces
+            only when the vendor has at least one past attended event. */}
+        {isApproved && recentAttended && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <DashboardActionRow
+              accentBg="#1a1a1a"
+              accentFg="#fff"
+              title="Upload event content"
+              subtitle="Pick a past event and add your photos, video, and IG links"
+              icon={<UploadIcon size={18} />}
+              onClick={() => navigate('/vendors/upload')}
               isMobile={isMobile}
             />
           </div>
@@ -5260,76 +5273,209 @@ function VendorDashboardPage({ isMobile }) {
               : "Your account is suspended. Reach out to Trainer Center HB to re-activate."}
           </div>
         )}
+      </div>
+      {checkingInEventId && (
+        <VendorCheckInModal
+          vendorId={vendor.id}
+          eventId={checkingInEventId}
+          onClose={() => setCheckingInEventId(null)}
+          onCheckedIn={(att) => {
+            setAttendance(prev => ({ ...prev, [checkingInEventId]: att }));
+            setCheckingInEventId(null);
+          }}
+        />
+      )}
+    </PageWrapper>
+  );
+}
 
-        {/* Upcoming Vendor Days */}
-        <div id="upcoming-events" style={{ maxWidth: '900px', margin: '0 auto', scrollMarginTop: '20px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
-            Upcoming Vendor Days
-          </h3>
-          {events.filter(ev => {
-            // Hide past events the vendor never applied to
-            return !(ev.event_date < todayISO() && !applications[ev.id]);
-          }).length === 0 ? (
-            <div style={{
-              backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
-              padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
-            }}>
-              No Vendor Days scheduled yet. Check back soon — they happen the last Friday of every month.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {events
-                .filter(ev => !(ev.event_date < todayISO() && !applications[ev.id]))
-                .map(ev => (
-                  <VendorEventCard
-                    key={ev.id}
-                    event={ev}
-                    application={applications[ev.id]}
-                    attendance={attendance[ev.id]}
-                    vendorId={vendor.id}
-                    vendorStatus={vendor.status}
-                    isFirstApplication={Object.keys(applications).length === 0}
-                    onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
-                    onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
-                    isMobile={isMobile}
-                  />
-              ))}
-            </div>
-          )}
+// ─── Vendor Events List page (sub-route of dashboard) ────
+// /vendors/events — extracts the events list out of the dashboard. Each
+// event row keeps its existing apply / approved / check-in / cancelled
+// behaviors via VendorEventCard. Top of page has a Back to dashboard link.
+function VendorEventsListPage({ isMobile }) {
+  const { vendor, isLoading: authRolesLoading } = useAuth();
+  const navigate = useNavigate();
+  const [events, setEvents] = useState([]);
+  const [applications, setApplications] = useState({});
+  const [attendance, setAttendance] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authRolesLoading) return;
+    if (!vendor) { navigate('/vendors/dashboard'); return; }
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+    Promise.all([
+      supabase.from('events').select('*')
+        .eq('has_vendors', true)
+        .gte('event_date', fourteenDaysAgo)
+        .order('event_date', { ascending: true })
+        .limit(20),
+      supabase.from('vendor_applications').select('*').eq('vendor_id', vendor.id),
+      supabase.from('vendor_attendance').select('*').eq('vendor_id', vendor.id),
+    ]).then(([evRes, appsRes, attRes]) => {
+      setEvents(evRes.data || []);
+      const apps = {};
+      (appsRes.data || []).forEach(a => { apps[a.event_id] = a; });
+      setApplications(apps);
+      const att = {};
+      (attRes.data || []).forEach(a => { att[a.event_id] = a; });
+      setAttendance(att);
+      setLoading(false);
+    });
+  }, [vendor, authRolesLoading, navigate]);
+
+  if (authRolesLoading || loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+          <Loader2 size={20} className="spin" /> Loading...
         </div>
+      </PageWrapper>
+    );
+  }
+  if (!vendor) return null;
 
-        {/* Upload latest — bottom CTA when there's a past event the vendor
-            attended. Routes to the same upload page as the per-event card,
-            just elevated so it's hard to miss after a show. */}
-        {recentAttended && (
-          <div style={{ maxWidth: '900px', margin: '32px auto 0' }}>
-            <Link to={`/vendors/upload/${recentAttended.eventId}`} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: '#1a1a1a', color: '#fff',
-              borderRadius: '12px',
-              padding: isMobile ? '16px 18px' : '18px 22px',
-              textDecoration: 'none',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-                <div style={{
-                  width: '40px', height: '40px', borderRadius: '50%',
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  <UploadIcon size={18} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
-                    Upload from {recentAttended.event.title || 'last event'}
+  const visibleEvents = events.filter(ev => !(ev.event_date < todayISO() && !applications[ev.id]));
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
+        <Link to="/vendors/dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          fontSize: '0.85rem', fontWeight: '700', color: '#666',
+          textDecoration: 'none', marginBottom: '14px',
+        }}>
+          ← Back to dashboard
+        </Link>
+        <SectionHeader title="Events & applications" subtitle="Vendor Days you can apply to or are approved for" />
+        {visibleEvents.length === 0 ? (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+            padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+          }}>
+            No Vendor Days scheduled yet. Check back soon — they happen the last Friday of every month.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {visibleEvents.map(ev => (
+              <VendorEventCard
+                key={ev.id}
+                event={ev}
+                application={applications[ev.id]}
+                attendance={attendance[ev.id]}
+                vendorId={vendor.id}
+                vendorStatus={vendor.status}
+                isFirstApplication={Object.keys(applications).length === 0}
+                onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
+                onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
+                isMobile={isMobile}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor Upload event picker (sub-route of dashboard) ──
+// /vendors/upload (no eventId) — shows every event the vendor has either
+// checked into OR has an approved application for (whether checked in
+// or not), so they can pick which one to upload content for.
+function VendorUploadPickerPage({ isMobile }) {
+  const { vendor, isLoading: authRolesLoading } = useAuth();
+  const navigate = useNavigate();
+  const [pastEvents, setPastEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authRolesLoading) return;
+    if (!vendor) { navigate('/vendors/dashboard'); return; }
+    Promise.all([
+      supabase.from('vendor_attendance').select('event_id, checked_in_at').eq('vendor_id', vendor.id),
+      supabase.from('vendor_applications').select('event_id').eq('vendor_id', vendor.id).eq('status', 'approved'),
+    ]).then(async ([attRes, appsRes]) => {
+      const ids = new Set();
+      (attRes.data || []).forEach(a => ids.add(a.event_id));
+      (appsRes.data || []).forEach(a => ids.add(a.event_id));
+      if (ids.size === 0) { setPastEvents([]); setLoading(false); return; }
+      const { data: evs } = await supabase
+        .from('events').select('*')
+        .in('id', Array.from(ids))
+        .lt('event_date', todayISO())
+        .order('event_date', { ascending: false });
+      setPastEvents(evs || []);
+      setLoading(false);
+    });
+  }, [vendor, authRolesLoading, navigate]);
+
+  if (authRolesLoading || loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+          <Loader2 size={20} className="spin" /> Loading...
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (!vendor) return null;
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
+        <Link to="/vendors/dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          fontSize: '0.85rem', fontWeight: '700', color: '#666',
+          textDecoration: 'none', marginBottom: '14px',
+        }}>
+          ← Back to dashboard
+        </Link>
+        <SectionHeader title="Upload event content" subtitle="Pick a past event to upload photos, video, and IG links to" />
+        {pastEvents.length === 0 ? (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+            padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+          }}>
+            No past events to upload to yet. Once you check in (or are approved for a past event), it will show up here.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {pastEvents.map(ev => {
+              const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+              return (
+                <Link
+                  key={ev.id}
+                  to={`/vendors/upload/${ev.id}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+                    padding: isMobile ? '14px 16px' : '16px 20px',
+                    textDecoration: 'none', color: '#1a1a1a',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '50%',
+                      backgroundColor: '#1a1a1a', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <UploadIcon size={18} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
+                        {ev.title || 'Vendor Day'}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                        {dateStr}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)' }}>
-                    {recentAttendedDateStr} · paste your IG link too — boosts your traffic
-                  </div>
-                </div>
-              </div>
-              <ArrowRight size={18} color="rgba(255,255,255,0.85)" />
-            </Link>
+                  <ArrowRight size={18} color="#999" />
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>
@@ -7362,6 +7508,13 @@ function VendorUploadPage({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
+        <Link to="/vendors/upload" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          fontSize: '0.85rem', fontWeight: '700', color: '#666',
+          textDecoration: 'none', marginBottom: '14px',
+        }}>
+          ← Pick a different event
+        </Link>
         <SectionHeader title="Upload your Vendor Day content" subtitle={`${event.title || 'Vendor Day'} · ${eventDate}`} />
 
         {/* Why-bother banner: posting the same media you put on IG, with the
@@ -9318,6 +9471,8 @@ function App() {
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
         <Route path="/vendors/edit" element={<VendorEditProfilePage isMobile={isMobile} />} />
+        <Route path="/vendors/events" element={<VendorEventsListPage isMobile={isMobile} />} />
+        <Route path="/vendors/upload" element={<VendorUploadPickerPage isMobile={isMobile} />} />
         <Route path="/vendors/upload/:eventId" element={<VendorUploadPage isMobile={isMobile} />} />
         <Route path="/vendors/review" element={<VendorReviewPage isMobile={isMobile} />} />
         {/* Guest-facing alias for the same review/voting flow. DB still uses members. */}
