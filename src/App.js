@@ -999,15 +999,7 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
       if (ev.recurrence === 'biweekly') return diffDays % 14 === 0;
       if (ev.recurrence === 'monthly') return evDate.getDate() === day;
       return false;
-    }).filter(ev => {
-      if (!activeCategory) return true;
-      // Virtual filter: 'vendors' isn't a category, it's the has_vendors
-      // flag. Used by the about-page CTA and the Vendors chip on the
-      // calendar header so visitors can find every vendor-bearing event
-      // regardless of which category it lives under.
-      if (activeCategory === 'vendors') return !!ev.has_vendors;
-      return (ev.categories || []).includes(activeCategory);
-    });
+    }).filter(ev => !activeCategory || (ev.categories || []).includes(activeCategory));
   };
 
   const handleDayClick = (day) => {
@@ -2957,11 +2949,9 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
   // site (the about-page calendar CTA, the See-lineup chips on the calendar
   // header, etc.) can land users in a pre-filtered state.
   const initialFilter = searchParams.get('filter');
-  // 'vendors' is the virtual has_vendors filter; the rest must match a
-  // real CATEGORIES key. Anything else is ignored.
+  // Filter must match a real CATEGORIES key. Anything else is ignored.
   const [activeFilter, setActiveFilter] = useState(
-    initialFilter === 'vendors' || (initialFilter && CATEGORIES[initialFilter])
-      ? initialFilter : null
+    initialFilter && CATEGORIES[initialFilter] ? initialFilter : null
   );
   const [events, setEvents] = useState([]);
   const calendarRef = useRef(null);
@@ -3276,66 +3266,6 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
             gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
             gap: '10px',
           }}>
-            {/* Virtual chip: Vendors. Filters by has_vendors flag, not by
-                category, so it surfaces every vendor-bearing event no
-                matter which category they're tagged with. */}
-            {(() => {
-              const vendorCount = events.filter(e => !e.cancelled && e.has_vendors).length;
-              const isActive = activeFilter === 'vendors';
-              const dim = vendorCount === 0;
-              const vendorColor = '#16a34a';
-              const description = 'Events with vendors set up — Vendor Days and special trade nights.';
-              return (
-                <button
-                  key="vendors"
-                  type="button"
-                  onClick={() => setActiveFilter(isActive ? null : 'vendors')}
-                  disabled={dim}
-                  title={dim ? 'No vendor events on the calendar yet' : description}
-                  style={{
-                    textAlign: 'left',
-                    padding: '12px 14px',
-                    borderRadius: '10px',
-                    backgroundColor: isActive ? vendorColor : '#fff',
-                    border: `1px solid ${isActive ? vendorColor : '#eee'}`,
-                    borderLeft: `3px solid ${vendorColor}`,
-                    cursor: dim ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit',
-                    opacity: dim ? 0.55 : 1,
-                    transition: 'all 0.15s',
-                    boxShadow: isActive ? `0 4px 12px ${vendorColor}33` : 'none',
-                    minWidth: 0,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                    <h4 style={{
-                      fontSize: '0.88rem', fontWeight: '800',
-                      color: isActive ? '#fff' : '#1a1a1a',
-                      margin: 0, flex: 1, minWidth: 0,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      Vendors
-                    </h4>
-                    {vendorCount > 0 && (
-                      <span style={{
-                        fontSize: '0.65rem', fontWeight: '800',
-                        color: isActive ? '#fff' : vendorColor,
-                        backgroundColor: isActive ? 'rgba(255,255,255,0.22)' : vendorColor + '1a',
-                        padding: '2px 7px', borderRadius: '999px',
-                        flexShrink: 0,
-                      }}>{vendorCount}</span>
-                    )}
-                  </div>
-                  <p style={{
-                    fontSize: '0.72rem',
-                    color: isActive ? 'rgba(255,255,255,0.9)' : '#666',
-                    margin: 0, lineHeight: '1.35',
-                  }}>
-                    {description}
-                  </p>
-                </button>
-              );
-            })()}
             {Object.entries(CATEGORIES).map(([key, cat]) => {
               const isActive = activeFilter === key;
               const count = categoryCounts[key] || 0;
