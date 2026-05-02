@@ -4400,42 +4400,93 @@ function VendorSubmissionCard({ submission }) {
       backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
       overflow: 'hidden', display: 'flex', flexDirection: 'column'
     }}>
-      {/* Media area */}
+      {/* Media area — when link_url is set, the tile becomes an outbound
+          tap that sends the visitor to the vendor's IG post. That's the
+          point of the upload flow: drive collectors back to the vendor. */}
       {video ? (
-        <div style={{ position: 'relative', paddingTop: '56.25%', backgroundColor: '#000' }}>
-          <iframe
-            src={`https://iframe.mediadelivery.net/embed/${process.env.REACT_APP_BUNNY_LIBRARY_ID}/${video.bunny_video_id}?autoplay=true&loop=true&muted=true&preload=true&responsive=true`}
-            loading="lazy"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-            title={`Video by ${v.name}`}
-          />
-        </div>
+        (() => {
+          const videoBlock = (
+            <div style={{ position: 'relative', paddingTop: '56.25%', backgroundColor: '#000' }}>
+              <iframe
+                src={`https://iframe.mediadelivery.net/embed/${process.env.REACT_APP_BUNNY_LIBRARY_ID}/${video.bunny_video_id}?autoplay=true&loop=true&muted=true&preload=true&responsive=true`}
+                loading="lazy"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+                title={`Video by ${v.name}`}
+              />
+              {video.link_url && (
+                <a
+                  href={video.link_url}
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    position: 'absolute', bottom: '8px', right: '8px',
+                    backgroundColor: 'rgba(0,0,0,0.75)', color: '#fff',
+                    padding: '6px 12px', borderRadius: '999px',
+                    fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.04em',
+                    textTransform: 'uppercase', textDecoration: 'none',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    zIndex: 2,
+                  }}
+                >
+                  View on IG  →
+                </a>
+              )}
+            </div>
+          );
+          return videoBlock;
+        })()
       ) : photos.length > 0 ? (
-        <div style={{
-          aspectRatio: '16 / 9',
-          backgroundColor: '#000',
-          backgroundImage: `url(${photoUrl(photos[0].supabase_path)})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }} />
+        photos[0].link_url ? (
+          <a href={photos[0].link_url} target="_blank" rel="noopener noreferrer" style={{
+            display: 'block', textDecoration: 'none', position: 'relative',
+            aspectRatio: '16 / 9',
+            backgroundColor: '#000',
+            backgroundImage: `url(${photoUrl(photos[0].supabase_path)})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+          }}>
+            <span style={{
+              position: 'absolute', bottom: '8px', right: '8px',
+              backgroundColor: 'rgba(0,0,0,0.75)', color: '#fff',
+              padding: '6px 12px', borderRadius: '999px',
+              fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}>
+              View on IG  →
+            </span>
+          </a>
+        ) : (
+          <div style={{
+            aspectRatio: '16 / 9',
+            backgroundColor: '#000',
+            backgroundImage: `url(${photoUrl(photos[0].supabase_path)})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }} />
+        )
       ) : null}
 
-      {/* Photo strip if multiple */}
+      {/* Photo strip if multiple — each tile links to its own IG post if set. */}
       {photos.length > 1 && (
         <div style={{ display: 'flex', gap: '4px', padding: '4px', backgroundColor: '#fafafa' }}>
-          {photos.slice(0, 4).map(p => (
-            <div key={p.id} style={{
-              flex: 1,
-              aspectRatio: '1 / 1',
-              backgroundImage: `url(${photoUrl(p.supabase_path)})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              borderRadius: '4px',
-              minWidth: 0
-            }} />
-          ))}
+          {photos.slice(0, 4).map(p => {
+            const tile = (
+              <div style={{
+                flex: 1,
+                aspectRatio: '1 / 1',
+                backgroundImage: `url(${photoUrl(p.supabase_path)})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                borderRadius: '4px',
+                minWidth: 0
+              }} />
+            );
+            return p.link_url ? (
+              <a key={p.id} href={p.link_url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, textDecoration: 'none' }}>
+                {tile}
+              </a>
+            ) : <div key={p.id} style={{ flex: 1, minWidth: 0 }}>{tile}</div>;
+          })}
         </div>
       )}
 
@@ -4815,10 +4866,37 @@ function VendorDashboardPage({ isMobile }) {
     );
   }
 
+  // Computed surfaces for the new dashboard quick-actions:
+  const todayStr = todayISO();
+  // Today's event the vendor is approved for + not yet checked in.
+  const todayEvent = events.find(ev =>
+    ev.event_date === todayStr &&
+    applications[ev.id]?.status === 'approved' &&
+    !attendance[ev.id]
+  );
+  // Most recent past event the vendor checked into — drives the "Upload latest"
+  // CTA at the bottom of the dashboard.
+  const recentAttended = Object.keys(attendance)
+    .map(eventId => ({ eventId, event: events.find(e => e.id === eventId) }))
+    .filter(x => x.event && x.event.event_date < todayStr)
+    .sort((a, b) => b.event.event_date.localeCompare(a.event.event_date))[0];
+  const recentAttendedDateStr = recentAttended
+    ? new Date(recentAttended.event.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+  const isApproved = vendor.status === 'approved';
+  const isPending = vendor.status === 'pending';
+  const isSuspended = vendor.status === 'suspended';
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
+
+        {/* ── Partnership journey strip ───────────────────────
+            5-step lifecycle visualizer. Step 1 reflects the vendor's
+            current partner status; steps 2-5 are the recurring rhythm
+            that keeps the partnership active. */}
+        <PartnershipJourney vendorStatus={vendor.status} isMobile={isMobile} />
 
         {/* Profile summary */}
         <div style={{
@@ -4847,7 +4925,7 @@ function VendorDashboardPage({ isMobile }) {
         </div>
 
         {/* Edit profile entry point */}
-        <div style={{ maxWidth: '900px', margin: '0 auto 24px' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
           <Link to="/vendors/edit" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
@@ -4880,8 +4958,61 @@ function VendorDashboardPage({ isMobile }) {
           </Link>
         </div>
 
+        {/* Check in to today's event — only when there is one to check into. */}
+        {isApproved && todayEvent && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <DashboardActionRow
+              accentBg="#16a34a"
+              accentFg="#fff"
+              title={`Check in to today's event`}
+              subtitle={`${todayEvent.title || 'Vendor Day'} · ${new Date(todayEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
+              icon={<CheckCircle2 size={18} />}
+              onClick={() => {
+                const el = document.getElementById('upcoming-events');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              isMobile={isMobile}
+            />
+          </div>
+        )}
+
+        {/* Apply for more events — only useful when there are unapplied future events. */}
+        {isApproved && events.some(e => e.event_date >= todayStr && !applications[e.id]) && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <DashboardActionRow
+              accentBg="#fff0f0"
+              accentFg="#C8102E"
+              title="Apply for more events"
+              subtitle="Pick the upcoming Vendor Days you want to be at"
+              icon={<CalendarIcon size={18} />}
+              onClick={() => {
+                const el = document.getElementById('upcoming-events');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              isMobile={isMobile}
+            />
+          </div>
+        )}
+
+        {(isPending || isSuspended) && (
+          <div style={{
+            maxWidth: '900px', margin: '0 auto 24px',
+            backgroundColor: isSuspended ? '#fef2f2' : '#fff7ed',
+            border: `1px solid ${isSuspended ? '#fecaca' : '#fed7aa'}`,
+            borderRadius: '12px',
+            padding: isMobile ? '16px' : '18px 22px',
+            fontSize: '0.88rem',
+            color: isSuspended ? '#991b1b' : '#9a3412',
+            lineHeight: 1.6,
+          }}>
+            {isPending
+              ? "Trainer Center HB is reviewing your profile. You'll be able to apply for events once approved."
+              : "Your account is suspended. Reach out to Trainer Center HB to re-activate."}
+          </div>
+        )}
+
         {/* Upcoming Vendor Days */}
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <div id="upcoming-events" style={{ maxWidth: '900px', margin: '0 auto', scrollMarginTop: '20px' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 16px 0' }}>
             Upcoming Vendor Days
           </h3>
@@ -4916,8 +5047,187 @@ function VendorDashboardPage({ isMobile }) {
             </div>
           )}
         </div>
+
+        {/* Upload latest — bottom CTA when there's a past event the vendor
+            attended. Routes to the same upload page as the per-event card,
+            just elevated so it's hard to miss after a show. */}
+        {recentAttended && (
+          <div style={{ maxWidth: '900px', margin: '32px auto 0' }}>
+            <Link to={`/vendors/upload/${recentAttended.eventId}`} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: '#1a1a1a', color: '#fff',
+              borderRadius: '12px',
+              padding: isMobile ? '16px 18px' : '18px 22px',
+              textDecoration: 'none',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <UploadIcon size={18} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
+                    Upload from {recentAttended.event.title || 'last event'}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)' }}>
+                    {recentAttendedDateStr} · paste your IG link too — boosts your traffic
+                  </div>
+                </div>
+              </div>
+              <ArrowRight size={18} color="rgba(255,255,255,0.85)" />
+            </Link>
+          </div>
+        )}
       </div>
     </PageWrapper>
+  );
+}
+
+// ─── Partnership Journey strip ────────────────────────────
+// 5-step horizontal (or vertical on mobile) lifecycle the vendor moves
+// through. Step 1 mirrors `vendor.status`. Steps 2-5 are recurring per
+// event cycle. Pending or suspended vendors see steps 2-5 dimmed.
+function PartnershipJourney({ vendorStatus, isMobile }) {
+  const STEPS = [
+    { num: 1, label: 'Partner status', desc: 'Apply to partner with Trainer Center HB.' },
+    { num: 2, label: 'Pick events', desc: 'Apply for the Vendor Days you want to be at.' },
+    { num: 3, label: 'Promote before', desc: 'DM-share TC posts to friends. The IG algo rewards DMs more than likes — that is how a low-volume page like ours grows.' },
+    { num: 4, label: 'Capture during', desc: 'Take photos and a short clip from your table.' },
+    { num: 5, label: 'Upload after', desc: 'Post freely on your IG. Then upload here so it shows on our public Vendors page.' },
+  ];
+  const isApproved = vendorStatus === 'approved';
+  const isPending = vendorStatus === 'pending';
+  const isSuspended = vendorStatus === 'suspended';
+
+  // Step 1 takes the partner-status color. Steps 2-5 are dimmed unless approved.
+  const step1Color = isApproved ? '#16a34a' : isSuspended ? '#dc2626' : '#c2410c';
+  const step1Pill = isApproved ? 'Approved partner' : isSuspended ? 'Suspended' : 'Pending review';
+
+  const stepStyle = (i) => {
+    const isFirst = i === 0;
+    const dimmed = !isFirst && !isApproved;
+    return {
+      flex: 1,
+      minWidth: isMobile ? 'auto' : '0',
+      backgroundColor: '#fff',
+      border: `1px solid ${isFirst ? step1Color : dimmed ? '#eee' : '#1a1a1a'}`,
+      borderRadius: '12px',
+      padding: isMobile ? '14px 14px' : '14px 16px',
+      opacity: dimmed ? 0.55 : 1,
+    };
+  };
+
+  return (
+    <div style={{ maxWidth: '1100px', margin: '0 auto 24px' }}>
+      <h3 style={{
+        fontSize: '0.78rem', fontWeight: '800', color: '#666',
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        margin: '0 0 12px 6px',
+      }}>
+        Your Trainer Center HB partnership · 5 steps
+      </h3>
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: '10px',
+        alignItems: 'stretch',
+      }}>
+        {STEPS.map((s, i) => {
+          const dimmed = i > 0 && !isApproved;
+          return (
+            <div key={s.num} style={stepStyle(i)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <div style={{
+                  width: '24px', height: '24px', borderRadius: '50%',
+                  backgroundColor: i === 0 ? step1Color : dimmed ? '#e5e7eb' : '#1a1a1a',
+                  color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.72rem', fontWeight: '800',
+                  flexShrink: 0,
+                }}>
+                  {s.num}
+                </div>
+                <div style={{
+                  fontSize: '0.78rem', fontWeight: '800',
+                  color: dimmed ? '#9ca3af' : '#1a1a1a',
+                  letterSpacing: '0.02em',
+                  textTransform: 'uppercase',
+                }}>
+                  {s.label}
+                </div>
+              </div>
+              {i === 0 ? (
+                <>
+                  <div style={{
+                    display: 'inline-block',
+                    fontSize: '0.7rem', fontWeight: '800',
+                    color: step1Color,
+                    backgroundColor: step1Color + '14',
+                    padding: '3px 10px', borderRadius: '999px',
+                    marginBottom: '6px',
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                  }}>
+                    {step1Pill}
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#666', lineHeight: 1.45 }}>
+                    {isPending
+                      ? 'Awaiting Trainer Center HB review.'
+                      : isSuspended
+                        ? 'Reach out to Chef to re-activate.'
+                        : 'You are an approved partner.'}
+                  </p>
+                </>
+              ) : (
+                <p style={{ margin: 0, fontSize: '0.78rem', color: dimmed ? '#9ca3af' : '#444', lineHeight: 1.45 }}>
+                  {s.desc}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Reusable button-row card for dashboard quick actions (Check in, Apply, etc.)
+function DashboardActionRow({ accentBg, accentFg, title, subtitle, icon, onClick, isMobile }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+      padding: isMobile ? '14px 16px' : '16px 20px',
+      width: '100%', textAlign: 'left', cursor: 'pointer',
+      fontFamily: 'inherit',
+      transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = '#1a1a1a'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{
+          width: '40px', height: '40px', borderRadius: '50%',
+          backgroundColor: accentBg, color: accentFg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          {icon}
+        </div>
+        <div>
+          <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666' }}>
+            {subtitle}
+          </div>
+        </div>
+      </div>
+      <ArrowRight size={18} color="#999" />
+    </button>
   );
 }
 
@@ -6518,7 +6828,12 @@ function VendorUploadPage({ isMobile }) {
 
   const [caption, setCaption] = useState('');
   const [photos, setPhotos] = useState([null, null, null]);
+  // Per-slot IG (or other) link URL. Captured at upload time, persisted to
+  // vendor_media.link_url, locked once saved. Tap-through on the public
+  // /vendors feed sends collectors directly to the vendor's IG post.
+  const [photoLinks, setPhotoLinks] = useState(['', '', '']);
   const [video, setVideo] = useState(null);
+  const [videoLink, setVideoLink] = useState('');
   const [photoProgress, setPhotoProgress] = useState([0, 0, 0]);
   const [videoProgress, setVideoProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -6682,6 +6997,7 @@ function VendorUploadPage({ isMobile }) {
           submission_id: submissionId,
           kind: 'photo',
           supabase_path: path,
+          link_url: (photoLinks[i] || '').trim() || null,
           sort_order: baseSortOrder + i,
         });
       }
@@ -6694,6 +7010,7 @@ function VendorUploadPage({ isMobile }) {
           kind: 'video',
           bunny_video_id: videoGuid,
           bunny_playback_url: playbackUrl,
+          link_url: (videoLink || '').trim() || null,
           sort_order: baseSortOrder + photos.length,
         });
       }
@@ -6717,22 +7034,15 @@ function VendorUploadPage({ isMobile }) {
 
       // Reset selection
       setPhotos([null, null, null]);
+      setPhotoLinks(['', '', '']);
       setVideo(null);
-      setDoneMessage('Uploaded! Your post will appear on the public Vendors page.');
+      setVideoLink('');
+      setDoneMessage('Uploaded! Your post is now on the public Vendors page.');
     } catch (err) {
       setError(err.message || String(err));
     } finally {
       setUploading(false);
     }
-  };
-
-  const handleDeleteExisting = async (mediaItem) => {
-    if (!window.confirm('Delete this media?')) return;
-    if (mediaItem.kind === 'photo' && mediaItem.supabase_path) {
-      await supabase.storage.from('vendor-media').remove([mediaItem.supabase_path]);
-    }
-    await supabase.from('vendor_media').delete().eq('id', mediaItem.id);
-    setExistingMedia(prev => prev.filter(m => m.id !== mediaItem.id));
   };
 
   if (authReady && !session) {
@@ -6791,10 +7101,32 @@ function VendorUploadPage({ isMobile }) {
     marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
   };
 
+  // Slot accounting — saved photos/videos are locked, so the upload form
+  // shows only the remaining slots (3 photos total, 1 video total).
+  const existingPhotos = existingMedia.filter(m => m.kind === 'photo');
+  const existingVideo = existingMedia.find(m => m.kind === 'video');
+  const remainingPhotoSlots = Math.max(0, 3 - existingPhotos.length);
+  const showVideoSlot = !existingVideo;
+  const allFull = remainingPhotoSlots === 0 && !showVideoSlot;
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '720px', margin: '0 auto' }}>
         <SectionHeader title="Upload your Vendor Day content" subtitle={`${event.title || 'Vendor Day'} · ${eventDate}`} />
+
+        {/* Why-bother banner: posting the same media you put on IG, with the
+            link, drives collectors back to YOUR account. That's the play. */}
+        <div style={{
+          backgroundColor: '#fff7ed', border: '1px solid #fed7aa',
+          borderRadius: '12px', padding: '16px 18px', marginBottom: '20px',
+        }}>
+          <p style={{ margin: '0 0 6px', fontSize: '0.78rem', fontWeight: '800', color: '#9a3412', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Highly recommended
+          </p>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: '#1f2937', lineHeight: 1.55 }}>
+            Upload the same photo or video you posted on Instagram. Paste your IG post link below each upload — when collectors tap your tile on the public Vendors page, it sends them straight to your post to follow you. <strong>That is the point of this — boost your traffic.</strong>
+          </p>
+        </div>
 
         {existingMedia.length > 0 && (
           <div style={{
@@ -6802,46 +7134,66 @@ function VendorUploadPage({ isMobile }) {
             padding: '20px', marginBottom: '20px'
           }}>
             <h3 style={{ fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>
-              Already uploaded
+              Already uploaded · locked
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
               {existingMedia.map(m => (
-                <div key={m.id} style={{
-                  position: 'relative', aspectRatio: '1 / 1', borderRadius: '8px',
-                  overflow: 'hidden', backgroundColor: '#000',
-                  ...(m.kind === 'photo' ? {
-                    backgroundImage: `url(${photoUrl(m.supabase_path)})`,
-                    backgroundSize: 'cover', backgroundPosition: 'center'
-                  } : {})
-                }}>
-                  {m.kind === 'video' && (
-                    <div style={{
-                      width: '100%', height: '100%', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', backgroundColor: '#000', flexDirection: 'column', gap: '4px'
+                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{
+                    position: 'relative', aspectRatio: '1 / 1', borderRadius: '8px',
+                    overflow: 'hidden', backgroundColor: '#000',
+                    ...(m.kind === 'photo' ? {
+                      backgroundImage: `url(${photoUrl(m.supabase_path)})`,
+                      backgroundSize: 'cover', backgroundPosition: 'center'
+                    } : {})
+                  }}>
+                    {m.kind === 'video' && (
+                      <div style={{
+                        width: '100%', height: '100%', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', backgroundColor: '#000', flexDirection: 'column', gap: '4px'
+                      }}>
+                        <Film size={24} />
+                        <span style={{ fontSize: '0.7rem' }}>Video</span>
+                      </div>
+                    )}
+                    <div title="Locked — contact Trainer Center to edit" style={{
+                      position: 'absolute', top: '6px', right: '6px',
+                      backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff',
+                      borderRadius: '50%', width: '26px', height: '26px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                      <Film size={24} />
-                      <span style={{ fontSize: '0.7rem' }}>Video</span>
+                      <Lock size={12} />
                     </div>
+                  </div>
+                  {m.link_url ? (
+                    <a href={m.link_url} target="_blank" rel="noopener noreferrer" style={{
+                      fontSize: '0.72rem', color: '#C8102E', fontWeight: '700',
+                      textDecoration: 'none', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
+                      {m.link_url.replace(/^https?:\/\//, '')}
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: '0.72rem', color: '#9ca3af', fontStyle: 'italic' }}>
+                      No IG link
+                    </span>
                   )}
-                  <button
-                    onClick={() => handleDeleteExisting(m)}
-                    title="Delete"
-                    style={{
-                      position: 'absolute', top: '4px', right: '4px',
-                      backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff',
-                      border: 'none', borderRadius: '50%', width: '26px', height: '26px',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {allFull ? (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px dashed #ddd',
+            borderRadius: '12px', padding: '24px 20px', textAlign: 'center',
+            color: '#666', fontSize: '0.9rem'
+          }}>
+            All slots used (3 photos + 1 video). Contact Trainer Center if you need to edit anything.
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} style={{
           backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
           padding: isMobile ? '20px 16px' : '32px',
@@ -6855,37 +7207,72 @@ function VendorUploadPage({ isMobile }) {
             style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }}
           />
 
-          {/* Photo slots */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
-              Photos (up to 3 per upload)
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-              {photos.map((p, i) => (
-                <PhotoSlot
-                  key={i}
-                  file={p}
-                  progress={photoProgress[i]}
-                  uploading={uploading && p !== null}
-                  onSelect={setPhotoSlot(i)}
-                  onClear={clearPhotoSlot(i)}
-                />
-              ))}
+          {/* Photo slots — only the remaining ones, with a per-slot IG link input. */}
+          {remainingPhotoSlots > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
+                Photos · {remainingPhotoSlots} slot{remainingPhotoSlots === 1 ? '' : 's'} left
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {Array.from({ length: remainingPhotoSlots }).map((_, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px', alignItems: 'start' }}>
+                    <PhotoSlot
+                      file={photos[i]}
+                      progress={photoProgress[i]}
+                      uploading={uploading && photos[i] !== null}
+                      onSelect={setPhotoSlot(i)}
+                      onClear={clearPhotoSlot(i)}
+                    />
+                    <input
+                      type="url"
+                      value={photoLinks[i]}
+                      onChange={e => setPhotoLinks(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
+                      placeholder="Paste your IG post link (https://instagram.com/p/...)"
+                      style={{
+                        ...inputCss, marginTop: 0, marginBottom: 0,
+                        fontSize: '0.85rem',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Video */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
-              Video (one short clip — autoplay-friendly on the public page)
-            </label>
-            <VideoSlot
-              file={video}
-              progress={videoProgress}
-              uploading={uploading && !!video}
-              onSelect={(e) => setVideo(e.target.files?.[0] || null)}
-              onClear={() => setVideo(null)}
-            />
+          {/* Video slot — hidden once a video is already saved. */}
+          {showVideoSlot && (
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
+                Video · 1 slot left
+              </label>
+              <VideoSlot
+                file={video}
+                progress={videoProgress}
+                uploading={uploading && !!video}
+                onSelect={(e) => setVideo(e.target.files?.[0] || null)}
+                onClear={() => setVideo(null)}
+              />
+              {video && (
+                <input
+                  type="url"
+                  value={videoLink}
+                  onChange={e => setVideoLink(e.target.value)}
+                  placeholder="Paste your IG post link (https://instagram.com/p/...)"
+                  style={{ ...inputCss, marginTop: '10px', marginBottom: 0, fontSize: '0.85rem' }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Locked-once-saved confirm copy. */}
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+            borderRadius: '8px', padding: '12px 14px', marginBottom: '16px',
+            fontSize: '0.82rem', color: '#7f1d1d', lineHeight: 1.55,
+            display: 'flex', alignItems: 'flex-start', gap: '8px',
+          }}>
+            <Lock size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <span><strong>Heads up:</strong> once you tap Upload, this media (photos, video, and the IG link you paste) is locked. Contact Trainer Center if you need it removed or edited later.</span>
           </div>
 
           {error && (
@@ -6922,6 +7309,7 @@ function VendorUploadPage({ isMobile }) {
             {uploading ? <><Loader2 size={18} className="spin" /> Uploading...</> : <><UploadIcon size={18} /> Upload</>}
           </button>
         </form>
+        )}
       </div>
     </PageWrapper>
   );
