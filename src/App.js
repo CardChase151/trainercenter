@@ -3938,9 +3938,29 @@ function VendorDayAboutPage({ isMobile }) {
           <p style={para}>
             <strong>About 90% of our Vendor Days are completely free for vendors.</strong> No table fees. No gatekeeping. We provide the room, the foot traffic, and the platform. Vendors bring their inventory.
           </p>
+
+          <h2 style={h2}>Beyond Vendor Day — what else we do</h2>
           <p style={para}>
-            We do this because the Pokemon community is built on warm relationships and word of mouth, not algorithms or ads. Every vendor we grow grows the whole scene. Every collector who walks in finds something they could not get on eBay.
+            Vendor Day is one night a month. The rest of the time we're still working with the same vendors and collectors:
           </p>
+          <ul style={{ ...para, paddingLeft: '20px', margin: '0 0 16px 0' }}>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Consignment</strong> — drop off inventory any time of the month and we'll move it for you.{' '}
+              <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>Talk to Chef →</Link>
+            </li>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Buy &amp; sell</strong> — we buy collections and singles, and we keep stock on hand to sell back to the community.{' '}
+              <Link to="/buy-sell" style={{ color: '#C8102E', fontWeight: '700' }}>Buy / sell with us →</Link>
+            </li>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Grading</strong> — we run submissions out and walk you through what to send, when, and why.{' '}
+              <Link to="/grading" style={{ color: '#C8102E', fontWeight: '700' }}>How grading works →</Link>
+            </li>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>1-on-1 consultations</strong> — appraisals, collecting strategy, learning the TCG. Book a slot with Chef.{' '}
+              <Link to="/consultation" style={{ color: '#C8102E', fontWeight: '700' }}>Book a consultation →</Link>
+            </li>
+          </ul>
 
           <h2 style={h2}>How vending here works</h2>
           <ol style={{ ...para, paddingLeft: '20px', margin: '0 0 16px 0' }}>
