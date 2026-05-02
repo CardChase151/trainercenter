@@ -2019,32 +2019,23 @@ function OpenNowBanner({ isMobile }) {
   const todayEvents = eventsOnDate(today);
   const todayCats = uniqueCategoryKeys(todayEvents);
 
-  // Find the next open day (with events preferred). Walks up to 14 days out,
-  // skipping Monday-closed and special-closed dates.
-  let nextDayLabel = '';
-  let nextEvents = [];
-  if (!isOpen || todayClosed) {
-    for (let offset = todayClosed ? 1 : 1; offset <= 14; offset++) {
-      const d = new Date(today.getTime() + offset * 86400000);
-      const dDow = d.getDay();
-      const dISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const dSpecial = specialHoursForDate(specialHours, dISO);
-      if (dSpecial?.closed) continue;
-      if (!hoursMap[dDow] && !dSpecial) continue;
-      const evs = eventsOnDate(d);
-      if (evs.length > 0) {
-        nextDayLabel = offset === 1 ? 'Tomorrow' : DAY_LABELS[dDow];
-        nextEvents = evs;
-        break;
-      }
-      // No events but at least it's open — keep first such day as a fallback.
-      if (!nextDayLabel) {
-        nextDayLabel = offset === 1 ? 'Tomorrow' : DAY_LABELS[dDow];
-        nextEvents = [];
-      }
-    }
+  // Look forward to the next OPEN day (skipping Mondays, block dates).
+  // Only used when today is fully done — either Monday/block or after close.
+  let futureDayLabel = '';
+  let futureEvents = [];
+  for (let offset = 1; offset <= 14; offset++) {
+    const d = new Date(today.getTime() + offset * 86400000);
+    const dDow = d.getDay();
+    const dISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dSpecial = specialHoursForDate(specialHours, dISO);
+    if (dSpecial?.closed) continue;
+    if (!hoursMap[dDow] && !dSpecial) continue;
+    const evs = eventsOnDate(d);
+    futureDayLabel = offset === 1 ? 'Tomorrow' : DAY_LABELS[dDow];
+    futureEvents = evs;
+    break;
   }
-  const nextCats = uniqueCategoryKeys(nextEvents);
+  const futureCats = uniqueCategoryKeys(futureEvents);
 
   // Render a row of category pills.
   const CatPills = ({ keys, dark }) => (
@@ -2122,16 +2113,24 @@ function OpenNowBanner({ isMobile }) {
   }
 
   // ─── CLOSED ──────────────────────────────────────────────
-  // Three sub-states:
-  //   1. Today is fully closed (Monday or special-closed) → "Closed today"
-  //   2. Today is open later → "Closed right now · Opens at X"
-  //   3. Otherwise (after hours of an open day) → "Currently closed"
+  // Decide which day's lineup to surface — never look ahead past today
+  // unless today is genuinely done (Monday/block) or shop already closed.
+  //   1. Today is fully closed (Monday or special-closed) → tomorrow
+  //   2. Opens later today (early AM) → today
+  //   3. After-hours of an open day → tomorrow
   const opensLaterToday = !todayClosed && effectiveRange && (today.getHours() + today.getMinutes() / 60) < effectiveRange[0];
   const headline = todayClosed
     ? 'Closed today'
     : opensLaterToday
-      ? `Closed right now · Opens at ${formatHr(effectiveRange[0])}`
-      : 'Currently closed';
+      ? `Opens at ${formatHr(effectiveRange[0])}`
+      : 'Closed for the night';
+
+  // Pills surface today's events when shop will still open today, otherwise
+  // the next open day's events. Single row, no "Up next + Today" stack.
+  const showFuture = todayClosed || !opensLaterToday;
+  const dayLabel = showFuture ? futureDayLabel : 'Today';
+  const dayCats = showFuture ? futureCats : todayCats;
+  const fallbackCopy = showFuture ? "shop's open" : "come hang out at the shop";
 
   return (
     <Link to="/calendar" style={{ textDecoration: 'none' }}>
@@ -2155,23 +2154,13 @@ function OpenNowBanner({ isMobile }) {
               {headline}
             </span>
           </div>
-          {/* Today pills if today is open later */}
-          {opensLaterToday && todayCats.length > 0 && (
+          {dayLabel && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>Today:</span>
-              <CatPills keys={todayCats} dark />
-            </div>
-          )}
-          {/* Up next preview */}
-          {nextDayLabel && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>
-                Up next · <span style={{ color: '#fbbfbf' }}>{nextDayLabel}:</span>
-              </span>
-              {nextCats.length > 0 ? (
-                <CatPills keys={nextCats} dark />
+              <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#fff' }}>{dayLabel}:</span>
+              {dayCats.length > 0 ? (
+                <CatPills keys={dayCats} dark />
               ) : (
-                <span style={{ fontSize: '0.78rem', color: '#bbb', fontStyle: 'italic' }}>shop's open</span>
+                <span style={{ fontSize: '0.78rem', color: '#bbb', fontStyle: 'italic' }}>{fallbackCopy}</span>
               )}
             </div>
           )}
