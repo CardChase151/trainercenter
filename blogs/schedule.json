@@ -1,5 +1,5 @@
 {
-  "next": 6,
+  "next": 7,
   "total": 12,
   "blogs": [
     {
@@ -36,7 +36,7 @@
       "num": 6,
       "file": "06-sleeve-and-protect.md",
       "title": "How to Properly Sleeve and Protect Your Cards",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 7,

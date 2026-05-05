@@ -144,7 +144,7 @@ const BLOG_DATA = [
   {
     slug: 'sleeve-and-protect',
     title: 'How to Properly Sleeve and Protect Your Pokemon Cards',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'You pulled a great card. Now what? If you toss it in a binder pocket or leave it on a table, you are risking damage that drops its value immediately. Proper protection takes about 10 seconds and costs almost nothing.' },
       { type: 'h2', text: 'The Basics: Penny Sleeve + Top Loader' },
