@@ -3,7 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3 } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase } from 'lucide-react';
 import * as tus from 'tus-js-client';
 import './App.css';
 
@@ -4191,13 +4191,13 @@ function VendorDayAboutPage({ isMobile }) {
           )}
 
           <div style={{ marginTop: '28px', textAlign: 'center' }}>
-            <Link to="/vendors/apply" style={{
+            <Link to="/vendors/dashboard" style={{
               backgroundColor: '#1a1a1a', color: '#fff',
               padding: '14px 28px', borderRadius: '10px',
               fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: '8px',
             }}>
-              Apply to vend <ArrowRight size={16} />
+              Open Vendor Dashboard <ArrowRight size={16} />
             </Link>
           </div>
         </div>
@@ -4520,171 +4520,14 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
   );
 }
 
-// ─── Vendors Page ─────────────────────────────────────────
-function VendorsPage({ isMobile, staff }) {
-  const isAdmin = !!staff?.isAdmin;
-  // Auth-aware fast path: if the viewer is already a logged-in vendor or
-  // member/guest, skip the public landing and drop them straight into their
-  // dashboard. `replace` keeps the back button from looping back to /vendors.
-  const { vendor, member, isLoading: authLoading } = useAuth();
-  const [winners, setWinners] = useState(null);
-
-  useEffect(() => {
-    // Fetch last Vendor Day winners (most recent past event with at least one vote)
-    supabase.rpc('get_last_voted_vendor_day').then(async ({ data }) => {
-      if (!data || data.length === 0) return;
-      const ev = data[0];
-      const { data: w } = await supabase.rpc('get_event_winners', { p_event_id: ev.event_id });
-      if (w && w.length > 0) setWinners({ event: ev, winners: w });
-    });
-  }, []);
-
-  // Wait for auth state to settle before deciding — otherwise the public
-  // page flashes for a frame on logged-in users while the session resolves.
-  if (!authLoading && vendor) {
-    return <Navigate to="/vendors/dashboard" replace />;
-  }
-  if (!authLoading && member && !vendor) {
-    return <Navigate to="/vendors/review" replace />;
-  }
-
-  return (
-    <PageWrapper isMobile={isMobile}>
-      <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Vendors" subtitle="Last-Friday Vendor Day at Trainer Center HB" />
-
-        {/* Intro + Apply CTA */}
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid #eee',
-          padding: isMobile ? '24px 16px' : '40px',
-          maxWidth: '900px',
-          margin: '0 auto 32px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-            <div style={{
-              width: '48px', height: '48px', borderRadius: '12px',
-              backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <Users size={24} color="#16a34a" />
-            </div>
-            <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-              Vendor Day at Trainer Center HB
-            </h3>
-          </div>
-
-          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
-            Every last Friday of the month, Pokemon vendors set up tables at Trainer Center HB, Huntington Beach. Bring your singles, sealed product, slabs, vintage, Japanese imports - whatever you specialize in. Trade with collectors, sell to walk-ins, and connect with the community.
-          </p>
-          <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '28px' }}>
-            Apply once, return every month with two clicks. After each event, share photos and a short clip from your table - we feature recent vendor posts right here on the page.
-          </p>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-            <Link to="/vendors/apply" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              backgroundColor: '#C8102E', color: '#fff',
-              padding: '12px 24px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
-            }}>
-              Apply to Vend
-            </Link>
-            <Link to="/vendors/review" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              backgroundColor: '#16a34a', color: '#fff',
-              padding: '12px 24px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
-            }}>
-              Sign in as Guest to Review
-            </Link>
-            <Link to="/vendors/dashboard" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              backgroundColor: '#fff', color: '#1a1a1a',
-              padding: '12px 24px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
-              border: '1px solid #ddd'
-            }}>
-              Vendor Login
-            </Link>
-            {isAdmin && (
-              <Link to="/staff/vendors" style={{
-                display: 'inline-flex', alignItems: 'center', gap: '8px',
-                backgroundColor: '#1a1a1a', color: '#fff',
-                padding: '12px 24px', borderRadius: '10px',
-                fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
-              }}>
-                Manage Vendors
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {/* Last Vendor Day winners */}
-        {winners && (
-          <div style={{ maxWidth: '1100px', margin: '0 auto 36px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>
-              Last Vendor Day Winners
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: '#888', margin: '0 0 16px 0' }}>
-              {winners.event.event_title || 'Vendor Day'} · {new Date(winners.event.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            </p>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-              gap: '14px'
-            }}>
-              {VOTE_CATEGORIES.map(c => {
-                const w = winners.winners.find(x => x.category === c.key);
-                return (
-                  <div key={c.key} style={{
-                    backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
-                    padding: '20px', textAlign: 'center'
-                  }}>
-                    <div style={{
-                      fontSize: '0.7rem', color: '#16a34a', fontWeight: '800',
-                      textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px'
-                    }}>
-                      {c.label}
-                    </div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '4px' }}>
-                      {w ? w.vendor_name : '—'}
-                    </div>
-                    {w && (
-                      <div style={{ fontSize: '0.78rem', color: '#888' }}>
-                        {w.vote_count} {w.vote_count === 1 ? 'vote' : 'votes'}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Pointer to the gallery, which now lives on /vendor-day/about. */}
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <Link to="/vendor-day/about" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: isMobile ? '14px 16px' : '16px 20px',
-            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
-            textDecoration: 'none', color: '#1a1a1a', gap: '12px',
-          }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: '800' }}>
-                See recent vendor posts + last event lineup
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
-                Photos and clips vendors uploaded after past Vendor Days
-              </div>
-            </div>
-            <ArrowRight size={18} color="#999" style={{ flexShrink: 0 }} />
-          </Link>
-        </div>
-      </div>
-    </PageWrapper>
-  );
+// ─── /vendors → redirect to /vendor-day/about ────────────
+// The old marketing landing was duplicating /vendor-day/about. We collapsed
+// them: /vendors now just bounces to the about page so anyone hitting the
+// short URL still lands on the canonical explainer + CTA into the dashboard.
+function VendorsPage() {
+  return <Navigate to="/vendor-day/about" replace />;
 }
+
 
 // ─── Vendor submission card on public feed ────────────────
 function VendorSubmissionCard({ submission }) {
@@ -5065,11 +4908,72 @@ function VendorEditProfilePage({ isMobile }) {
   );
 }
 
+// ─── Themed dashboard card primitives ─────────────────────
+// Reusable card grid for the role-aware /vendors/dashboard hub. Each card
+// is a Link with an icon, title, subtitle, and optional badge. Brand-aware
+// (Trainer Center red as the default accent) but accepts overrides per card.
+function DashboardCardGrid({ children, isMobile }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+      gap: '16px',
+      maxWidth: '900px',
+      margin: '0 auto',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function DashboardCard({ icon, title, subtitle, to, accent = '#C8102E', accentBg = '#fff0f0', badge }) {
+  return (
+    <Link to={to} style={{
+      display: 'flex', alignItems: 'center', gap: '16px',
+      backgroundColor: '#ffffff', border: '1px solid #eee',
+      borderRadius: '14px',
+      padding: '20px',
+      textDecoration: 'none', color: '#1a1a1a',
+      transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = '#eee'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <div style={{
+        width: '52px', height: '52px', borderRadius: '14px',
+        backgroundColor: accentBg, color: accent,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        {icon}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '1rem', fontWeight: '800', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {title}
+          {badge && (
+            <span style={{
+              fontSize: '0.65rem', fontWeight: '700',
+              color: accent, backgroundColor: '#fff', border: `1px solid ${accent}33`,
+              padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px',
+            }}>{badge}</span>
+          )}
+        </div>
+        <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: 1.4 }}>
+          {subtitle}
+        </div>
+      </div>
+      <ArrowRight size={20} color="#999" style={{ flexShrink: 0 }} />
+    </Link>
+  );
+}
+
 // ─── Vendor Dashboard Page ────────────────────────────────
-// Logged-in vendor home. Three states:
-//   1. Not logged in → prompt to go to /vendors/apply
-//   2. Logged in but no vendor row → onboarding form (collect full profile)
-//   3. Logged in with vendor row → normal dashboard with event apply/check-in
+// Role-aware hub. Five states:
+//   1. Not logged in → themed card grid (Log In / Apply / Guest Review / About)
+//   2. Staff (admin), no vendor row → staff hub (Manage Vendors / About)
+//   3. Logged in, no vendor row → onboarding form (collect full profile)
+//   4. Vendor (with admin) → vendor dashboard + Manage Vendors banner
+//   5. Vendor (no admin) → normal vendor dashboard
 function VendorDashboardPage({ isMobile }) {
   // Single source of truth for auth + roles. No local session/vendor
   // listeners -- they live at App root via AuthContext now, so navigating
@@ -5123,36 +5027,91 @@ function VendorDashboardPage({ isMobile }) {
     await signOut();
   };
 
-  // ─── State 1: not logged in ───────────────────
+  // ─── State 1: not logged in — themed card hub ─────────────
   if (authReady && !session) {
     return (
       <PageWrapper isMobile={isMobile}>
-        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
-          <SectionHeader title="Vendor Dashboard" subtitle="Log in to apply for upcoming Vendor Days" />
-          <div style={{
-            backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eee',
-            padding: isMobile ? '24px 20px' : '36px'
-          }}>
-            <p style={{ fontSize: '0.95rem', color: '#666', lineHeight: '1.7', marginBottom: '20px' }}>
-              You need to be logged in to see your dashboard.
-            </p>
-            <Link to="/vendors/apply" style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              backgroundColor: '#C8102E', color: '#fff',
-              padding: '12px 24px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none'
-            }}>
-              Log in / Apply
-            </Link>
-          </div>
+        <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
+          <SectionHeader title="Vendor Dashboard" subtitle="Last-Friday Vendor Day at Trainer Center HB" />
+          <DashboardCardGrid isMobile={isMobile}>
+            <DashboardCard
+              icon={<LogIn size={22} />}
+              title="Log In"
+              subtitle="Already a vendor? Sign in to your dashboard."
+              to="/vendors/apply"
+              accent="#C8102E"
+              accentBg="#fff0f0"
+            />
+            <DashboardCard
+              icon={<FileEdit size={22} />}
+              title="Apply / Sign Up"
+              subtitle="New here? Start your vendor application."
+              to="/vendors/apply"
+              accent="#1a1a1a"
+              accentBg="#f4f4f5"
+            />
+            <DashboardCard
+              icon={<Eye size={22} />}
+              title="Guest Review"
+              subtitle="Just want to vote on vendors? Sign in as guest."
+              to="/vendors/review"
+              accent="#16a34a"
+              accentBg="#f0fdf4"
+            />
+            <DashboardCard
+              icon={<HelpCircle size={22} />}
+              title="What is Vendor Day?"
+              subtitle="Read what these events are and how they work."
+              to="/vendor-day/about"
+              accent="#0369a1"
+              accentBg="#f0f9ff"
+            />
+          </DashboardCardGrid>
         </div>
       </PageWrapper>
     );
   }
 
-  // ─── Staff bypass: admins skip vendor onboarding ─────────
+  // ─── Staff (admin) WITHOUT a vendor row — staff hub ───────
+  // Chase is here. Show admin actions + the about page link, no vendor flow.
   if (authReady && session && isAdmin && !vendorLoading && !vendor) {
-    return <StaffBypassScreen isMobile={isMobile} title="You're staff, not a vendor" body="This dashboard is for outside vendors applying to Vendor Days. As staff you don't need a vendor profile." linkTo="/staff/vendors" linkLabel="Open Vendor Admin" />;
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
+          <SectionHeader title="Vendor Dashboard" subtitle="Staff view — manage vendors and review applications" />
+          <DashboardCardGrid isMobile={isMobile}>
+            <DashboardCard
+              icon={<Settings size={22} />}
+              title="Manage Vendors"
+              subtitle="Review applications, approve, edit, and check attendance."
+              to="/staff/vendors"
+              accent="#C8102E"
+              accentBg="#fff0f0"
+              badge="Staff"
+            />
+            <DashboardCard
+              icon={<HelpCircle size={22} />}
+              title="What is Vendor Day?"
+              subtitle="Read what these events are and how they work."
+              to="/vendor-day/about"
+              accent="#0369a1"
+              accentBg="#f0f9ff"
+            />
+          </DashboardCardGrid>
+          <div style={{ textAlign: 'center', marginTop: '24px' }}>
+            <button onClick={handleLogout} style={{
+              backgroundColor: '#fff', color: '#666',
+              padding: '10px 16px', borderRadius: '8px',
+              fontSize: '0.85rem', fontWeight: '600',
+              border: '1px solid #ddd', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: '6px'
+            }}>
+              <LogOut size={14} /> Log out
+            </button>
+          </div>
+        </div>
+      </PageWrapper>
+    );
   }
 
   // ─── State 2: logged in but no vendor row → onboarding ───
@@ -5196,6 +5155,41 @@ function VendorDashboardPage({ isMobile }) {
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
+
+        {/* Staff who are also vendors (Chef, Seth) get a Manage Vendors
+            shortcut at the top of their own vendor dashboard so they can
+            jump back into admin without bouncing through another page. */}
+        {isAdmin && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <Link to="/staff/vendors" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: '#fff0f0', border: '1px solid #fecdd3',
+              borderRadius: '12px',
+              padding: isMobile ? '14px 16px' : '16px 20px',
+              textDecoration: 'none', color: '#1a1a1a',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  backgroundColor: '#C8102E', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Settings size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '800', marginBottom: '2px' }}>
+                    Manage Vendors <span style={{ fontSize: '0.7rem', color: '#C8102E', fontWeight: '700', marginLeft: '6px', padding: '2px 8px', backgroundColor: '#fff', borderRadius: '999px', border: '1px solid #fecdd3' }}>Staff</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#666' }}>
+                    Review applications, approve, edit, check attendance
+                  </div>
+                </div>
+              </div>
+              <ArrowRight size={18} color="#C8102E" />
+            </Link>
+          </div>
+        )}
 
         {/* ── Partnership journey strip ───────────────────────
             5-step lifecycle visualizer. Step 1 reflects the vendor's
