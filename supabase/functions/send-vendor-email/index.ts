@@ -536,26 +536,26 @@ Deno.serve(async (req: Request) => {
       if (!bodyHtml && !bodyText) return json({ error: 'body required' }, 400)
 
       // Resolve audience → list of vendor rows
-      let targets: { id: string; name: string; email: string }[] = []
+      let targets: { id: string; name: string; email: string; user_id?: string }[] = []
       const eventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event']
       if (eventScoped.includes(audience) && !payload.event_id) {
         return json({ error: 'event_id required for this audience' }, 400)
       }
 
       if (audience === 'all') {
-        const { data, error } = await supabase.from('vendors').select('id, name, email')
+        const { data, error } = await supabase.from('vendors').select('id, name, email, user_id')
         if (error) return json({ error: error.message }, 500)
         targets = data || []
       } else if (audience === 'approved_all') {
-        const { data, error } = await supabase.from('vendors').select('id, name, email').eq('status', 'approved')
+        const { data, error } = await supabase.from('vendors').select('id, name, email, user_id').eq('status', 'approved')
         if (error) return json({ error: error.message }, 500)
         targets = data || []
       } else if (audience === 'pending_all') {
-        const { data, error } = await supabase.from('vendors').select('id, name, email').eq('status', 'pending')
+        const { data, error } = await supabase.from('vendors').select('id, name, email, user_id').eq('status', 'pending')
         if (error) return json({ error: error.message }, 500)
         targets = data || []
       } else if (audience === 'approved_not_applied') {
-        const { data: approved, error: vErr } = await supabase.from('vendors').select('id, name, email').eq('status', 'approved')
+        const { data: approved, error: vErr } = await supabase.from('vendors').select('id, name, email, user_id').eq('status', 'approved')
         if (vErr) return json({ error: vErr.message }, 500)
         const { data: apps } = await supabase.from('vendor_applications').select('vendor_id').eq('event_id', payload.event_id)
         const applied = new Set((apps || []).map(a => a.vendor_id))
@@ -563,7 +563,7 @@ Deno.serve(async (req: Request) => {
       } else if (audience === 'applied_any') {
         const { data: apps, error: aErr } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendor:vendors(id, name, email)')
+          .select('vendor_id, vendor:vendors(id, name, email, user_id)')
           .eq('event_id', payload.event_id)
         if (aErr) return json({ error: aErr.message }, 500)
         targets = (apps || [])
@@ -572,7 +572,7 @@ Deno.serve(async (req: Request) => {
       } else if (audience === 'approved_for_event') {
         const { data: apps, error: aErr } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendor:vendors(id, name, email)')
+          .select('vendor_id, vendor:vendors(id, name, email, user_id)')
           .eq('event_id', payload.event_id)
           .eq('status', 'approved')
         if (aErr) return json({ error: aErr.message }, 500)
@@ -582,7 +582,7 @@ Deno.serve(async (req: Request) => {
       } else if (audience === 'pending_for_event') {
         const { data: apps, error: aErr } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendor:vendors(id, name, email)')
+          .select('vendor_id, vendor:vendors(id, name, email, user_id)')
           .eq('event_id', payload.event_id)
           .eq('status', 'pending')
         if (aErr) return json({ error: aErr.message }, 500)
@@ -590,6 +590,13 @@ Deno.serve(async (req: Request) => {
           .map((a: any) => a.vendor)
           .filter((v: any) => v && v.email)
       }
+
+      // Exclude staff: vendors whose user_id maps to a profile with is_admin=true
+      // are people like Chef and Seth who happen to also have vendor rows. They
+      // shouldn't get marketing/comms blasts intended for outside vendors.
+      const { data: adminProfiles } = await supabase.from('profiles').select('id').eq('is_admin', true)
+      const adminIds = new Set((adminProfiles || []).map(p => p.id))
+      targets = targets.filter(v => !v.user_id || !adminIds.has(v.user_id))
 
       // Optional: append a small event banner if attach_event is set
       let eventBanner = ''

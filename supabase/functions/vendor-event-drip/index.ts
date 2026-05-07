@@ -261,12 +261,22 @@ Deno.serve(async (req) => {
     const appliedSet = new Set(apps.map((a: any) => a.vendor_id))
     const approvedForEventSet = new Set(apps.filter((a: any) => a.status === 'approved').map((a: any) => a.vendor_id))
 
-    // Track A: signup push (approved partners NOT yet applied to this event)
+    // Track A: signup push (approved partners NOT yet applied to this event).
+    // Exclude staff: vendors whose user_id maps to a profile with is_admin=true
+    // are people like Chef and Seth who also happen to be vendors. They don't
+    // need the drip — they ARE the people sending it.
     const signupStep = activeStep(SIGNUP_STEPS, daysUntil)
     if (signupStep) {
       const { data: approvedVendors } = await supabase
-        .from('vendors').select('id, name, email').eq('status', 'approved')
-      const targets = (approvedVendors || []).filter(v => !appliedSet.has(v.id) && v.email)
+        .from('vendors').select('id, name, email, user_id').eq('status', 'approved')
+      const { data: adminProfiles } = await supabase
+        .from('profiles').select('id').eq('is_admin', true)
+      const adminIds = new Set((adminProfiles || []).map(p => p.id))
+      const targets = (approvedVendors || []).filter(v =>
+        !appliedSet.has(v.id) &&
+        v.email &&
+        !adminIds.has(v.user_id)
+      )
       for (const v of targets) {
         // Pre-insert log row → unique constraint dedups
         const { error: logErr } = await supabase
@@ -292,14 +302,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Track B: lineup hype + logistics (approved FOR this event)
+    // Track B: lineup hype + logistics (approved FOR this event).
+    // Same staff exclusion — Chef/Seth showing up for vendor day doesn't mean
+    // they need the "see you there" autoreply.
     const lineupStep = activeStep(LINEUP_STEPS, daysUntil)
     if (lineupStep && approvedForEventSet.size > 0) {
       const ids = [...approvedForEventSet]
       const { data: approvedForEvent } = await supabase
-        .from('vendors').select('id, name, email').in('id', ids)
+        .from('vendors').select('id, name, email, user_id').in('id', ids)
+      const { data: adminProfilesB } = await supabase
+        .from('profiles').select('id').eq('is_admin', true)
+      const adminIdsB = new Set((adminProfilesB || []).map(p => p.id))
       for (const v of (approvedForEvent || [])) {
         if (!v.email) continue
+        if (adminIdsB.has(v.user_id)) continue
         const { error: logErr } = await supabase
           .from('vendor_email_log')
           .insert({ vendor_id: v.id, event_id: ev.id, step_key: lineupStep.key })
