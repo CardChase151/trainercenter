@@ -2083,7 +2083,7 @@ function OpenNowBanner({ isMobile }) {
           border: '1px solid #bbf7d0',
           borderRadius: '12px',
           padding: '14px 20px',
-          margin: isMobile ? '0 16px 24px' : '0 auto 32px',
+          margin: isMobile ? '24px 16px 32px' : '40px auto 48px',
           maxWidth: '1100px',
           display: 'flex',
           alignItems: 'center',
