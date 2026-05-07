@@ -8216,12 +8216,14 @@ function StaffVendorsPage({ isMobile, staff }) {
         .order('applied_at', { ascending: true }),
       // All vendors for the vendor list tab
       supabase.from('vendors').select('*').order('created_at', { ascending: false }),
-      // Upcoming Vendor Day events with their applications
+      // Vendor Day events (past + upcoming) with their applications.
+      // Ordered descending so the most-recent-or-soon events come first;
+      // EventRosterList splits past vs upcoming for the staff filter.
       supabase.from('events')
         .select('*, vendor_applications(*, vendor:vendors(*))')
         .eq('has_vendors', true)
-        .order('event_date', { ascending: true })
-        .limit(6),
+        .order('event_date', { ascending: false })
+        .limit(100),
       supabase.from('vendor_attendance').select('*'),
       // Member visits joined with member + attributed vendor
       supabase.from('member_event_visits')
@@ -8391,7 +8393,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} onDecide={decideApplication} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
@@ -8718,161 +8720,282 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
-function EventRosterList({ events, attendance, allVendors, profilesById, onDecide, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, onDecide, onOpenDetail, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
+  const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(() => new Set()); // event ids expanded
 
-  if (events.length === 0) {
-    return (
-      <div style={{
-        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
-        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
-      }}>
-        No upcoming Vendor Day events. Add one in the calendar with category "Vendor Day".
-      </div>
-    );
-  }
+  const todayStr = todayISO();
+  // Split events by date: upcoming (today + future) ascending so the next
+  // event is at top; past (before today) descending so the most recent is on top.
+  const upcoming = events
+    .filter(ev => ev.event_date >= todayStr)
+    .slice()
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const past = events
+    .filter(ev => ev.event_date < todayStr)
+    .slice()
+    .sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+  const list = filter === 'upcoming' ? upcoming : past;
+
+  // Search filter: match event title OR any vendor name in the roster.
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? list : list.filter(ev => {
+    if ((ev.title || '').toLowerCase().includes(q)) return true;
+    const apps = ev.vendor_applications || [];
+    return apps.some(a => ((a.vendor || {}).name || '').toLowerCase().includes(q));
+  });
+
+  // When the user searches, auto-expand matching events so vendor hits show.
+  const effectiveExpanded = q
+    ? new Set(filtered.map(ev => ev.id))
+    : expanded;
+
+  const toggle = (id) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const segBtn = (active) => ({
+    flex: 1,
+    padding: '10px 14px',
+    border: 'none',
+    backgroundColor: active ? '#1a1a1a' : '#fff',
+    color: active ? '#fff' : '#666',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    fontWeight: '700',
+    cursor: 'pointer',
+    border: active ? 'none' : '1px solid #ddd',
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {events.map(ev => {
-        const apps = ev.vendor_applications || [];
-        const evAttend = attendance[ev.id] || {};
-        const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-        const approved = apps.filter(a => a.status === 'approved');
-        const pending = apps.filter(a => a.status === 'pending');
-        return (
-          <div key={ev.id} style={{
-            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
-            padding: isMobile ? '16px' : '20px 24px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-              <div>
-                <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
-                <div style={{ fontSize: '0.85rem', color: '#666' }}>{dateStr}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ fontSize: '0.8rem', color: '#666' }}>
-                  {approved.length} approved · {pending.length} pending
+    <div>
+      {/* Upcoming / Past segmented control */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+        <button onClick={() => setFilter('upcoming')} style={segBtn(filter === 'upcoming')}>
+          Upcoming Events ({upcoming.length})
+        </button>
+        <button onClick={() => setFilter('past')} style={segBtn(filter === 'past')}>
+          Past Events ({past.length})
+        </button>
+      </div>
+
+      {/* Search */}
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by event or vendor name…"
+        style={{
+          width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+          border: '1px solid #ddd', borderRadius: '8px',
+          marginBottom: '16px', boxSizing: 'border-box',
+        }}
+      />
+
+      {filtered.length === 0 ? (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+          padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+        }}>
+          {q ? 'No matches.' : (
+            filter === 'upcoming'
+              ? 'No upcoming Vendor Day events. Add one in the calendar with category "Vendor Day".'
+              : 'No past Vendor Day events.'
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filtered.map(ev => {
+            const apps = ev.vendor_applications || [];
+            const evAttend = attendance[ev.id] || {};
+            const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+            const approved = apps.filter(a => a.status === 'approved');
+            const pending = apps.filter(a => a.status === 'pending');
+            const isExpanded = effectiveExpanded.has(ev.id);
+            const isPast = ev.event_date < todayStr;
+            return (
+              <div key={ev.id} style={{
+                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+                overflow: 'hidden',
+              }}>
+                {/* Header row — clickable to expand/collapse */}
+                <div
+                  onClick={() => toggle(ev.id)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: '8px',
+                    padding: isMobile ? '14px 16px' : '16px 20px',
+                    cursor: 'pointer',
+                    backgroundColor: isExpanded ? '#fafafa' : '#fff',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <ChevronDown
+                      size={18}
+                      color="#999"
+                      style={{
+                        transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                        transition: 'transform 0.15s',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#666' }}>{dateStr}</div>
+                    </div>
+                  </div>
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}
+                  >
+                    <span style={{ fontSize: '0.78rem', color: '#666' }}>
+                      {approved.length} approved · {pending.length} pending
+                    </span>
+                    {ev.cancelled ? (
+                      <span style={{
+                        backgroundColor: '#fef2f2', color: '#dc2626',
+                        padding: '3px 10px', borderRadius: '999px',
+                        fontWeight: '800', fontSize: '0.68rem',
+                        textTransform: 'uppercase', letterSpacing: '0.5px',
+                        border: '1px solid #fecaca'
+                      }}>
+                        Cancelled
+                      </span>
+                    ) : !isPast && (
+                      <>
+                        <button onClick={() => setAddingTo(ev)} style={{
+                          backgroundColor: '#16a34a', color: '#fff', border: 'none',
+                          padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                          fontSize: '0.75rem', cursor: 'pointer',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px'
+                        }}>
+                          <Plus size={12} /> Add vendor
+                        </button>
+                        <button onClick={() => setCancelling(ev)} style={{
+                          backgroundColor: '#fff', color: '#dc2626',
+                          padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                          fontSize: '0.75rem', cursor: 'pointer',
+                          border: '1px solid #fecaca'
+                        }}>
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                {ev.cancelled ? (
-                  <span style={{
-                    backgroundColor: '#fef2f2', color: '#dc2626',
-                    padding: '4px 10px', borderRadius: '20px',
-                    fontWeight: '800', fontSize: '0.7rem',
-                    textTransform: 'uppercase', letterSpacing: '0.5px',
-                    border: '1px solid #fecaca'
-                  }}>
-                    Cancelled
-                  </span>
-                ) : (
-                  <>
-                    <button onClick={() => setAddingTo(ev)} style={{
-                      backgroundColor: '#16a34a', color: '#fff', border: 'none',
-                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                      fontSize: '0.78rem', cursor: 'pointer',
-                      display: 'inline-flex', alignItems: 'center', gap: '4px'
-                    }}>
-                      <Plus size={13} /> Add vendor
-                    </button>
-                    <button onClick={() => setCancelling(ev)} style={{
-                      backgroundColor: '#fff', color: '#dc2626',
-                      padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                      fontSize: '0.78rem', cursor: 'pointer',
-                      border: '1px solid #fecaca'
-                    }}>
-                      Cancel event
-                    </button>
-                  </>
+
+                {/* Roster (only when expanded) */}
+                {isExpanded && (
+                  <div style={{ padding: isMobile ? '0 16px 14px' : '0 20px 16px' }}>
+                    {apps.length === 0 ? (
+                      <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic', paddingTop: '8px' }}>No applications yet.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px' }}>
+                        {apps.slice().sort((a, b) => (((a.vendor||{}).name||'').localeCompare(((b.vendor||{}).name||''), undefined, { sensitivity: 'base' }))).map(a => {
+                          const checkedIn = evAttend[a.vendor_id];
+                          const v = a.vendor || {};
+                          // Per-event approver — only when approved + decided_by recorded
+                          let apprLabel = null;
+                          if (a.status === 'approved' && a.decided_by) {
+                            const p = (profilesById || {})[a.decided_by];
+                            const who = p?.name || p?.email || 'staff';
+                            const when = a.decided_at
+                              ? new Date(a.decided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              : null;
+                            apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
+                          }
+                          return (
+                            <div
+                              key={a.id}
+                              onClick={() => onOpenDetail && onOpenDetail(v)}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '8px 12px', backgroundColor: '#fafafa', borderRadius: '8px',
+                                fontSize: '0.85rem', flexWrap: 'wrap', gap: '8px',
+                                cursor: onOpenDetail ? 'pointer' : 'default',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={e => { if (onOpenDetail) e.currentTarget.style.background = '#f4f4f5'; }}
+                              onMouseLeave={e => { if (onOpenDetail) e.currentTarget.style.background = '#fafafa'; }}
+                            >
+                              <div>
+                                <strong>{v.name}</strong>
+                                {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
+                                {(a.requested_start_time || a.requested_end_time) && (
+                                  <span style={{
+                                    marginLeft: '8px',
+                                    display: 'inline-flex', alignItems: 'center', gap: '3px',
+                                    fontSize: '0.7rem', fontWeight: '700',
+                                    color: '#15803d', backgroundColor: '#f0fdf4',
+                                    padding: '2px 8px', borderRadius: '999px',
+                                  }}>
+                                    <Clock size={10} />
+                                    {formatTime12h(a.requested_start_time) || '?'}–{formatTime12h(a.requested_end_time) || '?'}
+                                  </span>
+                                )}
+                                {a.vendor_note && (
+                                  <div style={{
+                                    fontSize: '0.78rem', color: '#444', marginTop: '4px',
+                                    fontStyle: 'italic', maxWidth: '480px',
+                                  }}>
+                                    "{a.vendor_note}"
+                                  </div>
+                                )}
+                                {apprLabel && (
+                                  <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
+                                    {apprLabel}
+                                  </div>
+                                )}
+                              </div>
+                              <div
+                                onClick={e => e.stopPropagation()}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                              >
+                                <ApplicationStatusBadge status={a.status} />
+                                {a.status === 'approved' && (
+                                  checkedIn ? (
+                                    <span style={{
+                                      fontSize: '0.7rem', backgroundColor: '#f0fdf4', color: '#15803d',
+                                      padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
+                                    }}>
+                                      {checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}
+                                    </span>
+                                  ) : (
+                                    <span style={{
+                                      fontSize: '0.7rem', backgroundColor: '#f3f4f6', color: '#6b7280',
+                                      padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
+                                    }}>
+                                      Not checked in
+                                    </span>
+                                  )
+                                )}
+                                {a.status === 'pending' && !isPast && (
+                                  <button onClick={() => onDecide(a.id, 'approved', null)} style={{
+                                    fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
+                                    border: 'none', padding: '4px 10px', borderRadius: '6px',
+                                    fontWeight: '700', cursor: 'pointer'
+                                  }}>Approve</button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-            {apps.length === 0 ? (
-              <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic' }}>No applications yet.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {apps.map(a => {
-                  const checkedIn = evAttend[a.vendor_id];
-                  const v = a.vendor || {};
-                  // Per-event approver — only when approved + decided_by recorded
-                  let apprLabel = null;
-                  if (a.status === 'approved' && a.decided_by) {
-                    const p = (profilesById || {})[a.decided_by];
-                    const who = p?.name || p?.email || 'staff';
-                    const when = a.decided_at
-                      ? new Date(a.decided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                      : null;
-                    apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
-                  }
-                  return (
-                    <div key={a.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '8px 12px', backgroundColor: '#fafafa', borderRadius: '8px',
-                      fontSize: '0.85rem', flexWrap: 'wrap', gap: '8px'
-                    }}>
-                      <div>
-                        <strong>{v.name}</strong>
-                        {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
-                        {(a.requested_start_time || a.requested_end_time) && (
-                          <span style={{
-                            marginLeft: '8px',
-                            display: 'inline-flex', alignItems: 'center', gap: '3px',
-                            fontSize: '0.7rem', fontWeight: '700',
-                            color: '#15803d', backgroundColor: '#f0fdf4',
-                            padding: '2px 8px', borderRadius: '999px',
-                          }}>
-                            <Clock size={10} />
-                            {formatTime12h(a.requested_start_time) || '?'}–{formatTime12h(a.requested_end_time) || '?'}
-                          </span>
-                        )}
-                        {a.vendor_note && (
-                          <div style={{
-                            fontSize: '0.78rem', color: '#444', marginTop: '4px',
-                            fontStyle: 'italic', maxWidth: '480px',
-                          }}>
-                            "{a.vendor_note}"
-                          </div>
-                        )}
-                        {apprLabel && (
-                          <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
-                            {apprLabel}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ApplicationStatusBadge status={a.status} />
-                        {a.status === 'approved' && (
-                          checkedIn ? (
-                            <span style={{
-                              fontSize: '0.7rem', backgroundColor: '#f0fdf4', color: '#15803d',
-                              padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
-                            }}>
-                              {checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}
-                            </span>
-                          ) : (
-                            <span style={{
-                              fontSize: '0.7rem', backgroundColor: '#f3f4f6', color: '#6b7280',
-                              padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
-                            }}>
-                              Not checked in
-                            </span>
-                          )
-                        )}
-                        {a.status === 'pending' && (
-                          <button onClick={() => onDecide(a.id, 'approved', null)} style={{
-                            fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
-                            border: 'none', padding: '4px 10px', borderRadius: '6px',
-                            fontWeight: '700', cursor: 'pointer'
-                          }}>Approve</button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
 
       {addingTo && (
         <AddVendorToEventModal
@@ -9113,24 +9236,43 @@ function ApplicationStatusBadge({ status }) {
 // Brand-new signups awaiting partner approval. Distinct from "Pending requests"
 // which are already-approved vendors applying to a specific event date.
 function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMobile }) {
-  if (vendors.length === 0) {
-    return (
-      <div style={{
-        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
-        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
-      }}>
-        No new vendor applications. When someone signs up to become a vendor, they'll show up here.
-      </div>
-    );
-  }
+  const [search, setSearch] = useState('');
   const fmtDate = (iso) => {
     if (!iso) return '';
     const d = new Date(iso);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
+  // Alphabetize by name (case-insensitive). Keeps the list predictable as it grows.
+  const sorted = vendors.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? sorted : sorted.filter(v =>
+    (v.name || '').toLowerCase().includes(q) ||
+    (v.email || '').toLowerCase().includes(q) ||
+    (v.specialty || '').toLowerCase().includes(q)
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {vendors.map(v => (
+    <div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name, email, or specialty…"
+        style={{
+          width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+          border: '1px solid #ddd', borderRadius: '8px',
+          marginBottom: '12px', boxSizing: 'border-box',
+        }}
+      />
+      {filtered.length === 0 ? (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+          padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+        }}>
+          {q ? 'No matches.' : 'No new vendor applications. When someone signs up to become a vendor, they\'ll show up here.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {filtered.map(v => (
         <VendorRichCard
           key={v.id}
           vendor={v}
@@ -9162,21 +9304,16 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
           }
         />
       ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, isMobile }) {
-  if (vendors.length === 0) {
-    return (
-      <div style={{
-        backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
-        padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
-      }}>
-        No vendors yet.
-      </div>
-    );
-  }
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
+
   const approverLabel = (v) => {
     if (v.status !== 'approved' || !v.approved_by) return null;
     const p = (profilesById || {})[v.approved_by];
@@ -9221,9 +9358,64 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
     }
     return null;
   };
+
+  // Alphabetize → status filter → search filter.
+  const sorted = vendors.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  const byStatus = statusFilter === 'all' ? sorted : sorted.filter(v => v.status === statusFilter);
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? byStatus : byStatus.filter(v =>
+    (v.name || '').toLowerCase().includes(q) ||
+    (v.email || '').toLowerCase().includes(q) ||
+    (v.specialty || '').toLowerCase().includes(q)
+  );
+
+  const statusBtn = (active) => ({
+    padding: '6px 12px',
+    border: active ? 'none' : '1px solid #ddd',
+    backgroundColor: active ? '#1a1a1a' : '#fff',
+    color: active ? '#fff' : '#666',
+    borderRadius: '6px',
+    fontSize: '0.78rem',
+    fontWeight: '700',
+    cursor: 'pointer',
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {vendors.map(v => {
+    <div>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        <button onClick={() => setStatusFilter('all')} style={statusBtn(statusFilter === 'all')}>
+          All ({sorted.length})
+        </button>
+        <button onClick={() => setStatusFilter('approved')} style={statusBtn(statusFilter === 'approved')}>
+          Approved ({sorted.filter(v => v.status === 'approved').length})
+        </button>
+        <button onClick={() => setStatusFilter('pending')} style={statusBtn(statusFilter === 'pending')}>
+          Pending ({sorted.filter(v => v.status === 'pending').length})
+        </button>
+        <button onClick={() => setStatusFilter('suspended')} style={statusBtn(statusFilter === 'suspended')}>
+          Suspended ({sorted.filter(v => v.status === 'suspended').length})
+        </button>
+      </div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by name, email, or specialty…"
+        style={{
+          width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+          border: '1px solid #ddd', borderRadius: '8px',
+          marginBottom: '12px', boxSizing: 'border-box',
+        }}
+      />
+      {filtered.length === 0 ? (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+          padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+        }}>
+          {q || statusFilter !== 'all' ? 'No matches.' : 'No vendors yet.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {filtered.map(v => {
         return (
           <VendorRichCard
             key={v.id}
@@ -9253,6 +9445,8 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
           />
         );
       })}
+        </div>
+      )}
     </div>
   );
 }
