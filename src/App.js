@@ -7952,7 +7952,7 @@ function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
 // One layout used across "Newly applying", "All vendors", etc. Click a card
 // → opens VendorDetailModal with everything the vendor submitted.
 
-function VendorRichCard({ vendor, statusBadge, actions, onClick, isMobile }) {
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile }) {
   const v = vendor;
   return (
     <div
@@ -8005,6 +8005,11 @@ function VendorRichCard({ vendor, statusBadge, actions, onClick, isMobile }) {
           <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
             {v.heard_from && <span>Heard from: {String(v.heard_from).replace(/_/g, ' ')}</span>}
             {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
+          </div>
+        )}
+        {decisionLine && (
+          <div style={{ marginTop: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
+            {decisionLine}
           </div>
         )}
       </div>
@@ -9136,6 +9141,9 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
               Applied {fmtDate(v.created_at)}
             </span>
           }
+          decisionLine={
+            <span style={{ color: '#c2410c' }}>Pending approval</span>
+          }
           actions={
             <>
               <button onClick={() => onStatusChange(v.id, 'approved')} style={{
@@ -9195,23 +9203,35 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
       }}>{m.label}</span>
     );
   };
+  // Decision line per status: approved → green "Approved by NAME · DATE",
+  // pending → orange "Pending approval", suspended → red "Suspended" (with
+  // the same approver context for who took the action).
+  const decisionFor = (v) => {
+    if (v.status === 'approved') {
+      const apprLabel = approverLabel(v);
+      return apprLabel
+        ? <span style={{ color: '#16a34a' }}>{apprLabel}</span>
+        : <span style={{ color: '#16a34a' }}>Approved partner</span>;
+    }
+    if (v.status === 'pending') {
+      return <span style={{ color: '#c2410c' }}>Pending approval</span>;
+    }
+    if (v.status === 'suspended') {
+      return <span style={{ color: '#991b1b' }}>Suspended</span>;
+    }
+    return null;
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {vendors.map(v => {
-        const apprLabel = approverLabel(v);
-        const richVendor = apprLabel
-          // Quick way to show approver line on the rich card without expanding the
-          // shared component: piggyback on bio if there's no real bio. Otherwise
-          // it shows in the modal's Approval section.
-          ? v
-          : v;
         return (
           <VendorRichCard
             key={v.id}
-            vendor={richVendor}
+            vendor={v}
             isMobile={isMobile}
             onClick={() => onOpenDetail && onOpenDetail(v)}
             statusBadge={badgeFor(v.status)}
+            decisionLine={decisionFor(v)}
             actions={
               <>
                 {v.status !== 'approved' && (
