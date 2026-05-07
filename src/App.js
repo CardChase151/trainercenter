@@ -8201,6 +8201,8 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [refreshKey, setRefreshKey] = useState(0);
   // Vendor detail modal — clicking any vendor card opens this with full info.
   const [detailVendor, setDetailVendor] = useState(null);
+  // Comms broadcast modal — Chef-composed email blast to vendor audiences.
+  const [showComms, setShowComms] = useState(false);
 
   const isAdmin = !!staff?.isAdmin;
 
@@ -8353,6 +8355,18 @@ function StaffVendorsPage({ isMobile, staff }) {
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title="Vendor Admin" subtitle="Approve vendor profiles, then schedule them per Vendor Day" />
 
+        {/* Top action bar — comms broadcast lives here so it's accessible from any tab */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', maxWidth: '1100px', margin: '0 auto 12px' }}>
+          <button onClick={() => setShowComms(true)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            backgroundColor: '#1a1a1a', color: '#fff', border: 'none',
+            padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
+            fontSize: '0.85rem', cursor: 'pointer'
+          }}>
+            <Mail size={14} /> Comms broadcast
+          </button>
+        </div>
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', maxWidth: '1100px', margin: '0 auto 24px', flexWrap: 'wrap' }}>
           <button onClick={() => setTab('new')} style={tabBtnStyle(tab === 'new')}>
@@ -8411,6 +8425,14 @@ function StaffVendorsPage({ isMobile, staff }) {
           vendor={detailVendor}
           profilesById={profilesById}
           onClose={() => setDetailVendor(null)}
+        />
+      )}
+
+      {showComms && (
+        <VendorCommsModal
+          events={events}
+          allVendors={allVendors}
+          onClose={() => setShowComms(false)}
         />
       )}
     </PageWrapper>
@@ -9020,6 +9042,247 @@ function EventRosterList({ events, attendance, allVendors, profilesById, onDecid
 
 // Modal for soft-cancelling an event. Marks events.cancelled=true with reason
 // and fires the event_cancelled email to every applicant (approved + pending).
+// ─── Vendor Comms (broadcast) modal ───────────────────────
+// Chef-composed email blast. Pick an audience (event-scoped or global), write
+// subject + body, send. Server-side resolves the audience and BCCs
+// chef@trainercenter.com so Chef has the email in his own inbox as a record.
+function VendorCommsModal({ events, allVendors, onClose }) {
+  const [audience, setAudience] = useState('approved_all');
+  const [eventId, setEventId] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [attachEvent, setAttachEvent] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  // Sort events: upcoming ascending first, then past descending. Most useful
+  // ordering for picking an event to scope a comms blast against.
+  const todayStr = todayISO();
+  const sortedEvents = (events || []).slice().sort((a, b) => {
+    const aPast = a.event_date < todayStr;
+    const bPast = b.event_date < todayStr;
+    if (aPast !== bPast) return aPast ? 1 : -1;
+    return aPast
+      ? b.event_date.localeCompare(a.event_date)
+      : a.event_date.localeCompare(b.event_date);
+  });
+
+  const eventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event'];
+  const needsEvent = eventScoped.includes(audience);
+
+  // Live audience count preview
+  const previewCount = (() => {
+    if (audience === 'all') return allVendors.length;
+    if (audience === 'approved_all') return allVendors.filter(v => v.status === 'approved').length;
+    if (audience === 'pending_all') return allVendors.filter(v => v.status === 'pending').length;
+    if (!needsEvent || !eventId) return null;
+    const ev = sortedEvents.find(e => e.id === eventId);
+    if (!ev) return null;
+    const apps = ev.vendor_applications || [];
+    if (audience === 'approved_not_applied') {
+      const applied = new Set(apps.map(a => a.vendor_id));
+      return allVendors.filter(v => v.status === 'approved' && !applied.has(v.id)).length;
+    }
+    if (audience === 'applied_any') return apps.length;
+    if (audience === 'approved_for_event') return apps.filter(a => a.status === 'approved').length;
+    if (audience === 'pending_for_event') return apps.filter(a => a.status === 'pending').length;
+    return null;
+  })();
+
+  const audienceOptions = [
+    { value: 'approved_all', label: 'All approved partners' },
+    { value: 'pending_all', label: 'All pending applicants' },
+    { value: 'all', label: 'Every vendor (approved + pending + suspended)' },
+    { value: 'approved_not_applied', label: 'Approved partners NOT signed up for this event' },
+    { value: 'approved_for_event', label: 'Approved for this event' },
+    { value: 'pending_for_event', label: 'Pending for this event' },
+    { value: 'applied_any', label: 'Anyone who applied for this event (any status)' },
+  ];
+
+  const send = async () => {
+    setError('');
+    if (!subject.trim()) { setError('Subject is required.'); return; }
+    if (!body.trim()) { setError('Message body is required.'); return; }
+    if (needsEvent && !eventId) { setError('Pick an event for this audience.'); return; }
+    if (previewCount === 0) { setError('No recipients match this audience.'); return; }
+    if (!window.confirm(`Send to ${previewCount ?? '?'} vendors? BCC will go to chef@trainercenter.com.`)) return;
+    setSending(true);
+    try {
+      const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-vendor-email`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          type: 'vendor_broadcast',
+          audience,
+          event_id: needsEvent ? eventId : undefined,
+          subject: subject.trim(),
+          body_text: body.trim(),
+          attach_event: needsEvent && attachEvent,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Send failed');
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    }
+    setSending(false);
+  };
+
+  const fmtEventOption = (ev) => {
+    const d = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const past = ev.event_date < todayStr;
+    return `${past ? '(past) ' : ''}${ev.title || 'Vendor Day'} · ${d}`;
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px', overflow: 'auto'
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        backgroundColor: '#fff', borderRadius: '14px',
+        maxWidth: '640px', width: '100%',
+        maxHeight: '92vh', overflowY: 'auto',
+        padding: '24px', position: 'relative',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.2)'
+      }}>
+        <button onClick={onClose} style={{
+          position: 'absolute', top: '14px', right: '14px',
+          background: '#f4f4f5', border: 'none', borderRadius: '50%',
+          width: '32px', height: '32px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer'
+        }}>
+          <X size={16} />
+        </button>
+
+        <h2 style={{ fontSize: '1.2rem', fontWeight: '800', margin: '0 0 4px' }}>Send broadcast to vendors</h2>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 20px' }}>
+          BCC's <code>chef@trainercenter.com</code> on every send.
+        </p>
+
+        {result ? (
+          <div style={{
+            backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+            borderRadius: '8px', padding: '14px 16px', marginBottom: '16px'
+          }}>
+            <div style={{ fontWeight: '800', color: '#15803d', marginBottom: '4px' }}>Sent to {result.count} vendor{result.count === 1 ? '' : 's'}</div>
+            {result.failed && result.failed.length > 0 && (
+              <div style={{ fontSize: '0.85rem', color: '#991b1b' }}>
+                Failed: {result.failed.length} ({result.failed.join(', ')})
+              </div>
+            )}
+            <button onClick={onClose} style={{
+              marginTop: '12px',
+              backgroundColor: '#1a1a1a', color: '#fff', border: 'none',
+              padding: '8px 18px', borderRadius: '6px', fontWeight: '700',
+              cursor: 'pointer'
+            }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <Field label="Audience">
+              <select value={audience} onChange={e => setAudience(e.target.value)} style={selectStyle}>
+                {audienceOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+
+            {needsEvent && (
+              <Field label="Event">
+                <select value={eventId} onChange={e => setEventId(e.target.value)} style={selectStyle}>
+                  <option value="">— Pick an event —</option>
+                  {sortedEvents.map(ev => (
+                    <option key={ev.id} value={ev.id}>{fmtEventOption(ev)}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+
+            {needsEvent && (
+              <Field label="">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#444', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={attachEvent} onChange={e => setAttachEvent(e.target.checked)} />
+                  Attach event title + date to the bottom of the email
+                </label>
+              </Field>
+            )}
+
+            <div style={{
+              backgroundColor: '#f9fafb', border: '1px solid #e5e7eb',
+              borderRadius: '8px', padding: '10px 14px', marginBottom: '16px',
+              fontSize: '0.85rem', color: '#374151'
+            }}>
+              {previewCount === null ? (
+                <span style={{ color: '#999' }}>Pick an event to see the audience size</span>
+              ) : (
+                <span><strong>{previewCount}</strong> vendor{previewCount === 1 ? '' : 's'} will receive this email</span>
+              )}
+            </div>
+
+            <Field label="Subject">
+              <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Quick update on May 29 layout" style={inputStyle} />
+            </Field>
+
+            <Field label="Message">
+              <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Plain text. Line breaks become paragraphs."
+                rows={8}
+                style={{ ...inputStyle, fontFamily: 'inherit', resize: 'vertical' }}
+              />
+              <div style={{ fontSize: '0.75rem', color: '#999', marginTop: '4px' }}>
+                Goes out wrapped in the standard Trainer Center HB email template (red header, address footer, dashboard CTA).
+              </div>
+            </Field>
+
+            {error && (
+              <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '6px', padding: '10px 14px', marginBottom: '14px', fontSize: '0.85rem' }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button onClick={onClose} disabled={sending} style={{
+                backgroundColor: '#fff', color: '#666',
+                border: '1px solid #ddd', padding: '10px 18px',
+                borderRadius: '8px', fontWeight: '700', cursor: 'pointer'
+              }}>Cancel</button>
+              <button onClick={send} disabled={sending || !subject.trim() || !body.trim() || (needsEvent && !eventId)} style={{
+                backgroundColor: '#C8102E', color: '#fff', border: 'none',
+                padding: '10px 22px', borderRadius: '8px', fontWeight: '700',
+                cursor: sending ? 'wait' : 'pointer',
+                opacity: (!subject.trim() || !body.trim() || (needsEvent && !eventId)) ? 0.5 : 1
+              }}>
+                {sending ? 'Sending…' : `Send${previewCount != null ? ` to ${previewCount}` : ''}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const inputStyle = {
+  width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+  border: '1px solid #ddd', borderRadius: '8px', boxSizing: 'border-box',
+};
+const selectStyle = { ...inputStyle, backgroundColor: '#fff' };
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: '14px' }}>
+      {label && <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#444', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</label>}
+      {children}
+    </div>
+  );
+}
+
 function CancelEventModal({ event, onClose, onCancelled }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);

@@ -31,7 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast'
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
@@ -40,20 +40,28 @@ type Payload = {
   event_id?: string
   reason?: string
   is_first_time?: boolean
+  // Fields used by 'vendor_broadcast': flexible Chef-composed comms blast
+  audience?: 'all' | 'approved_all' | 'pending_all' | 'approved_not_applied' | 'applied_any' | 'approved_for_event' | 'pending_for_event'
+  subject?: string
+  body_html?: string
+  body_text?: string
+  attach_event?: boolean
 }
 
-async function sendResendEmail(to: string[], subject: string, html: string, text: string) {
+async function sendResendEmail(to: string[], subject: string, html: string, text: string, bcc?: string[]) {
   if (!RESEND_API_KEY) {
     console.log('[send-vendor-email] RESEND_API_KEY not set; skipping send')
     return { skipped: true }
   }
+  const body: Record<string, unknown> = { from: FROM_ADDRESS, to, subject, html, text }
+  if (bcc && bcc.length > 0) body.bcc = bcc
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html, text }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const err = await res.text()
@@ -512,6 +520,110 @@ Deno.serve(async (req: Request) => {
         sentTo.push(v.email)
       }
       return json({ ok: true, sent: sentTo, count: sentTo.length })
+    }
+
+    if (type === 'vendor_broadcast') {
+      // Chef-composed comms blast. Audience is resolved server-side from the
+      // filter spec — never trust a client-supplied email list. BCC's
+      // chef@trainercenter.com on every send so Chef has the broadcast in his
+      // own inbox as a record.
+      const audience = payload.audience
+      const subject = (payload.subject || '').trim()
+      const bodyHtml = (payload.body_html || '').trim()
+      const bodyText = (payload.body_text || '').trim()
+      if (!audience) return json({ error: 'audience required' }, 400)
+      if (!subject) return json({ error: 'subject required' }, 400)
+      if (!bodyHtml && !bodyText) return json({ error: 'body required' }, 400)
+
+      // Resolve audience → list of vendor rows
+      let targets: { id: string; name: string; email: string }[] = []
+      const eventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event']
+      if (eventScoped.includes(audience) && !payload.event_id) {
+        return json({ error: 'event_id required for this audience' }, 400)
+      }
+
+      if (audience === 'all') {
+        const { data, error } = await supabase.from('vendors').select('id, name, email')
+        if (error) return json({ error: error.message }, 500)
+        targets = data || []
+      } else if (audience === 'approved_all') {
+        const { data, error } = await supabase.from('vendors').select('id, name, email').eq('status', 'approved')
+        if (error) return json({ error: error.message }, 500)
+        targets = data || []
+      } else if (audience === 'pending_all') {
+        const { data, error } = await supabase.from('vendors').select('id, name, email').eq('status', 'pending')
+        if (error) return json({ error: error.message }, 500)
+        targets = data || []
+      } else if (audience === 'approved_not_applied') {
+        const { data: approved, error: vErr } = await supabase.from('vendors').select('id, name, email').eq('status', 'approved')
+        if (vErr) return json({ error: vErr.message }, 500)
+        const { data: apps } = await supabase.from('vendor_applications').select('vendor_id').eq('event_id', payload.event_id)
+        const applied = new Set((apps || []).map(a => a.vendor_id))
+        targets = (approved || []).filter(v => !applied.has(v.id))
+      } else if (audience === 'applied_any') {
+        const { data: apps, error: aErr } = await supabase
+          .from('vendor_applications')
+          .select('vendor_id, vendor:vendors(id, name, email)')
+          .eq('event_id', payload.event_id)
+        if (aErr) return json({ error: aErr.message }, 500)
+        targets = (apps || [])
+          .map((a: any) => a.vendor)
+          .filter((v: any) => v && v.email)
+      } else if (audience === 'approved_for_event') {
+        const { data: apps, error: aErr } = await supabase
+          .from('vendor_applications')
+          .select('vendor_id, vendor:vendors(id, name, email)')
+          .eq('event_id', payload.event_id)
+          .eq('status', 'approved')
+        if (aErr) return json({ error: aErr.message }, 500)
+        targets = (apps || [])
+          .map((a: any) => a.vendor)
+          .filter((v: any) => v && v.email)
+      } else if (audience === 'pending_for_event') {
+        const { data: apps, error: aErr } = await supabase
+          .from('vendor_applications')
+          .select('vendor_id, vendor:vendors(id, name, email)')
+          .eq('event_id', payload.event_id)
+          .eq('status', 'pending')
+        if (aErr) return json({ error: aErr.message }, 500)
+        targets = (apps || [])
+          .map((a: any) => a.vendor)
+          .filter((v: any) => v && v.email)
+      }
+
+      // Optional: append a small event banner if attach_event is set
+      let eventBanner = ''
+      let eventTextBanner = ''
+      if (payload.attach_event && payload.event_id) {
+        const { data: ev } = await supabase.from('events').select('*').eq('id', payload.event_id).single()
+        if (ev) {
+          const dateStr = ev.event_date ? formatEventDate(ev.event_date) : ''
+          const timeLine = vendorTimeLine(ev)
+          eventBanner = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0"><tr><td style="background:#fff7ed;border-left:4px solid #ea580c;padding:14px 18px;border-radius:6px"><p style="margin:0;font-size:13px;font-weight:700;color:#9a3412">${ev.title || 'Vendor Day'}</p><p style="margin:4px 0 0;font-size:13px;color:#9a3412">${dateStr}${timeLine ? ` · ${timeLine}` : ''}</p></td></tr></table>`
+          eventTextBanner = `\n\n${ev.title || 'Vendor Day'} · ${dateStr}${timeLine ? ` · ${timeLine}` : ''}\n`
+        }
+      }
+
+      const html = wrapHtml(`${bodyHtml || `<p>${bodyText.replace(/\n/g, '</p><p>')}</p>`}${eventBanner}<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`)
+      const text = (bodyText || bodyHtml.replace(/<[^>]+>/g, '')) + eventTextBanner + `\n\nDashboard: ${SITE_URL}/vendors/dashboard`
+
+      const sentTo: string[] = []
+      const failed: string[] = []
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+      let firstSend = true
+      for (const v of targets) {
+        if (!v.email) continue
+        if (!firstSend) await sleep(550) // ~2/sec to respect Resend rate limit
+        firstSend = false
+        try {
+          await sendResendEmail([v.email], subject, html, text, ['chef@trainercenter.com'])
+          sentTo.push(v.email)
+        } catch (err) {
+          console.error('[vendor_broadcast] failed for', v.email, err)
+          failed.push(v.email)
+        }
+      }
+      return json({ ok: true, sent: sentTo, count: sentTo.length, failed, audience })
     }
 
     return json({ error: `unknown type: ${type}` }, 400)
