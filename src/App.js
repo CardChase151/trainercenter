@@ -4705,8 +4705,8 @@ function photoUrl(path) {
 // Standard email + password signup or login. Uses Supabase auth with email
 // confirmation disabled in project settings, so signUp returns a session
 // immediately. Toggle between Create account / Log in modes.
-function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess }) {
-  const [mode, setMode] = useState('signup'); // 'signup' | 'login'
+function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMode = 'login' }) {
+  const [mode, setMode] = useState(defaultMode); // 'signup' | 'login'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -4820,14 +4820,19 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess }) {
 }
 
 // ─── Vendor Apply Page ────────────────────────────────────
-// Email + password signup. After auth, user lands on /vendors/dashboard
+// Email + password login or signup. After auth, user lands on /vendors/dashboard
 // where the onboarding form fires for first-time vendors.
+// Defaults to login mode (returning vendors are the majority). Pass
+// ?mode=signup to open in signup mode (used by the Apply / Sign Up card).
 function VendorApplyPage({ isMobile }) {
   const navigate = useNavigateInternal();
+  const [searchParams] = useSearchParams();
+  const initialMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
+  const isSignupMode = initialMode === 'signup';
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title="Apply to Vend" subtitle="Create an account or log back in" />
+        <SectionHeader title={isSignupMode ? 'Apply to Vend' : 'Vendor Login'} subtitle={isSignupMode ? 'Create your vendor account' : 'Log back in or create an account'} />
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
@@ -4836,6 +4841,7 @@ function VendorApplyPage({ isMobile }) {
         }}>
           <PasswordAuthCard
             accent="red"
+            defaultMode={initialMode}
             signupCopy="New here? Create your vendor account in seconds. Right after, you'll fill out a one-time application Chef will review."
             loginCopy="Already a vendor? Log back in to apply for upcoming Vendor Days."
             onSuccess={() => navigate('/vendors/dashboard')}
@@ -5046,7 +5052,7 @@ function VendorDashboardPage({ isMobile }) {
               icon={<FileEdit size={22} />}
               title="Apply / Sign Up"
               subtitle="New here? Start your vendor application."
-              to="/vendors/apply"
+              to="/vendors/apply?mode=signup"
               accent="#1a1a1a"
               accentBg="#f4f4f5"
             />
