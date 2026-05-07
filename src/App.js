@@ -7948,6 +7948,241 @@ function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
 // ─── Staff Vendor Admin Page ──────────────────────────────
 // Gated by staff?.isAdmin. Two tabs: Pending Applications (approve/decline)
 // and Roster (per-event view of who applied + status + attendance).
+// ─── Shared rich card + detail modal for staff vendor lists ─────
+// One layout used across "Newly applying", "All vendors", etc. Click a card
+// → opens VendorDetailModal with everything the vendor submitted.
+
+function VendorRichCard({ vendor, statusBadge, actions, onClick, isMobile }) {
+  const v = vendor;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
+        padding: '14px 16px', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+      }}
+      onMouseEnter={e => {
+        if (!onClick) return;
+        e.currentTarget.style.borderColor = '#1a1a1a';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)';
+      }}
+      onMouseLeave={e => {
+        if (!onClick) return;
+        e.currentTarget.style.borderColor = '#eee';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
+    >
+      <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
+          {statusBadge}
+        </div>
+        <div style={{ marginTop: '4px', color: '#555' }}>
+          {v.email}
+          {v.phone && <span style={{ color: '#888' }}> · {v.phone}</span>}
+        </div>
+        {v.specialty && (
+          <div style={{ marginTop: '4px', color: '#555' }}>
+            <span style={{ color: '#888' }}>Specialty: </span>{v.specialty}
+          </div>
+        )}
+        {v.bio && (
+          <div style={{ marginTop: '4px', color: '#555', whiteSpace: 'pre-wrap' }}>
+            {v.bio}
+          </div>
+        )}
+        {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
+          <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
+            {v.ig_handle && <span>IG: {v.ig_handle}</span>}
+            {v.tiktok_handle && <span>{v.ig_handle ? ' · ' : ''}TikTok: {v.tiktok_handle}</span>}
+            {v.fb_handle && <span>{(v.ig_handle || v.tiktok_handle) ? ' · ' : ''}FB: {v.fb_handle}</span>}
+          </div>
+        )}
+        {(v.heard_from || v.referred_by_name) && (
+          <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
+            {v.heard_from && <span>Heard from: {String(v.heard_from).replace(/_/g, ' ')}</span>}
+            {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
+          </div>
+        )}
+      </div>
+      {actions && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+        >
+          {actions}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VendorDetailModal({ vendor, profilesById, onClose }) {
+  if (!vendor) return null;
+  const v = vendor;
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const approver = v.approved_by ? (profilesById || {})[v.approved_by] : null;
+
+  const statusColor = {
+    approved: { bg: '#f0fdf4', fg: '#15803d', border: '#bbf7d0' },
+    pending:  { bg: '#fef3c7', fg: '#92400e', border: '#fde68a' },
+    suspended:{ bg: '#fef2f2', fg: '#991b1b', border: '#fecaca' },
+  }[v.status] || { bg: '#f4f4f5', fg: '#3f3f46', border: '#e4e4e7' };
+
+  const socialLink = (kind, handle) => {
+    if (!handle) return null;
+    const clean = handle.replace(/^@/, '');
+    const url = kind === 'ig' ? `https://instagram.com/${clean}`
+              : kind === 'tt' ? `https://tiktok.com/@${clean}`
+              : kind === 'fb' ? `https://facebook.com/${clean}`
+              : null;
+    const label = kind === 'ig' ? 'Instagram' : kind === 'tt' ? 'TikTok' : 'Facebook';
+    return (
+      <a key={kind} href={url} target="_blank" rel="noopener noreferrer"
+         onClick={e => e.stopPropagation()}
+         style={{
+           display: 'inline-flex', alignItems: 'center', gap: '6px',
+           padding: '6px 12px', borderRadius: '999px',
+           backgroundColor: '#f4f4f5', color: '#1a1a1a',
+           fontSize: '0.8rem', fontWeight: '600',
+           textDecoration: 'none', border: '1px solid #e4e4e7'
+         }}>
+        {label}: @{clean}
+      </a>
+    );
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', overflow: 'auto'
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff', borderRadius: '16px',
+          maxWidth: '640px', width: '100%',
+          maxHeight: '90vh', overflowY: 'auto',
+          padding: '24px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+          position: 'relative'
+        }}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: '14px', right: '14px',
+            background: '#f4f4f5', border: 'none', borderRadius: '50%',
+            width: '32px', height: '32px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+          aria-label="Close"
+        >
+          <X size={16} />
+        </button>
+
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '16px' }}>
+          {v.avatar_url && (
+            <img src={v.avatar_url} alt="" style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              objectFit: 'cover', border: '1px solid #eee', flexShrink: 0
+            }} />
+          )}
+          <div style={{ minWidth: 0, paddingRight: '40px' }}>
+            <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name || '(no name)'}</div>
+            <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              <span style={{
+                fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px',
+                backgroundColor: statusColor.bg, color: statusColor.fg,
+                border: `1px solid ${statusColor.border}`,
+                padding: '3px 10px', borderRadius: '999px'
+              }}>
+                {v.status}
+              </span>
+              {v.created_at && (
+                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                  Joined {fmtDate(v.created_at)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DetailSection label="Contact">
+          <div>{v.email}</div>
+          {v.phone && <div>{v.phone}</div>}
+        </DetailSection>
+
+        {v.specialty && (
+          <DetailSection label="Specialty">
+            <div>{v.specialty}</div>
+          </DetailSection>
+        )}
+
+        {v.bio && (
+          <DetailSection label="Bio">
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{v.bio}</div>
+          </DetailSection>
+        )}
+
+        {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
+          <DetailSection label="Social">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {socialLink('ig', v.ig_handle)}
+              {socialLink('tt', v.tiktok_handle)}
+              {socialLink('fb', v.fb_handle)}
+            </div>
+          </DetailSection>
+        )}
+
+        {(v.heard_from || v.referred_by_name) && (
+          <DetailSection label="How they heard about us">
+            {v.heard_from && <div>Source: {String(v.heard_from).replace(/_/g, ' ')}</div>}
+            {v.referred_by_name && (
+              <div>
+                Referred by: <strong>{v.referred_by_name}</strong>
+                {v.referred_by_handle && ` (@${v.referred_by_handle})`}
+                {v.referred_by_contact && ` · ${v.referred_by_contact}`}
+              </div>
+            )}
+          </DetailSection>
+        )}
+
+        {v.status === 'approved' && approver && (
+          <DetailSection label="Approval">
+            <div>
+              Approved by <strong>{approver.name || approver.email || 'staff'}</strong>
+              {v.approved_at && ` · ${fmtDate(v.approved_at)}`}
+            </div>
+          </DetailSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DetailSection({ label, children }) {
+  return (
+    <div style={{ marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f4f4f5' }}>
+      <div style={{
+        fontSize: '0.7rem', fontWeight: '700', color: '#888',
+        textTransform: 'uppercase', letterSpacing: '0.5px',
+        marginBottom: '6px'
+      }}>{label}</div>
+      <div style={{ fontSize: '0.9rem', color: '#1a1a1a' }}>{children}</div>
+    </div>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -7959,6 +8194,8 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [profilesById, setProfilesById] = useState({}); // staff lookup for approver-name display
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Vendor detail modal — clicking any vendor card opens this with full info.
+  const [detailVendor, setDetailVendor] = useState(null);
 
   const isAdmin = !!staff?.isAdmin;
 
@@ -8139,6 +8376,7 @@ function StaffVendorsPage({ isMobile, staff }) {
             <NewlyApplyingVendorsList
               vendors={allVendors.filter(v => v.status === 'pending')}
               onStatusChange={setVendorStatus}
+              onOpenDetail={setDetailVendor}
               isMobile={isMobile}
             />
           )}
@@ -8152,7 +8390,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} onStatusChange={setVendorStatus} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -8160,6 +8398,14 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
         </div>
       </div>
+
+      {detailVendor && (
+        <VendorDetailModal
+          vendor={detailVendor}
+          profilesById={profilesById}
+          onClose={() => setDetailVendor(null)}
+        />
+      )}
     </PageWrapper>
   );
 }
@@ -8861,7 +9107,7 @@ function ApplicationStatusBadge({ status }) {
 // ─── Newly applying vendors (vendors.status === 'pending') ─
 // Brand-new signups awaiting partner approval. Distinct from "Pending requests"
 // which are already-approved vendors applying to a specific event date.
-function NewlyApplyingVendorsList({ vendors, onStatusChange, isMobile }) {
+function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMobile }) {
   if (vendors.length === 0) {
     return (
       <div style={{
@@ -8880,67 +9126,39 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, isMobile }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {vendors.map(v => (
-        <div key={v.id} style={{
-          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
-          padding: '14px 16px', display: 'flex', justifyContent: 'space-between',
-          alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
-        }}>
-          <div style={{ flex: '1 1 280px', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <strong style={{ fontSize: '0.95rem' }}>{v.name}</strong>
-              <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
-                Applied {fmtDate(v.created_at)}
-              </span>
-            </div>
-            <div style={{ marginTop: '4px', color: '#555' }}>
-              {v.email}
-              {v.phone && <span style={{ color: '#888' }}> · {v.phone}</span>}
-            </div>
-            {v.specialty && (
-              <div style={{ marginTop: '4px', color: '#555' }}>
-                <span style={{ color: '#888' }}>Specialty: </span>{v.specialty}
-              </div>
-            )}
-            {v.bio && (
-              <div style={{ marginTop: '4px', color: '#555', whiteSpace: 'pre-wrap' }}>
-                {v.bio}
-              </div>
-            )}
-            {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
-              <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
-                {v.ig_handle && <span>IG: {v.ig_handle}</span>}
-                {v.tiktok_handle && <span>{v.ig_handle ? ' · ' : ''}TikTok: {v.tiktok_handle}</span>}
-                {v.fb_handle && <span>{(v.ig_handle || v.tiktok_handle) ? ' · ' : ''}FB: {v.fb_handle}</span>}
-              </div>
-            )}
-            {(v.heard_from || v.referred_by_name) && (
-              <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
-                {v.heard_from && <span>Heard from: {v.heard_from}</span>}
-                {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-            <button onClick={() => onStatusChange(v.id, 'approved')} style={{
-              fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
-              border: 'none', padding: '6px 14px', borderRadius: '6px',
-              fontWeight: '700', cursor: 'pointer'
-            }}>Approve</button>
-            <button onClick={() => {
-              if (window.confirm(`Decline ${v.name} as a vendor?`)) onStatusChange(v.id, 'suspended');
-            }} style={{
-              fontSize: '0.8rem', backgroundColor: '#fff', color: '#991b1b',
-              border: '1px solid #fecaca', padding: '6px 14px', borderRadius: '6px',
-              fontWeight: '700', cursor: 'pointer'
-            }}>Decline</button>
-          </div>
-        </div>
+        <VendorRichCard
+          key={v.id}
+          vendor={v}
+          isMobile={isMobile}
+          onClick={() => onOpenDetail && onOpenDetail(v)}
+          statusBadge={
+            <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
+              Applied {fmtDate(v.created_at)}
+            </span>
+          }
+          actions={
+            <>
+              <button onClick={() => onStatusChange(v.id, 'approved')} style={{
+                fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+                border: 'none', padding: '6px 14px', borderRadius: '6px',
+                fontWeight: '700', cursor: 'pointer'
+              }}>Approve</button>
+              <button onClick={() => {
+                if (window.confirm(`Decline ${v.name} as a vendor?`)) onStatusChange(v.id, 'suspended');
+              }} style={{
+                fontSize: '0.8rem', backgroundColor: '#fff', color: '#991b1b',
+                border: '1px solid #fecaca', padding: '6px 14px', borderRadius: '6px',
+                fontWeight: '700', cursor: 'pointer'
+              }}>Decline</button>
+            </>
+          }
+        />
       ))}
     </div>
   );
 }
 
-function AllVendorsList({ vendors, profilesById, onStatusChange, isMobile }) {
+function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, isMobile }) {
   if (vendors.length === 0) {
     return (
       <div style={{
@@ -8960,44 +9178,59 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, isMobile }) {
       : null;
     return when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
   };
+  // Status badge color tokens (kept inline so the rich card stays presentational).
+  const badgeFor = (status) => {
+    const map = {
+      approved:  { bg: '#dcfce7', fg: '#15803d', label: 'Approved' },
+      pending:   { bg: '#fef3c7', fg: '#92400e', label: 'Pending' },
+      suspended: { bg: '#fee2e2', fg: '#991b1b', label: 'Suspended' },
+    };
+    const m = map[status] || { bg: '#f4f4f5', fg: '#3f3f46', label: status || 'Unknown' };
+    return (
+      <span style={{
+        fontSize: '0.7rem', fontWeight: '700',
+        color: m.fg, backgroundColor: m.bg,
+        padding: '2px 8px', borderRadius: '999px',
+        textTransform: 'uppercase', letterSpacing: '0.4px'
+      }}>{m.label}</span>
+    );
+  };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {vendors.map(v => {
         const apprLabel = approverLabel(v);
+        const richVendor = apprLabel
+          // Quick way to show approver line on the rich card without expanding the
+          // shared component: piggyback on bio if there's no real bio. Otherwise
+          // it shows in the modal's Approval section.
+          ? v
+          : v;
         return (
-          <div key={v.id} style={{
-            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
-            padding: '12px 16px', display: 'flex', justifyContent: 'space-between',
-            alignItems: 'center', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem'
-          }}>
-            <div>
-              <strong>{v.name}</strong>
-              <span style={{ color: '#888' }}> · {v.email}</span>
-              {v.specialty && <span style={{ color: '#888' }}> · {v.specialty}</span>}
-              {apprLabel && (
-                <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: '700', marginTop: '4px' }}>
-                  {apprLabel}
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <VendorStatusBadge status={v.status} />
-              {v.status !== 'approved' && (
-                <button onClick={() => onStatusChange(v.id, 'approved')} style={{
-                  fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
-                  border: 'none', padding: '4px 10px', borderRadius: '6px',
-                  fontWeight: '700', cursor: 'pointer'
-                }}>Approve</button>
-              )}
-              {v.status !== 'suspended' && (
-                <button onClick={() => onStatusChange(v.id, 'suspended')} style={{
-                  fontSize: '0.75rem', backgroundColor: '#fff', color: '#991b1b',
-                  border: '1px solid #fecaca', padding: '4px 10px', borderRadius: '6px',
-                  fontWeight: '700', cursor: 'pointer'
-                }}>Suspend</button>
-              )}
-            </div>
-          </div>
+          <VendorRichCard
+            key={v.id}
+            vendor={richVendor}
+            isMobile={isMobile}
+            onClick={() => onOpenDetail && onOpenDetail(v)}
+            statusBadge={badgeFor(v.status)}
+            actions={
+              <>
+                {v.status !== 'approved' && (
+                  <button onClick={() => onStatusChange(v.id, 'approved')} style={{
+                    fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+                    border: 'none', padding: '6px 14px', borderRadius: '6px',
+                    fontWeight: '700', cursor: 'pointer'
+                  }}>Approve</button>
+                )}
+                {v.status !== 'suspended' && (
+                  <button onClick={() => onStatusChange(v.id, 'suspended')} style={{
+                    fontSize: '0.8rem', backgroundColor: '#fff', color: '#991b1b',
+                    border: '1px solid #fecaca', padding: '6px 14px', borderRadius: '6px',
+                    fontWeight: '700', cursor: 'pointer'
+                  }}>Suspend</button>
+                )}
+              </>
+            }
+          />
         );
       })}
     </div>
