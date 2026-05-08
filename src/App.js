@@ -144,58 +144,143 @@ function SectionHeader({ title, subtitle }) {
 
 
 // ─── Calendar Component ───────────────────────────────────
-// ─── Staff Login Modal ────────────────────────────────────
+// ─── Login Modal (staff + vendor) ─────────────────────────
+// Single sign-in surface for both staff and vendors. After auth succeeds,
+// the modal flips to a "where to next?" picker keyed off the user's roles
+// so a fresh login lands them on the surface they actually came to manage.
 function StaffLogin({ onClose, onLogin }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [showVendorLink, setShowVendorLink] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState('login'); // 'login' | 'picker'
+  const [roles, setRoles] = useState({ isStaff: false, isVendor: false });
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setShowVendorLink(false);
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) {
       setError(authError.message);
       setLoading(false);
       return;
     }
-    // Auth succeeded -- now gate on is_admin. Non-admins are signed back
-    // out so they don't end up in a half-authenticated state.
+    // Resolve role membership in parallel. A user must have at least one
+    // (staff profile.is_admin OR vendors row) to stay signed in.
     const userId = data?.user?.id;
-    let isAdmin = false;
-    if (userId) {
-      const { data: profile } = await supabase
-        .from('profiles').select('is_admin').eq('id', userId).maybeSingle();
-      isAdmin = !!profile?.is_admin;
-    }
-    if (!isAdmin) {
+    const [profileRes, vendorRes] = await Promise.all([
+      supabase.from('profiles').select('is_admin').eq('id', userId).maybeSingle(),
+      supabase.from('vendors').select('id').eq('user_id', userId).maybeSingle(),
+    ]);
+    const isStaff = !!profileRes.data?.is_admin;
+    const isVendor = !!vendorRes.data?.id;
+    if (!isStaff && !isVendor) {
       await supabase.auth.signOut();
-      setError("That email isn't on the staff list.");
-      setShowVendorLink(true);
+      setError("That email isn't on the staff or vendor list.");
       setLoading(false);
       return;
     }
-    onLogin();
+    setRoles({ isStaff, isVendor });
+    onLogin(); // refresh App auth state so the lock badge updates immediately
+    setPhase('picker');
+    setLoading(false);
+  };
+
+  const goTo = (path) => {
+    navigate(path);
     onClose();
   };
 
+  const overlayStyle = {
+    position: 'fixed', inset: 0, zIndex: 9999,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '24px',
+  };
+  const cardStyle = {
+    backgroundColor: '#fff', borderRadius: '16px', padding: '32px',
+    width: '100%', maxWidth: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+  };
+  const pickerBtn = (color) => ({
+    width: '100%', padding: '14px 18px',
+    border: `1px solid ${color}33`,
+    borderRadius: '10px',
+    backgroundColor: '#fff',
+    color: color,
+    fontSize: '0.95rem', fontWeight: '700',
+    cursor: 'pointer', fontFamily: 'inherit',
+    textAlign: 'left',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    transition: 'background-color 0.15s, border-color 0.15s',
+  });
+
+  // ─── Phase 2: where to next? ────────────────────────────
+  if (phase === 'picker') {
+    // Staff picker takes priority — admins almost always want admin tools,
+    // even when they also happen to have a vendor row.
+    if (roles.isStaff) {
+      return (
+        <div style={overlayStyle} onClick={onClose}>
+          <div style={cardStyle} onClick={e => e.stopPropagation()}>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
+            <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 20px 0' }}>What would you like to manage?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button onClick={() => goTo('/calendar')} style={pickerBtn('#C8102E')}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
+              >
+                Calendar <ArrowRight size={16} />
+              </button>
+              <button onClick={() => goTo('/staff/vendors')} style={pickerBtn('#C8102E')}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
+              >
+                Vendors <ArrowRight size={16} />
+              </button>
+              <button onClick={() => goTo('/#visit-us')} style={pickerBtn('#C8102E')}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
+              >
+                Business Hours <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Vendor picker
+    return (
+      <div style={overlayStyle} onClick={onClose}>
+        <div style={cardStyle} onClick={e => e.stopPropagation()}>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 20px 0' }}>Where would you like to go?</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button onClick={onClose} style={pickerBtn('#1a1a1a')}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f5f5f5'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#1a1a1a33'; }}
+            >
+              Continue on-site <ArrowRight size={16} />
+            </button>
+            <button onClick={() => goTo('/vendors/dashboard')} style={pickerBtn('#16a34a')}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#16a34a'; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#16a34a33'; }}
+            >
+              Go to Vendor Dashboard <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Phase 1: login form ────────────────────────────────
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '24px'
-    }} onClick={onClose}>
-      <div style={{
-        backgroundColor: '#fff', borderRadius: '16px', padding: '32px',
-        width: '100%', maxWidth: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
-      }} onClick={e => e.stopPropagation()}>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Staff Login</h2>
-        <p style={{ fontSize: '0.8rem', color: '#999', margin: '0 0 20px 0' }}>Trainer Center HB staff only</p>
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Staff &amp; Vendor Login</h2>
+        <p style={{ fontSize: '0.8rem', color: '#999', margin: '0 0 20px 0' }}>Trainer Center HB</p>
         <form onSubmit={handleLogin}>
           <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
             style={{
@@ -210,21 +295,7 @@ function StaffLogin({ onClose, onLogin }) {
             }}
           />
           {error && (
-            <div style={{ margin: '0 0 12px 0' }}>
-              <p style={{ color: '#C8102E', fontSize: '0.8rem', margin: '0 0 4px 0' }}>{error}</p>
-              {showVendorLink && (
-                <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
-                  Are you a vendor?{' '}
-                  <Link
-                    to="/vendors/dashboard"
-                    onClick={onClose}
-                    style={{ color: '#C8102E', fontWeight: 700, textDecoration: 'none' }}
-                  >
-                    Vendor sign-in →
-                  </Link>
-                </p>
-              )}
-            </div>
+            <p style={{ color: '#C8102E', fontSize: '0.8rem', margin: '0 0 12px 0' }}>{error}</p>
           )}
           <button type="submit" disabled={loading} style={{
             width: '100%', padding: '12px', backgroundColor: '#C8102E', color: '#fff',
@@ -10371,22 +10442,39 @@ function App() {
               </Link>
             );
           })}
-          {/* Staff lock icon - always visible */}
-          <button
-            onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              color: staffUser ? '#C8102E' : '#1a1a1a',
-              padding: '4px',
-              transition: 'color 0.2s'
-            }}
-            title={staffUser ? 'Staff: Logged in (click to logout)' : 'Staff Login'}
-          >
-            {staffUser ? <Unlock size={20} /> : <Lock size={20} />}
-          </button>
+          {/* Auth badge — Lock when signed out, role label when signed in.
+              Staff (admin) wins over Vendor when a user has both roles. */}
+          {(() => {
+            const showStaffBadge = !!staffUser && isAdmin;
+            const showVendorBadge = !!staffUser && !isAdmin && !!vendor;
+            const badgeColor = showStaffBadge ? '#C8102E' : showVendorBadge ? '#16a34a' : '#1a1a1a';
+            const badgeLabel = showStaffBadge ? 'Staff' : showVendorBadge ? 'Vendor' : null;
+            return (
+              <button
+                onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: badgeLabel ? '0.85rem' : '1rem',
+                  fontWeight: badgeLabel ? '800' : 'inherit',
+                  color: badgeColor,
+                  padding: '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  fontFamily: 'inherit',
+                  transition: 'color 0.2s',
+                }}
+                title={
+                  showStaffBadge ? 'Signed in as Staff (click to log out)'
+                  : showVendorBadge ? 'Signed in as Vendor (click to log out)'
+                  : 'Staff & Vendor Login'
+                }
+              >
+                {badgeLabel || <Lock size={20} />}
+              </button>
+            );
+          })()}
           {/* Hamburger menu button - mobile only */}
           {isMobile && (
             <button
