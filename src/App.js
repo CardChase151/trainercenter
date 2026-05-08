@@ -1148,8 +1148,16 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
     const isToday = isCurrentMonth && today.getDate() === day;
     const isSelected = selectedDay === day;
 
-    // Get unique category colors for dots
-    const dotColors = [...new Set(dayEvents.flatMap(e => (e.categories || []).map(c => CATEGORIES[c]?.color || '#ea580c')))];
+    // Get unique category colors for dots. When a filter is active, only
+    // surface dots from that category — that's the whole point of a filter,
+    // otherwise a Tournament-filtered Friday still shows the Trade Night
+    // dot from a dual-tagged event.
+    const dotColors = [...new Set(
+      dayEvents.flatMap(e => (e.categories || [])
+        .filter(c => !activeCategory || c === activeCategory)
+        .map(c => CATEGORIES[c]?.color || '#ea580c')
+      )
+    )];
 
     cells.push(
       <div
@@ -1301,7 +1309,15 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
             <div style={{ padding: '16px', flex: 1, overflowY: 'auto' }}>
               {selectedDayEvents.length > 0 ? (
                 selectedDayEvents.map((event) => {
-                  const catColor = CATEGORIES[(event.categories || [])[0]]?.color || '#ea580c';
+                  // When a filter is active and this event carries it, color the
+                  // card with the filter's color so dual-tagged events read as
+                  // whichever lens the user picked. Falls back to first category
+                  // when no filter is active.
+                  const cats = event.categories || [];
+                  const primaryCat = (activeCategory && cats.includes(activeCategory))
+                    ? activeCategory
+                    : cats[0];
+                  const catColor = CATEGORIES[primaryCat]?.color || '#ea580c';
                   return (
                     <div key={event.id} style={{
                       padding: '14px 16px',
@@ -3176,13 +3192,38 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     })
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
-  // Live count of how many distinct, non-cancelled events fall into each
-  // category. Powers the chip-count badges + dims chips for empty categories.
-  const categoryCounts = events.reduce((acc, ev) => {
-    if (ev.cancelled) return acc;
-    (ev.categories || []).forEach(c => { acc[c] = (acc[c] || 0) + 1; });
-    return acc;
-  }, {});
+  // Count actual occurrences of each category in the visible month so the
+  // chip badges reflect what the user sees on the grid. A weekly event that
+  // hits four Fridays this month counts as 4, not 1. Cancelled events are
+  // skipped. Chips with 0 occurrences in the visible month get dimmed.
+  const categoryCounts = (() => {
+    const counts = {};
+    const dayMs = 1000 * 60 * 60 * 24;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      for (const ev of events) {
+        if (ev.cancelled) continue;
+        let matches = false;
+        if (ev.event_date === dateStr) {
+          matches = true;
+        } else if (ev.recurrence !== 'none') {
+          const evDate = new Date(ev.event_date + 'T00:00:00');
+          if (dateObj >= evDate &&
+              (!ev.recurrence_end_date || dateObj <= new Date(ev.recurrence_end_date + 'T00:00:00'))) {
+            const diffDays = Math.floor((dateObj - evDate) / dayMs);
+            if (ev.recurrence === 'weekly') matches = diffDays % 7 === 0;
+            else if (ev.recurrence === 'biweekly') matches = diffDays % 14 === 0;
+            else if (ev.recurrence === 'monthly') matches = evDate.getDate() === d;
+          }
+        }
+        if (matches) {
+          (ev.categories || []).forEach(c => { counts[c] = (counts[c] || 0) + 1; });
+        }
+      }
+    }
+    return counts;
+  })();
 
   // Derive special events (vendor-bearing TC Beach City Trade Nights).
   // Pull non-recurring "headline" events for the top-of-calendar callout.
