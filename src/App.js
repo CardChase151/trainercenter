@@ -9718,16 +9718,17 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
 // ─── Nav Link Helper ──────────────────────────────────────
 // Items with `children` render as click-to-open dropdowns (desktop) /
 // accordion sections (mobile). The parent label itself never navigates —
-// it only toggles its child menu.
-const NAV_ITEMS = [
+// it only toggles its child menu. Staff users land on the staff vendor
+// console; everyone else lands on the regular vendor dashboard.
+const buildNavItems = ({ isStaff }) => [
   { label: 'Home', to: '/' },
   { label: 'Calendar', to: '/calendar' },
   { label: 'Visit Us', to: '/#visit-us' },
   {
     label: 'Vendors',
     children: [
-      { label: 'Dashboard', to: '/vendors/dashboard' },
-      { label: 'Apply', to: '/vendors/apply' },
+      { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
+      { label: 'Apply', to: '/vendors/apply?mode=signup' },
       { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
       { label: 'Line ups', to: '/vendor-day' },
     ],
@@ -10036,8 +10037,17 @@ function App() {
   }, [location.pathname]);
 
   // Helper: a parent dropdown is "active" when any of its children match.
+  // Strip query/hash from `to` so /vendors/apply?mode=signup still matches
+  // the live /vendors/apply pathname.
+  const pathOnly = (to) => to.split('?')[0].split('#')[0];
   const isParentActive = (children) =>
-    children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
+    children.some(c => {
+      const p = pathOnly(c.to);
+      return location.pathname === p || location.pathname.startsWith(p + '/');
+    });
+
+  // Auth-aware nav (Dashboard child differs for staff vs vendor).
+  const NAV_ITEMS = buildNavItems({ isStaff: !!staff });
 
   // Site settings + special hours (editable Visit Us section + holiday overrides)
   const [siteSettings, setSiteSettings] = useState(null);
@@ -10267,7 +10277,7 @@ function App() {
                       zIndex: 1001,
                     }}>
                       {item.children.map(child => {
-                        const childActive = location.pathname === child.to;
+                        const childActive = location.pathname === pathOnly(child.to);
                         return (
                           <Link
                             key={child.label}
@@ -10409,7 +10419,7 @@ function App() {
                       borderBottom: '1px solid #f0f0f0',
                     }}>
                       {item.children.map(child => {
-                        const childActive = location.pathname === child.to;
+                        const childActive = location.pathname === pathOnly(child.to);
                         return (
                           <Link
                             key={child.label}
