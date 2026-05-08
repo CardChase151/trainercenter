@@ -419,9 +419,25 @@ const CATEGORIES = {
 };
 
 // ─── Event Modal (Add/Edit) ───────────────────────────────
-function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelEvent, isMobile, staff }) {
+function EventModal({ date, existingEvents, seriesSizes = {}, onClose, onSave, onDelete, onCancelEvent, isMobile, staff }) {
+  const dateToISO = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const initialDateISO = dateToISO(date);
+
+  const newId = (() => { let n = 0; return () => ++n; })();
+  const entryIdRef = useRef(newId);
+  const makeEntry = (d, s = '18:00', e = '20:00') => ({
+    _id: entryIdRef.current(),
+    date: d,
+    startTime: s,
+    endTime: e,
+  });
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  // startTime/endTime back the Repeating-mode time pickers and the
+  // editing-existing-event flow. The Specific-dates list keeps its own
+  // per-row times in `dateEntries`.
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('20:00');
   const [location, setLocation] = useState('');
@@ -434,6 +450,16 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
   const [vendorNote, setVendorNote] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
+  // When editing a row that's part of a multi-day series, this toggle pushes
+  // the shared fields (title/desc/categories/location/vendor settings) to
+  // every day in the series. Per-day fields (date/start/end) always stay
+  // bound to the row being edited.
+  const [applyToSeries, setApplyToSeries] = useState(false);
+  // New-event scheduling: 'specific' = hand-picked list of dates that may
+  // have different times each (camps, multi-day events). 'repeating' = the
+  // legacy weekly/biweekly/monthly recurrence with one shared time window.
+  const [scheduleMode, setScheduleMode] = useState('specific');
+  const [dateEntries, setDateEntries] = useState(() => [makeEntry(initialDateISO)]);
 
   const dateStr = `${date.toLocaleString('default', { month: 'long' })} ${date.getDate()}, ${date.getFullYear()}`;
 
@@ -442,10 +468,14 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
     setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate('');
     setHasVendors(false); setVendorStartTime(''); setVendorEndTime(''); setVendorNote('');
     setEditingEvent(null);
+    setScheduleMode('specific');
+    setDateEntries([makeEntry(initialDateISO)]);
+    setApplyToSeries(false);
   };
 
   const loadEvent = (event) => {
     setEditingEvent(event);
+    setApplyToSeries(false);
     setTitle(event.title);
     setDescription(event.description || '');
     setStartTime(event.start_time?.slice(0, 5) || '18:00');
@@ -458,6 +488,25 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
     setVendorStartTime(event.vendor_start_time?.slice(0, 5) || '');
     setVendorEndTime(event.vendor_end_time?.slice(0, 5) || '');
     setVendorNote(event.vendor_note || '');
+  };
+
+  // ─── Specific-dates list helpers ────────────────────────
+  const addDateEntry = () => {
+    // Default the new entry's date to the day after the last entry so a
+    // multi-day camp is one tap per consecutive day.
+    const last = dateEntries[dateEntries.length - 1];
+    const seed = last ? new Date(last.date + 'T12:00:00') : new Date(initialDateISO + 'T12:00:00');
+    seed.setDate(seed.getDate() + 1);
+    setDateEntries(prev => [
+      ...prev,
+      makeEntry(dateToISO(seed), last?.startTime || '18:00', last?.endTime || '20:00'),
+    ]);
+  };
+  const removeDateEntry = (id) => {
+    setDateEntries(prev => prev.length > 1 ? prev.filter(e => e._id !== id) : prev);
+  };
+  const updateDateEntry = (id, patch) => {
+    setDateEntries(prev => prev.map(e => e._id === id ? { ...e, ...patch } : e));
   };
 
   // When Add Vendors flips on, default the vendor window to the event's
@@ -478,31 +527,107 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
 
   const handleSave = () => {
     if (!title.trim()) return;
-    const dateFormatted = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const eventData = {
-      title: title.trim(),
-      description: description.trim() || null,
-      event_date: dateFormatted,
-      start_time: startTime,
-      end_time: endTime,
-      location: location.trim() || null,
-      categories: categories.length > 0 ? categories : ['other'],
-      recurrence,
-      recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null,
-      has_vendors: hasVendors,
-      vendor_start_time: hasVendors ? (vendorStartTime || startTime) : null,
-      vendor_end_time: hasVendors ? (vendorEndTime || endTime) : null,
-      vendor_note: hasVendors ? (vendorNote.trim() || null) : null,
-    };
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim() || null;
+    const trimmedLocation = location.trim() || null;
+    const safeCategories = categories.length > 0 ? categories : ['other'];
+    const trimmedVendorNote = hasVendors ? (vendorNote.trim() || null) : null;
+
+    // ─── Edit existing single row ─────────────────────────
     if (editingEvent?.id) {
-      eventData.id = editingEvent.id;
-      eventData.updated_by = staff?.id || null;
-      eventData.updated_by_name = staff?.name || null;
-    } else {
-      eventData.created_by = staff?.id || null;
-      eventData.created_by_name = staff?.name || null;
+      const editStartTime = startTime;
+      const editEndTime = endTime;
+      const eventData = {
+        id: editingEvent.id,
+        title: trimmedTitle,
+        description: trimmedDescription,
+        event_date: editingEvent.event_date,
+        start_time: editStartTime,
+        end_time: editEndTime,
+        location: trimmedLocation,
+        categories: safeCategories,
+        recurrence,
+        recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null,
+        has_vendors: hasVendors,
+        vendor_start_time: hasVendors ? (vendorStartTime || editStartTime) : null,
+        vendor_end_time: hasVendors ? (vendorEndTime || editEndTime) : null,
+        vendor_note: trimmedVendorNote,
+        updated_by: staff?.id || null,
+        updated_by_name: staff?.name || null,
+      };
+      // Series-wide patch: also push shared fields to every other row in the
+      // series. Per-day fields (date/start/end/recurrence) only update this row.
+      if (applyToSeries && editingEvent.series_id) {
+        const sharedFields = {
+          title: trimmedTitle,
+          description: trimmedDescription,
+          location: trimmedLocation,
+          categories: safeCategories,
+          has_vendors: hasVendors,
+          vendor_note: trimmedVendorNote,
+          updated_by: staff?.id || null,
+          updated_by_name: staff?.name || null,
+        };
+        onSave({
+          ...eventData,
+          _series: { sharedFields, series_id: editingEvent.series_id },
+        });
+      } else {
+        onSave(eventData);
+      }
+      resetForm();
+      return;
     }
-    onSave(eventData);
+
+    // ─── New event: branch on schedule mode ───────────────
+    const baseFields = {
+      title: trimmedTitle,
+      description: trimmedDescription,
+      location: trimmedLocation,
+      categories: safeCategories,
+      has_vendors: hasVendors,
+      vendor_note: trimmedVendorNote,
+      created_by: staff?.id || null,
+      created_by_name: staff?.name || null,
+    };
+
+    if (scheduleMode === 'repeating') {
+      // Single row with recurrence, anchored to the day the modal was opened on.
+      const dateFormatted = dateToISO(date);
+      const eventData = {
+        ...baseFields,
+        event_date: dateFormatted,
+        start_time: startTime,
+        end_time: endTime,
+        recurrence,
+        recurrence_end_date: recurrence !== 'none' && recurrenceEndDate ? recurrenceEndDate : null,
+        vendor_start_time: hasVendors ? (vendorStartTime || startTime) : null,
+        vendor_end_time: hasVendors ? (vendorEndTime || endTime) : null,
+      };
+      onSave(eventData);
+      resetForm();
+      return;
+    }
+
+    // Specific dates: one row per entry. Multiple entries share a series_id
+    // so we can render "Day X of Y" badges and offer series-wide edits later.
+    const sortedEntries = [...dateEntries].sort((a, b) => a.date.localeCompare(b.date));
+    const seriesId = sortedEntries.length > 1
+      ? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `series-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+      : null;
+    const rows = sortedEntries.map((entry, idx) => ({
+      ...baseFields,
+      event_date: entry.date,
+      start_time: entry.startTime,
+      end_time: entry.endTime,
+      recurrence: 'none',
+      recurrence_end_date: null,
+      vendor_start_time: hasVendors ? (vendorStartTime || entry.startTime) : null,
+      vendor_end_time: hasVendors ? (vendorEndTime || entry.endTime) : null,
+      series_id: seriesId,
+      series_position: seriesId ? idx + 1 : null,
+    }));
+    onSave(rows);
     resetForm();
   };
 
@@ -545,7 +670,7 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
       }
     : {
         backgroundColor: '#fff', borderRadius: '16px',
-        width: '100%', maxWidth: '480px',
+        width: '100%', maxWidth: '960px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
         maxHeight: '90vh',
         display: 'flex',
@@ -646,6 +771,33 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
           </div>
         )}
 
+        {/* Series banner — visible while editing a row that's part of a
+            multi-day series. Toggle pushes shared fields to every day. */}
+        {editingEvent?.series_id && seriesSizes[editingEvent.series_id] > 1 && (
+          <div style={{
+            backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe',
+            borderRadius: '10px', padding: '12px 14px', marginBottom: '14px',
+          }}>
+            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#5b21b6', marginBottom: '4px' }}>
+              Day {editingEvent.series_position} of {seriesSizes[editingEvent.series_id]} in a series
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#5b21b6', lineHeight: '1.5', marginBottom: '8px' }}>
+              By default, edits here only update this day. Toggle below to push title, description, categories, location, and vendor settings to every day in the series.
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={applyToSeries}
+                onChange={e => setApplyToSeries(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#7c3aed' }}
+              />
+              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#1a1a1a' }}>
+                Apply shared fields to all {seriesSizes[editingEvent.series_id]} days
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* Existing events on this day */}
         {existingEvents.length > 0 && !editingEvent && (
           <div style={{ marginBottom: '16px' }}>
@@ -683,6 +835,11 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
                     <div style={{ fontSize: '0.75rem', color: '#888' }}>
                       {formatTime12h(ev.start_time)} - {formatTime12h(ev.end_time)}
                       {ev.recurrence !== 'none' && <span style={{ color: '#C8102E', marginLeft: '8px' }}>{ev.recurrence}</span>}
+                      {ev.series_id && seriesSizes[ev.series_id] > 1 && ev.series_position && (
+                        <span style={{ color: '#7c3aed', marginLeft: '8px', fontWeight: '700' }}>
+                          Day {ev.series_position} of {seriesSizes[ev.series_id]}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -716,16 +873,241 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
           Markdown supported: <strong>**bold**</strong> · <em>*italic*</em>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Start</label>
-            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={inputStyle} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>End</label>
-            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
-          </div>
-        </div>
+        {/* ─── Schedule ────────────────────────────────────
+            New events: pick between a hand-picked list of dates (camps,
+            multi-day events) and a recurrence pattern (weekly/biweekly/
+            monthly). Each row in Specific dates can have its own time
+            window. Editing an existing event keeps the simple single-row
+            form; series-wide edits live in a separate flow. */}
+        {!editingEvent ? (
+          <>
+            <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Schedule</label>
+            <div role="radiogroup" style={{
+              display: 'flex', gap: '6px', marginBottom: '12px',
+              padding: '4px', backgroundColor: '#f3f4f6', borderRadius: '10px',
+            }}>
+              {[
+                { key: 'specific', label: 'Specific dates' },
+                { key: 'repeating', label: 'Repeating' },
+              ].map(opt => {
+                const active = scheduleMode === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setScheduleMode(opt.key)}
+                    style={{
+                      flex: 1,
+                      background: active ? '#fff' : 'transparent',
+                      border: active ? '1px solid #e5e7eb' : '1px solid transparent',
+                      boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                      borderRadius: '8px',
+                      padding: '8px 10px',
+                      fontSize: '0.85rem', fontWeight: '700',
+                      color: active ? '#1a1a1a' : '#6b7280',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {scheduleMode === 'specific' ? (
+              <div style={{ marginBottom: '12px' }}>
+                {dateEntries.map((entry, idx) => (
+                  <div key={entry._id} style={{
+                    display: isMobile ? 'block' : 'flex',
+                    gap: '8px',
+                    alignItems: 'flex-end',
+                    marginBottom: '8px',
+                    padding: isMobile ? '10px' : '0',
+                    backgroundColor: isMobile ? '#fafafa' : 'transparent',
+                    borderRadius: isMobile ? '10px' : '0',
+                    border: isMobile ? '1px solid #eee' : 'none',
+                  }}>
+                    <div style={{ flex: 2, marginBottom: isMobile ? '6px' : 0 }}>
+                      <label style={{ fontSize: '0.65rem', color: '#999', fontWeight: '600' }}>
+                        Day {idx + 1} date
+                      </label>
+                      <input
+                        type="date"
+                        value={entry.date}
+                        onChange={e => updateDateEntry(entry._id, { date: e.target.value })}
+                        style={{ ...inputStyle, marginBottom: 0 }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, marginBottom: isMobile ? '6px' : 0 }}>
+                      <label style={{ fontSize: '0.65rem', color: '#999', fontWeight: '600' }}>Start</label>
+                      <input
+                        type="time"
+                        value={entry.startTime}
+                        onChange={e => updateDateEntry(entry._id, { startTime: e.target.value })}
+                        style={{ ...inputStyle, marginBottom: 0 }}
+                      />
+                    </div>
+                    <div style={{ flex: 1, marginBottom: isMobile ? '6px' : 0 }}>
+                      <label style={{ fontSize: '0.65rem', color: '#999', fontWeight: '600' }}>End</label>
+                      <input
+                        type="time"
+                        value={entry.endTime}
+                        onChange={e => updateDateEntry(entry._id, { endTime: e.target.value })}
+                        style={{ ...inputStyle, marginBottom: 0 }}
+                      />
+                    </div>
+                    {dateEntries.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeDateEntry(entry._id)}
+                        title="Remove this date"
+                        style={{
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          color: '#C8102E',
+                          borderRadius: '8px',
+                          padding: isMobile ? '8px 12px' : '10px 12px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: '700',
+                          flexShrink: 0,
+                          width: isMobile ? '100%' : 'auto',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDateEntry}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px dashed #C8102E',
+                    backgroundColor: '#fff5f6',
+                    color: '#C8102E',
+                    borderRadius: '10px',
+                    fontSize: '0.9rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    marginTop: '4px',
+                  }}
+                >
+                  + Add another date
+                </button>
+                {dateEntries.length > 1 && (
+                  <p style={{ fontSize: '0.72rem', color: '#888', margin: '8px 2px 0' }}>
+                    These {dateEntries.length} dates will be saved as one series so you can edit or cancel them together later.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '0.78rem', color: '#666', margin: '-4px 0 10px 2px' }}>
+                  Repeats starting <strong>{dateStr}</strong>. Pick the times below and (optional) an end date.
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Start</label>
+                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>End</label>
+                    <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
+                  </div>
+                </div>
+                <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
+                <select value={recurrence} onChange={e => setRecurrence(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  <option value="none">Does not repeat</option>
+                  <option value="weekly">Every week</option>
+                  <option value="biweekly">Every 2 weeks</option>
+                  <option value="monthly">Every month</option>
+                </select>
+                {recurrence !== 'none' && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat until (optional)</label>
+                      {recurrenceEndDate && (
+                        <button
+                          type="button"
+                          onClick={() => setRecurrenceEndDate('')}
+                          style={{
+                            background: 'none', border: 'none', color: '#C8102E',
+                            fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
+                          }}
+                        >
+                          Clear end date
+                        </button>
+                      )}
+                    </div>
+                    <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} style={inputStyle} />
+                  </>
+                )}
+              </>
+            )}
+          </>
+        ) : (
+          // Editing an existing single row — keep the original simple form.
+          <>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Start</label>
+                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>End</label>
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
+              {recurrence !== 'none' && (
+                <button
+                  type="button"
+                  onClick={clearRecurrence}
+                  style={{
+                    background: 'none', border: 'none', color: '#C8102E',
+                    fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
+                  }}
+                >
+                  Clear repeat
+                </button>
+              )}
+            </div>
+            <select value={recurrence} onChange={e => setRecurrence(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+              <option value="none">Does not repeat</option>
+              <option value="weekly">Every week</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="monthly">Every month</option>
+            </select>
+            {recurrence !== 'none' && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat until (optional)</label>
+                  {recurrenceEndDate && (
+                    <button
+                      type="button"
+                      onClick={() => setRecurrenceEndDate('')}
+                      style={{
+                        background: 'none', border: 'none', color: '#C8102E',
+                        fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
+                      }}
+                    >
+                      Clear end date
+                    </button>
+                  )}
+                </div>
+                <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} style={inputStyle} />
+              </>
+            )}
+          </>
+        )}
 
         <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Location (optional)</label>
         <input placeholder="Location" value={location} onChange={e => setLocation(e.target.value)} style={inputStyle} />
@@ -765,49 +1147,6 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
             );
           })}
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
-          <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat</label>
-          {recurrence !== 'none' && (
-            <button
-              type="button"
-              onClick={clearRecurrence}
-              style={{
-                background: 'none', border: 'none', color: '#C8102E',
-                fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
-              }}
-            >
-              Clear repeat
-            </button>
-          )}
-        </div>
-        <select value={recurrence} onChange={e => setRecurrence(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-          <option value="none">Does not repeat</option>
-          <option value="weekly">Every week</option>
-          <option value="biweekly">Every 2 weeks</option>
-          <option value="monthly">Every month</option>
-        </select>
-
-        {recurrence !== 'none' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Repeat until (optional)</label>
-              {recurrenceEndDate && (
-                <button
-                  type="button"
-                  onClick={() => setRecurrenceEndDate('')}
-                  style={{
-                    background: 'none', border: 'none', color: '#C8102E',
-                    fontSize: '0.7rem', fontWeight: '700', cursor: 'pointer', padding: '4px 8px'
-                  }}
-                >
-                  Clear end date
-                </button>
-              )}
-            </div>
-            <input type="date" value={recurrenceEndDate} onChange={e => setRecurrenceEndDate(e.target.value)} style={inputStyle} />
-          </>
-        )}
 
         {/* Vendor block. Any event can opt-in to having vendors; toggle drives
             the public-facing "Vendors will be there X to Y" line, the See lineup
@@ -894,14 +1233,15 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
       {eventToDelete && (
         <DeleteEventConfirmModal
           event={eventToDelete}
+          seriesSize={eventToDelete.series_id ? (seriesSizes[eventToDelete.series_id] || 1) : 1}
           onClose={() => setEventToDelete(null)}
-          onCancelWithEmail={async (reason) => {
-            await onCancelEvent(eventToDelete.id, reason);
+          onCancelWithEmail={async (reason, scope) => {
+            await onCancelEvent(eventToDelete.id, reason, scope);
             setEventToDelete(null);
             onClose();
           }}
-          onPermanentDelete={async () => {
-            await onDelete(eventToDelete.id);
+          onPermanentDelete={async (scope) => {
+            await onDelete(eventToDelete.id, scope);
             setEventToDelete(null);
             onClose();
           }}
@@ -914,19 +1254,23 @@ function EventModal({ date, existingEvents, onClose, onSave, onDelete, onCancelE
 // Two-path confirm dialog for the calendar Delete button.
 //   Soft cancel: notifies applicants + stops reminders, keeps data.
 //   Permanent delete: cascades through applications/attendance/votes; no email.
-function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanentDelete }) {
+function DeleteEventConfirmModal({ event, seriesSize = 1, onClose, onCancelWithEmail, onPermanentDelete }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmHard, setConfirmHard] = useState(false);
+  // For series events, default scope to the whole series — that's what staff
+  // usually mean when they hit Delete on a multi-day event. They can flip
+  // back to "Just this day" if they only want to skip one date.
+  const [scope, setScope] = useState(seriesSize > 1 ? 'series' : 'one');
 
   const handleSoftCancel = async () => {
     setBusy(true);
-    await onCancelWithEmail(reason.trim() || null);
+    await onCancelWithEmail(reason.trim() || null, scope);
     setBusy(false);
   };
   const handleHardDelete = async () => {
     setBusy(true);
-    await onPermanentDelete();
+    await onPermanentDelete(scope);
     setBusy(false);
   };
 
@@ -940,12 +1284,52 @@ function DeleteEventConfirmModal({ event, onClose, onCancelWithEmail, onPermanen
           Pick how to handle this event below. The default option notifies applicants — use the permanent delete only for events you created by mistake.
         </p>
 
+        {seriesSize > 1 && (
+          <div style={{
+            backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe',
+            borderRadius: '10px', padding: '12px 14px', marginBottom: '14px',
+          }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+              Multi-day series · {seriesSize} days
+            </div>
+            <div role="radiogroup" style={{ display: 'flex', gap: '6px' }}>
+              {[
+                { key: 'series', label: `All ${seriesSize} days` },
+                { key: 'one', label: 'Just this day' },
+              ].map(opt => {
+                const active = scope === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setScope(opt.key)}
+                    style={{
+                      flex: 1,
+                      background: active ? '#7c3aed' : '#fff',
+                      color: active ? '#fff' : '#5b21b6',
+                      border: `1px solid ${active ? '#7c3aed' : '#ddd6fe'}`,
+                      borderRadius: '8px',
+                      padding: '9px 10px',
+                      fontSize: '0.85rem', fontWeight: '700',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{
           backgroundColor: '#fef2f2', border: '1px solid #fecaca',
           borderRadius: '8px', padding: '12px 14px', marginBottom: '14px',
           fontSize: '0.85rem', color: '#991b1b', lineHeight: '1.6'
         }}>
-          <strong>Cancel event (recommended):</strong> sends a cancellation email to every approved + pending applicant and tells future reminder emails to skip this date. Applications, attendance, and votes are preserved.
+          <strong>Cancel event (recommended):</strong> sends a cancellation email to every approved + pending applicant {scope === 'series' && seriesSize > 1 ? `on each of the ${seriesSize} days` : ''} and tells future reminder emails to skip {scope === 'series' && seriesSize > 1 ? 'these dates' : 'this date'}. Applications, attendance, and votes are preserved.
         </div>
 
         <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1092,10 +1476,35 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
     }
   };
 
-  const handleSaveEvent = async (eventData) => {
-    const op = eventData.id
-      ? supabase.from('events').update(eventData).eq('id', eventData.id).select()
-      : supabase.from('events').insert([eventData]).select();
+  const handleSaveEvent = async (eventDataOrRows) => {
+    // Multi-day series creation passes an array of rows (each row a single
+    // day in the series). Single-event create/update still passes one object.
+    const isMulti = Array.isArray(eventDataOrRows);
+    // Series-wide edit: caller passed { ...eventData, _series: { sharedFields, series_id } }.
+    // First update the row's per-row fields; then push shared fields to every
+    // row carrying the same series_id so the camp stays in sync.
+    const seriesPatch = !isMulti && eventDataOrRows._series;
+    if (seriesPatch) {
+      const { sharedFields, series_id } = seriesPatch;
+      const eventDataCopy = { ...eventDataOrRows };
+      delete eventDataCopy._series;
+      const [r1, r2] = await Promise.all([
+        supabase.from('events').update(eventDataCopy).eq('id', eventDataCopy.id).select(),
+        supabase.from('events').update(sharedFields).eq('series_id', series_id).select(),
+      ]);
+      if (r1.error || r2.error) {
+        console.error('[Calendar] series save failed', r1.error || r2.error);
+        alert(`Could not save event: ${(r1.error || r2.error).message}`);
+        return;
+      }
+      fetchEvents();
+      return;
+    }
+    const op = isMulti
+      ? supabase.from('events').insert(eventDataOrRows).select()
+      : eventDataOrRows.id
+        ? supabase.from('events').update(eventDataOrRows).eq('id', eventDataOrRows.id).select()
+        : supabase.from('events').insert([eventDataOrRows]).select();
     const { data, error } = await op;
     if (error) {
       console.error('[Calendar] save failed', error);
@@ -1110,8 +1519,22 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
     fetchEvents();
   };
 
-  const handleDeleteEvent = async (eventId) => {
-    const { error } = await supabase.from('events').delete().eq('id', eventId);
+  // Series-aware delete. scope='one' deletes a single row (legacy); scope='series'
+  // deletes every row sharing the series_id (cascade clears vendor_applications,
+  // attendance, votes, media on all of them).
+  const handleDeleteEvent = async (eventId, scope = 'one') => {
+    let q;
+    if (scope === 'series') {
+      const target = events.find(e => e.id === eventId);
+      if (target?.series_id) {
+        q = supabase.from('events').delete().eq('series_id', target.series_id);
+      } else {
+        q = supabase.from('events').delete().eq('id', eventId);
+      }
+    } else {
+      q = supabase.from('events').delete().eq('id', eventId);
+    }
+    const { error } = await q;
     if (error) {
       console.error('[Calendar] delete failed', error);
       alert(`Could not delete event: ${error.message}`);
@@ -1122,7 +1545,13 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
 
   // Soft-cancel: marks events.cancelled=true and fires email to applicants.
   // Preserves all related data (applications, attendance, votes, media).
-  const handleCancelEvent = async (eventId, reason) => {
+  // scope='series' cancels every row in the series and fires a notification
+  // for each so applicants on each individual day get the heads-up.
+  const handleCancelEvent = async (eventId, reason, scope = 'one') => {
+    const target = events.find(e => e.id === eventId);
+    const isSeries = scope === 'series' && target?.series_id;
+    const filterCol = isSeries ? 'series_id' : 'id';
+    const filterVal = isSeries ? target.series_id : eventId;
     const { error } = await supabase
       .from('events')
       .update({
@@ -1130,12 +1559,19 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
         cancelled_at: new Date().toISOString(),
         cancellation_reason: reason || null,
       })
-      .eq('id', eventId);
+      .eq(filterCol, filterVal);
     if (error) {
       alert(`Could not cancel event: ${error.message}`);
       return;
     }
-    sendVendorEmail({ type: 'event_cancelled', event_id: eventId, reason: reason || null });
+    if (isSeries) {
+      const seriesEvents = events.filter(e => e.series_id === target.series_id);
+      for (const ev of seriesEvents) {
+        sendVendorEmail({ type: 'event_cancelled', event_id: ev.id, reason: reason || null });
+      }
+    } else {
+      sendVendorEmail({ type: 'event_cancelled', event_id: eventId, reason: reason || null });
+    }
     fetchEvents();
   };
 
@@ -1196,6 +1632,12 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
 
   const selectedDayEvents = selectedDay ? getEventsForDay(selectedDay) : [];
   const hasSelection = selectedDay !== null;
+  // Map series_id → total days in that series, so day-detail cards can
+  // render "Day X of Y" for multi-day events.
+  const seriesSizes = events.reduce((acc, ev) => {
+    if (ev.series_id) acc[ev.series_id] = (acc[ev.series_id] || 0) + 1;
+    return acc;
+  }, {});
 
   // Use the shared module-level formatTime12h helper
   const formatTime = formatTime12h;
@@ -1335,6 +1777,16 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                         }}>
                           {(event.categories || []).map(c => CATEGORIES[c]?.label || c).join(' · ') || 'Other'}
                         </span>
+                        {event.series_id && seriesSizes[event.series_id] > 1 && event.series_position && (
+                          <span style={{
+                            fontSize: '0.6rem', fontWeight: '800', color: '#1a1a1a',
+                            backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb',
+                            padding: '2px 8px', borderRadius: '4px',
+                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                          }}>
+                            Day {event.series_position} of {seriesSizes[event.series_id]}
+                          </span>
+                        )}
                         {event.cancelled && (
                           <span style={{
                             fontSize: '0.6rem', fontWeight: '800', color: '#dc2626',
@@ -1469,6 +1921,7 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
         <EventModal
           date={modalDate}
           existingEvents={getEventsForDay(modalDate.getDate())}
+          seriesSizes={seriesSizes}
           onClose={() => setShowEventModal(false)}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
