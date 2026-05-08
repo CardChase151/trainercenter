@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
 import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2 } from 'lucide-react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import LinkExtension from '@tiptap/extension-link';
+import DOMPurify from 'dompurify';
 import * as tus from 'tus-js-client';
 import './App.css';
 
@@ -42,6 +45,162 @@ const formatAuditTime = (ts) => {
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
   });
 };
+
+// ─── HTML sanitization ───────────────────────────────────
+// Calendar event descriptions are now stored as HTML produced by the
+// TipTap editor in EventModal. Every render path runs the stored HTML
+// through DOMPurify with a tight allowlist before handing it to
+// dangerouslySetInnerHTML so a compromised admin or pasted-in content
+// can't inject scripts/iframes.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 's', 'u',
+                 'ul', 'ol', 'li', 'a', 'h2', 'h3', 'h4',
+                 'blockquote', 'code', 'pre', 'hr'],
+  ALLOWED_ATTR: ['href', 'target', 'rel'],
+};
+const sanitizeRichText = (html) => {
+  if (!html) return '';
+  const clean = DOMPurify.sanitize(html, SANITIZE_CONFIG);
+  // Force every link to open in a new tab and not pass referrer/opener.
+  return clean.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
+};
+const isRichTextEmpty = (html) => {
+  if (!html) return true;
+  const stripped = html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, '').trim();
+  return stripped.length === 0;
+};
+
+// ─── Rich Text Editor (TipTap) ──────────────────────────
+// Used in the staff EventModal for event descriptions. Outputs HTML, not
+// markdown — what staff see in the editor is exactly what visitors see on
+// the calendar. Keep the toolbar narrow on purpose: bold/italic/strike,
+// bullet + numbered lists, link. Headings stay out — these are inline
+// card descriptions, not articles.
+function RichTextEditor({ value, onChange, placeholder, isMobile }) {
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        horizontalRule: false,
+        blockquote: false,
+      }),
+      LinkExtension.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
+    ],
+    content: value || '',
+    onUpdate: ({ editor: ed }) => {
+      const html = ed.getHTML();
+      onChange(isRichTextEmpty(html) ? '' : html);
+    },
+  });
+
+  // When the parent changes `value` externally (loading an event into the
+  // edit form, or resetting the form), push it into the editor without
+  // triggering an onUpdate loop.
+  useEffect(() => {
+    if (!editor) return;
+    const current = editor.getHTML();
+    const incoming = value || '';
+    if (incoming !== current && !(isRichTextEmpty(incoming) && isRichTextEmpty(current))) {
+      editor.commands.setContent(incoming, { emitUpdate: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, editor]);
+
+  if (!editor) return null;
+
+  const btn = (active, onClick, label, Icon) => (
+    <button
+      type="button"
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      title={label}
+      style={{
+        background: active ? '#1a1a1a' : '#fff',
+        color: active ? '#fff' : '#444',
+        border: '1px solid #ddd',
+        borderRadius: '6px',
+        padding: '6px 9px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontSize: '0.85rem',
+        fontWeight: '700',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: '32px',
+        height: '32px',
+      }}
+    >
+      <Icon size={15} />
+    </button>
+  );
+
+  const promptForLink = () => {
+    const previous = editor.getAttributes('link').href || '';
+    const url = window.prompt('Link URL', previous);
+    if (url === null) return; // cancelled
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      return;
+    }
+    const safeUrl = url.startsWith('http') ? url : `https://${url}`;
+    editor.chain().focus().extendMarkRange('link').setLink({ href: safeUrl }).run();
+  };
+
+  return (
+    <div style={{
+      border: '1px solid #ddd',
+      borderRadius: '8px',
+      overflow: 'hidden',
+      backgroundColor: '#fff',
+      marginBottom: '12px',
+    }}>
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: '4px',
+        padding: '6px 8px',
+        borderBottom: '1px solid #eee',
+        backgroundColor: '#fafafa',
+      }}>
+        {btn(editor.isActive('bold'), () => editor.chain().focus().toggleBold().run(), 'Bold (Ctrl/Cmd+B)', BoldIcon)}
+        {btn(editor.isActive('italic'), () => editor.chain().focus().toggleItalic().run(), 'Italic (Ctrl/Cmd+I)', ItalicIcon)}
+        {btn(editor.isActive('strike'), () => editor.chain().focus().toggleStrike().run(), 'Strikethrough', Strikethrough)}
+        <span style={{ width: '1px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+        {btn(editor.isActive('bulletList'), () => editor.chain().focus().toggleBulletList().run(), 'Bullet list', List)}
+        {btn(editor.isActive('orderedList'), () => editor.chain().focus().toggleOrderedList().run(), 'Numbered list', ListOrdered)}
+        <span style={{ width: '1px', backgroundColor: '#e5e7eb', margin: '0 4px' }} />
+        {btn(editor.isActive('link'), promptForLink, 'Add or edit link', Link2)}
+      </div>
+      <div
+        onClick={() => editor.chain().focus().run()}
+        style={{
+          padding: '12px 14px',
+          fontSize: '16px',
+          lineHeight: '1.5',
+          minHeight: isMobile ? '120px' : '140px',
+          cursor: 'text',
+        }}
+      >
+        <EditorContent editor={editor} />
+        {isRichTextEmpty(editor.getHTML()) && placeholder && (
+          <div style={{
+            position: 'absolute',
+            color: '#aaa',
+            pointerEvents: 'none',
+            transform: 'translateY(-1.5em)',
+            fontSize: '16px',
+          }}>
+            {placeholder}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Scroll To Top on Route Change ──────────────────────
 function ScrollToTop() {
@@ -871,15 +1030,12 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
         <input placeholder="Event title" value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} />
 
         <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Description (optional)</label>
-        <textarea
-          placeholder="Use **bold** or *italic* for emphasis. Press Enter for new lines."
+        <RichTextEditor
           value={description}
-          onChange={e => setDescription(e.target.value)}
-          style={textareaStyle}
+          onChange={setDescription}
+          placeholder="Type a description. Use the toolbar for bold, italic, lists, and links."
+          isMobile={isMobile}
         />
-        <div style={{ fontSize: '0.7rem', color: '#aaa', margin: '-4px 0 12px 2px' }}>
-          Markdown supported: <strong>**bold**</strong> · <em>*italic*</em>
-        </div>
 
         {/* ─── Schedule ────────────────────────────────────
             New events: pick between a hand-picked list of dates (camps,
@@ -1877,18 +2033,12 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                           </div>
                         </div>
                       )}
-                      {event.description && (
-                        <div className="event-md" style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: '1.4' }}>
-                          <ReactMarkdown
-                            components={{
-                              p: ({ node, children, ...props }) => <p style={{ margin: '0 0 6px 0' }} {...props}>{children}</p>,
-                              strong: ({ node, children, ...props }) => <strong style={{ color: '#1a1a1a' }} {...props}>{children}</strong>,
-                              a: ({ node, children, href, ...props }) => <a style={{ color: '#C8102E' }} href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
-                            }}
-                          >
-                            {event.description}
-                          </ReactMarkdown>
-                        </div>
+                      {event.description && !isRichTextEmpty(event.description) && (
+                        <div
+                          className="event-md"
+                          style={{ fontSize: '0.8rem', color: '#666', marginTop: '6px', lineHeight: '1.4' }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeRichText(event.description) }}
+                        />
                       )}
                       {event.recurrence !== 'none' && (
                         <div style={{
@@ -11238,6 +11388,29 @@ function App() {
         @media (max-width: 768px) {
           body { -webkit-text-size-adjust: 100%; }
         }
+        /* TipTap editor + rendered description styling. Tight defaults so the
+           editor visually matches the day-detail card content area. */
+        .ProseMirror { outline: none; min-height: 100px; }
+        .ProseMirror p { margin: 0 0 8px 0; }
+        .ProseMirror p:last-child { margin-bottom: 0; }
+        .ProseMirror ul, .ProseMirror ol { margin: 0 0 8px 0; padding-left: 22px; }
+        .ProseMirror li { margin-bottom: 2px; }
+        .ProseMirror a { color: #C8102E; text-decoration: underline; }
+        .ProseMirror strong { font-weight: 800; color: #1a1a1a; }
+        .ProseMirror em { font-style: italic; }
+        .ProseMirror s { text-decoration: line-through; color: #6b7280; }
+        .ProseMirror.is-editor-empty:first-child::before {
+          color: #aaa; content: attr(data-placeholder); float: left;
+          height: 0; pointer-events: none;
+        }
+        .event-md p { margin: 0 0 6px 0; }
+        .event-md p:last-child { margin-bottom: 0; }
+        .event-md ul, .event-md ol { margin: 0 0 6px 0; padding-left: 22px; }
+        .event-md li { margin-bottom: 2px; }
+        .event-md a { color: #C8102E; text-decoration: underline; }
+        .event-md strong { font-weight: 800; color: #1a1a1a; }
+        .event-md em { font-style: italic; }
+        .event-md s { text-decoration: line-through; color: #999; }
       `}</style>
     </div>
     </AuthContext.Provider>
