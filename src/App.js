@@ -419,7 +419,7 @@ const CATEGORIES = {
 };
 
 // ─── Event Modal (Add/Edit) ───────────────────────────────
-function EventModal({ date, existingEvents, seriesSizes = {}, onClose, onSave, onDelete, onCancelEvent, isMobile, staff }) {
+function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null, onClose, onSave, onDelete, onCancelEvent, isMobile, staff }) {
   const dateToISO = (d) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const initialDateISO = dateToISO(date);
@@ -489,6 +489,14 @@ function EventModal({ date, existingEvents, seriesSizes = {}, onClose, onSave, o
     setVendorEndTime(event.vendor_end_time?.slice(0, 5) || '');
     setVendorNote(event.vendor_note || '');
   };
+
+  // When the modal is opened from a day-detail Edit button, jump straight
+  // into edit mode for that specific row instead of landing the user on the
+  // create form.
+  useEffect(() => {
+    if (initialEdit) loadEvent(initialEdit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEdit?.id]);
 
   // ─── Specific-dates list helpers ────────────────────────
   const addDateEntry = () => {
@@ -1410,6 +1418,14 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
   const [selectedDay, setSelectedDay] = useState(initialDateObj ? initialDateObj.getDate() : null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalDate, setModalDate] = useState(null);
+  // When the staff Edit button on a day-detail card opens the modal, this
+  // holds the specific event to pre-load so the modal lands in edit mode
+  // for that row instead of dumping users at the day-level "add" screen.
+  const [editEventTarget, setEditEventTarget] = useState(null);
+  // Day-detail Delete button now routes through the same confirm dialog
+  // the existing-events list inside the modal uses, so series scope and
+  // soft-cancel-with-email are available everywhere.
+  const [confirmDeleteEvent, setConfirmDeleteEvent] = useState(null);
   const detailPanelRef = useRef(null);
 
   const year = currentDate.getFullYear();
@@ -1885,6 +1901,7 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                       {isStaff && (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <button onClick={() => {
+                            setEditEventTarget(event);
                             setModalDate(new Date(year, month, selectedDay));
                             setShowEventModal(true);
                           }} style={{
@@ -1892,7 +1909,7 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                             padding: '5px 12px', fontSize: '0.7rem', fontWeight: '600',
                             cursor: 'pointer', color: '#333'
                           }}>Edit</button>
-                          <button onClick={() => handleDeleteEvent(event.id)} style={{
+                          <button onClick={() => setConfirmDeleteEvent(event)} style={{
                             background: '#fee', border: 'none', borderRadius: '6px',
                             padding: '5px 12px', fontSize: '0.7rem', fontWeight: '600',
                             cursor: 'pointer', color: '#C8102E'
@@ -1922,12 +1939,30 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
           date={modalDate}
           existingEvents={getEventsForDay(modalDate.getDate())}
           seriesSizes={seriesSizes}
-          onClose={() => setShowEventModal(false)}
+          initialEdit={editEventTarget}
+          onClose={() => { setShowEventModal(false); setEditEventTarget(null); }}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
           onCancelEvent={handleCancelEvent}
           isMobile={isMobile}
           staff={staff}
+        />
+      )}
+      {/* Day-detail Delete button funnels through the same confirm dialog
+          so series scope and soft-cancel-with-email apply everywhere. */}
+      {confirmDeleteEvent && (
+        <DeleteEventConfirmModal
+          event={confirmDeleteEvent}
+          seriesSize={confirmDeleteEvent.series_id ? (seriesSizes[confirmDeleteEvent.series_id] || 1) : 1}
+          onClose={() => setConfirmDeleteEvent(null)}
+          onCancelWithEmail={async (reason, scope) => {
+            await handleCancelEvent(confirmDeleteEvent.id, reason, scope);
+            setConfirmDeleteEvent(null);
+          }}
+          onPermanentDelete={async (scope) => {
+            await handleDeleteEvent(confirmDeleteEvent.id, scope);
+            setConfirmDeleteEvent(null);
+          }}
         />
       )}
     </>
