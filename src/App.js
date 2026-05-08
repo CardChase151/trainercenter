@@ -4170,6 +4170,17 @@ function VendorDayAboutPage({ isMobile }) {
             </Link>
           )}
 
+          <div style={{ marginTop: '28px', marginBottom: '8px', textAlign: 'center' }}>
+            <Link to="/vendors/dashboard" style={{
+              backgroundColor: '#1a1a1a', color: '#fff',
+              padding: '14px 28px', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+            }}>
+              Open Vendor Dashboard <ArrowRight size={16} />
+            </Link>
+          </div>
+
           {/* Recent vendor uploads gallery — same shape as /vendors used to
               run, just lives here now since /vendors is a promo page. */}
           {submissions.length > 0 && (
@@ -4190,17 +4201,6 @@ function VendorDayAboutPage({ isMobile }) {
               </div>
             </>
           )}
-
-          <div style={{ marginTop: '28px', textAlign: 'center' }}>
-            <Link to="/vendors/dashboard" style={{
-              backgroundColor: '#1a1a1a', color: '#fff',
-              padding: '14px 28px', borderRadius: '10px',
-              fontSize: '0.95rem', fontWeight: '700', textDecoration: 'none',
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-            }}>
-              Open Vendor Dashboard <ArrowRight size={16} />
-            </Link>
-          </div>
         </div>
       </div>
     </PageWrapper>
