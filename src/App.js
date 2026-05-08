@@ -3192,16 +3192,22 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     })
     .sort((a, b) => DAY_ORDER.indexOf(a.dow) - DAY_ORDER.indexOf(b.dow));
 
-  // Count actual occurrences of each category in the visible month so the
-  // chip badges reflect what the user sees on the grid. A weekly event that
-  // hits four Fridays this month counts as 4, not 1. Cancelled events are
-  // skipped. Chips with 0 occurrences in the visible month get dimmed.
+  // Count actual occurrences of each category over the next 90 days so the
+  // chip badges reflect upcoming events, not just master rows. A weekly
+  // event hitting ~13 Fridays in the window counts as 13, not 1.
+  // Cancelled events are skipped. Chips with 0 upcoming occurrences dim.
   const categoryCounts = (() => {
     const counts = {};
     const dayMs = 1000 * 60 * 60 * 24;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateObj = new Date(year, month, d);
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+    const windowDays = 90;
+    for (let i = 0; i < windowDays; i++) {
+      const dateObj = new Date(today0.getTime() + i * dayMs);
+      const y = dateObj.getFullYear();
+      const m = dateObj.getMonth();
+      const d = dateObj.getDate();
+      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       for (const ev of events) {
         if (ev.cancelled) continue;
         let matches = false;
