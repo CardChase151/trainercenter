@@ -10300,6 +10300,52 @@ function App() {
                           </Link>
                         );
                       })}
+                      {item.label === 'Vendors' && (
+                        <div style={{ borderTop: '1px solid #eee', marginTop: '6px', paddingTop: '6px' }}>
+                          {staffUser ? (
+                            <>
+                              <div style={{
+                                fontSize: '0.7rem', fontWeight: '700',
+                                color: '#888', padding: '6px 14px',
+                                textTransform: 'uppercase', letterSpacing: '0.06em',
+                              }}>
+                                Logged in
+                              </div>
+                              <button
+                                onClick={() => { handleLogout(); setOpenDropdown(null); }}
+                                style={{
+                                  background: 'none', border: 'none',
+                                  width: '100%', textAlign: 'left',
+                                  cursor: 'pointer', fontFamily: 'inherit',
+                                  color: '#C8102E', fontSize: '0.85rem', fontWeight: '700',
+                                  padding: '10px 14px', borderRadius: '6px',
+                                  transition: 'background-color 0.15s',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fff0f0'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                Log out
+                              </button>
+                            </>
+                          ) : (
+                            <Link
+                              to="/vendors/apply"
+                              onClick={() => setOpenDropdown(null)}
+                              style={{
+                                display: 'block',
+                                color: '#1a1a1a', textDecoration: 'none',
+                                fontSize: '0.85rem', fontWeight: '700',
+                                padding: '10px 14px', borderRadius: '6px',
+                                transition: 'background-color 0.15s, color 0.15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#1a1a1a'; }}
+                            >
+                              Log in
+                            </Link>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -10439,6 +10485,46 @@ function App() {
                           </Link>
                         );
                       })}
+                      {item.label === 'Vendors' && (
+                        staffUser ? (
+                          <>
+                            <div style={{
+                              fontSize: '0.7rem', fontWeight: '700',
+                              color: '#888', padding: '12px 24px 4px 40px',
+                              textTransform: 'uppercase', letterSpacing: '0.06em',
+                              borderTop: '1px solid #efefef',
+                            }}>
+                              Logged in
+                            </div>
+                            <button
+                              onClick={() => { handleLogout(); setMenuOpen(false); setOpenDropdown(null); }}
+                              style={{
+                                background: 'none', border: 'none',
+                                width: '100%', textAlign: 'left',
+                                cursor: 'pointer', fontFamily: 'inherit',
+                                color: '#C8102E', fontSize: '0.9rem', fontWeight: '700',
+                                padding: '4px 24px 14px 40px',
+                              }}
+                            >
+                              Log out
+                            </button>
+                          </>
+                        ) : (
+                          <Link
+                            to="/vendors/apply"
+                            onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
+                            style={{
+                              display: 'block',
+                              color: '#1a1a1a', textDecoration: 'none',
+                              fontSize: '0.9rem', fontWeight: '700',
+                              padding: '12px 24px 12px 40px',
+                              borderTop: '1px solid #efefef',
+                            }}
+                          >
+                            Log in
+                          </Link>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
