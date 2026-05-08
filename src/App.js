@@ -342,7 +342,7 @@ const CATEGORIES = {
   game_day:     { label: 'Game Day',     color: '#0891b2', description: 'Video games, board games, TCG. Bring your stuff or play what is at the shop.' },
   crafts:       { label: 'Crafts & Art', color: '#ec4899', description: 'Family-friendly. Paint Pokemon, do crafts, hang out.' },
   consultation: { label: 'Consultations',color: '#059669', description: 'Book 1-on-1 with Chef for appraisals, strategy, or learn the TCG.' },
-  card_show:    { label: 'Card Show',    color: '#7c3aed', description: 'Card shows we host at Trainer Center, plus signings and in-store special days.' },
+  tc_trade_night: { label: "TC's Beach City Trade Night!", color: '#7c3aed', description: "Trainer Center's biggest event. Last Friday of the month, local vendors set up in the shop, full lineup of trades and finds." },
   on_the_road:  { label: 'On the Road',  color: '#d97706', description: 'Off-site shows where you can find us — Front Row, conventions, regional trade days.' },
   other:        { label: 'Other',        color: '#ea580c', description: 'Everything else on the schedule.' },
 };
@@ -1293,6 +1293,47 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                               {formatTime(event.vendor_start_time)} – {formatTime(event.vendor_end_time)}
                             </div>
                           )}
+                          {(() => {
+                            const approved = (event.vendor_applications || [])
+                              .filter(a => a.status === 'approved' && a.vendor);
+                            if (approved.length === 0) return null;
+                            return (
+                              <div style={{
+                                display: 'flex', flexWrap: 'wrap', gap: '6px',
+                                marginBottom: '10px'
+                              }}>
+                                {approved.map(a => (
+                                  <div key={a.id} style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    padding: '4px 10px 4px 4px', borderRadius: '999px',
+                                    backgroundColor: '#fff', border: '1px solid #bbf7d0',
+                                    fontSize: '0.72rem', fontWeight: '700', color: '#166534'
+                                  }}>
+                                    {a.vendor.avatar_url ? (
+                                      <img
+                                        src={a.vendor.avatar_url}
+                                        alt=""
+                                        style={{
+                                          width: '20px', height: '20px',
+                                          borderRadius: '50%', objectFit: 'cover'
+                                        }}
+                                      />
+                                    ) : (
+                                      <div style={{
+                                        width: '20px', height: '20px', borderRadius: '50%',
+                                        backgroundColor: '#dcfce7',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: '0.65rem', color: '#15803d', fontWeight: '800'
+                                      }}>
+                                        {(a.vendor.name || '?').charAt(0).toUpperCase()}
+                                      </div>
+                                    )}
+                                    {a.vendor.name}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <Link
                               to={`/vendor-day?event=${event.id}`}
@@ -3068,9 +3109,17 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
   const calendarRef = useRef(null);
 
   const fetchEvents = useCallback(async () => {
+    // Pull approved vendor lineup with each event so the day-detail panel
+    // can show vendor names without a second round-trip per click.
     const { data } = await supabase
       .from('events')
-      .select('*')
+      .select(`
+        *,
+        vendor_applications (
+          id, status,
+          vendor:vendors ( id, name, avatar_url, specialty )
+        )
+      `)
       .order('start_time', { ascending: true });
     setEvents(data || []);
   }, []);
@@ -3113,12 +3162,13 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     return acc;
   }, {});
 
-  // Derive special events (vendor-bearing or card shows).
+  // Derive special events (vendor-bearing TC Beach City Trade Nights).
   // Pull non-recurring "headline" events for the top-of-calendar callout.
-  // Anything with `has_vendors=true` or tagged `card_show` qualifies, sorted
-  // by soonest first so the upcoming lineup surfaces ahead of older callouts.
+  // Anything with `has_vendors=true` or tagged `tc_trade_night` qualifies,
+  // sorted by soonest first so the upcoming lineup surfaces ahead of older
+  // callouts.
   const specialEvents = events
-    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.has_vendors || (ev.categories || []).includes('card_show')))
+    .filter(ev => !ev.cancelled && ev.recurrence === 'none' && (ev.has_vendors || (ev.categories || []).includes('tc_trade_night')))
     .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   // Get today's events
@@ -3214,7 +3264,7 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
         .day-num { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
         .event-title { background: #f5f5f5; border-radius: 4px; padding: 2px 6px; margin: 2px 0; font-size: 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-title.trade_night { border-left: 3px solid #C8102E; }
-        .event-title.card_show { border-left: 3px solid #7c3aed; }
+        .event-title.tc_trade_night { border-left: 3px solid #7c3aed; }
         .event-title.game_day { border-left: 3px solid #0891b2; }
         .event-title.crafts { border-left: 3px solid #ec4899; }
         .event-title.consultation { border-left: 3px solid #059669; }
@@ -9742,7 +9792,7 @@ const MARKETING_CATEGORIES = [
   { key: 'tournament',  label: 'Tournament announcements',    help: 'TCG, video, and board-game tournaments.' },
   { key: 'game_day',    label: 'Game Day reminders',          help: 'Weekly games hangout and special game days.' },
   { key: 'crafts',      label: 'Crafts & Art days',           help: 'Family-friendly painting and creative events.' },
-  { key: 'card_show',   label: 'Card shows + special days',   help: 'Card shows at Trainer Center and the ones we are at on the road, plus signings and special days.' },
+  { key: 'tc_trade_night', label: "TC's Beach City Trade Night reminders", help: "Trainer Center's biggest event — last Friday of the month, local vendors set up in the shop." },
   { key: 'store_news',  label: 'Store news and updates',      help: 'Hours, restocks, new arrivals, store happenings.' },
   { key: 'blog',        label: 'New blog posts',              help: 'Articles and guides we publish on the site.' },
 ];
