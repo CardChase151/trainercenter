@@ -1293,47 +1293,6 @@ function Calendar({ isStaff, isMobile, staff, activeCategory, calendarRef, event
                               {formatTime(event.vendor_start_time)} – {formatTime(event.vendor_end_time)}
                             </div>
                           )}
-                          {(() => {
-                            const approved = (event.vendor_applications || [])
-                              .filter(a => a.status === 'approved' && a.vendor);
-                            if (approved.length === 0) return null;
-                            return (
-                              <div style={{
-                                display: 'flex', flexWrap: 'wrap', gap: '6px',
-                                marginBottom: '10px'
-                              }}>
-                                {approved.map(a => (
-                                  <div key={a.id} style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                    padding: '4px 10px 4px 4px', borderRadius: '999px',
-                                    backgroundColor: '#fff', border: '1px solid #bbf7d0',
-                                    fontSize: '0.72rem', fontWeight: '700', color: '#166534'
-                                  }}>
-                                    {a.vendor.avatar_url ? (
-                                      <img
-                                        src={a.vendor.avatar_url}
-                                        alt=""
-                                        style={{
-                                          width: '20px', height: '20px',
-                                          borderRadius: '50%', objectFit: 'cover'
-                                        }}
-                                      />
-                                    ) : (
-                                      <div style={{
-                                        width: '20px', height: '20px', borderRadius: '50%',
-                                        backgroundColor: '#dcfce7',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '0.65rem', color: '#15803d', fontWeight: '800'
-                                      }}>
-                                        {(a.vendor.name || '?').charAt(0).toUpperCase()}
-                                      </div>
-                                    )}
-                                    {a.vendor.name}
-                                  </div>
-                                ))}
-                              </div>
-                            );
-                          })()}
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <Link
                               to={`/vendor-day?event=${event.id}`}
@@ -3109,17 +3068,9 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
   const calendarRef = useRef(null);
 
   const fetchEvents = useCallback(async () => {
-    // Pull approved vendor lineup with each event so the day-detail panel
-    // can show vendor names without a second round-trip per click.
     const { data } = await supabase
       .from('events')
-      .select(`
-        *,
-        vendor_applications (
-          id, status,
-          vendor:vendors ( id, name, avatar_url, specialty )
-        )
-      `)
+      .select('*')
       .order('start_time', { ascending: true });
     setEvents(data || []);
   }, []);
