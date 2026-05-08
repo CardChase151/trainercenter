@@ -9716,15 +9716,31 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
 }
 
 // ─── Nav Link Helper ──────────────────────────────────────
+// Items with `children` render as click-to-open dropdowns (desktop) /
+// accordion sections (mobile). The parent label itself never navigates —
+// it only toggles its child menu.
 const NAV_ITEMS = [
   { label: 'Home', to: '/' },
   { label: 'Calendar', to: '/calendar' },
-  { label: 'Vendors', to: '/vendors' },
   { label: 'Visit Us', to: '/#visit-us' },
-  { label: 'Buy/Sell', to: '/buy-sell' },
-  { label: 'Consultation', to: '/consultation' },
-  { label: 'Grading', to: '/grading' },
-  { label: 'Blog', to: '/blog' }
+  {
+    label: 'Vendors',
+    children: [
+      { label: 'Dashboard', to: '/vendors/dashboard' },
+      { label: 'Apply', to: '/vendors/apply' },
+      { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
+      { label: 'Line ups', to: '/vendor-day' },
+    ],
+  },
+  {
+    label: 'Services',
+    children: [
+      { label: 'Buy / Sell', to: '/buy-sell' },
+      { label: 'Consultation', to: '/consultation' },
+      { label: 'Grading', to: '/grading' },
+    ],
+  },
+  { label: 'Blog', to: '/blog' },
 ];
 
 // ─── Unsubscribe page ─────────────────────────────────────
@@ -9995,8 +10011,33 @@ function App() {
     : null;
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Desktop: which dropdown parent is open (label string), or null.
+  // Mobile: which accordion section is expanded inside the drawer.
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const navRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const location = useLocation();
+
+  // Close any open desktop dropdown when clicking outside the nav.
+  useEffect(() => {
+    if (!openDropdown || isMobile) return;
+    const handleClickOutside = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openDropdown, isMobile]);
+
+  // Close dropdowns whenever the route changes (handles child clicks).
+  useEffect(() => {
+    setOpenDropdown(null);
+  }, [location.pathname]);
+
+  // Helper: a parent dropdown is "active" when any of its children match.
+  const isParentActive = (children) =>
+    children.some(c => location.pathname === c.to || location.pathname.startsWith(c.to + '/'));
 
   // Site settings + special hours (editable Visit Us section + holiday overrides)
   const [siteSettings, setSiteSettings] = useState(null);
@@ -10149,7 +10190,7 @@ function App() {
       <ScrollToTop />
 
       {/* Nav - hidden until scroll on home, always visible on other pages */}
-      <nav style={{
+      <nav ref={navRef} style={{
         position: 'fixed',
         top: 0,
         left: 0,
@@ -10174,41 +10215,106 @@ function App() {
         </Link>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
           {/* Desktop nav links */}
-          {!isMobile && NAV_ITEMS.map(item => (
-            item.label === 'Visit Us' ? (
+          {!isMobile && NAV_ITEMS.map(item => {
+            // Dropdown parent — click toggles, child click navigates.
+            if (item.children) {
+              const isOpen = openDropdown === item.label;
+              const parentActive = isParentActive(item.children);
+              return (
+                <div key={item.label} style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => setOpenDropdown(isOpen ? null : item.label)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: parentActive || isOpen ? '#C8102E' : '#555',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
+                      padding: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontFamily: 'inherit',
+                      transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = '#C8102E'}
+                    onMouseLeave={e => { if (!parentActive && !isOpen) e.currentTarget.style.color = '#555'; }}
+                  >
+                    {item.label}
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                      }}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 14px)',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #eee',
+                      borderRadius: '10px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                      padding: '6px',
+                      minWidth: '220px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      zIndex: 1001,
+                    }}>
+                      {item.children.map(child => {
+                        const childActive = location.pathname === child.to;
+                        return (
+                          <Link
+                            key={child.label}
+                            to={child.to}
+                            onClick={() => setOpenDropdown(null)}
+                            style={{
+                              color: childActive ? '#C8102E' : '#1a1a1a',
+                              textDecoration: 'none',
+                              fontSize: '0.85rem',
+                              fontWeight: '600',
+                              padding: '10px 14px',
+                              borderRadius: '6px',
+                              whiteSpace: 'nowrap',
+                              transition: 'background-color 0.15s, color 0.15s',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; if (!childActive) e.currentTarget.style.color = '#1a1a1a'; }}
+                          >
+                            {child.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            // Visit Us is a hash anchor — no active state coloring.
+            const isActive = item.label !== 'Visit Us' && location.pathname === item.to;
+            return (
               <Link
                 key={item.label}
                 to={item.to}
                 style={{
-                  color: '#555',
+                  color: isActive ? '#C8102E' : '#555',
                   textDecoration: 'none',
                   fontSize: '0.85rem',
                   fontWeight: '600',
-                  transition: 'color 0.2s'
+                  transition: 'color 0.2s',
                 }}
-                onMouseEnter={e => e.target.style.color = '#C8102E'}
-                onMouseLeave={e => e.target.style.color = '#555'}
+                onMouseEnter={e => e.currentTarget.style.color = '#C8102E'}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#555'; }}
               >
                 {item.label}
               </Link>
-            ) : (
-              <Link
-                key={item.label}
-                to={item.to}
-                style={{
-                  color: location.pathname === item.to ? '#C8102E' : '#555',
-                  textDecoration: 'none',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  transition: 'color 0.2s'
-                }}
-                onMouseEnter={e => e.target.style.color = '#C8102E'}
-                onMouseLeave={e => { if (location.pathname !== item.to) e.target.style.color = '#555'; }}
-              >
-                {item.label}
-              </Link>
-            )
-          ))}
+            );
+          })}
           {/* Staff lock icon - always visible */}
           <button
             onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
@@ -10258,28 +10364,96 @@ function App() {
           boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
           display: 'flex',
           flexDirection: 'column',
-          padding: '8px 0'
+          padding: '8px 0',
+          maxHeight: 'calc(100vh - 64px)',
+          overflowY: 'auto',
         }}>
-          {NAV_ITEMS.map(item => (
-            <Link
-              key={item.label}
-              to={item.to}
-              onClick={() => setMenuOpen(false)}
-              style={{
-                color: location.pathname === item.to ? '#C8102E' : '#555',
-                textDecoration: 'none',
-                fontSize: '0.95rem',
-                fontWeight: '600',
-                padding: '14px 24px',
-                borderBottom: '1px solid #f0f0f0',
-                transition: 'background-color 0.2s, color 0.2s'
-              }}
-              onMouseEnter={e => { e.target.style.backgroundColor = '#fff0f0'; e.target.style.color = '#C8102E'; }}
-              onMouseLeave={e => { e.target.style.backgroundColor = 'transparent'; if (location.pathname !== item.to) e.target.style.color = '#555'; }}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(item => {
+            // Accordion section for parents with children.
+            if (item.children) {
+              const isOpen = openDropdown === item.label;
+              const parentActive = isParentActive(item.children);
+              return (
+                <div key={item.label}>
+                  <button
+                    onClick={() => setOpenDropdown(isOpen ? null : item.label)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      width: '100%',
+                      cursor: 'pointer',
+                      color: parentActive || isOpen ? '#C8102E' : '#555',
+                      fontSize: '0.95rem',
+                      fontWeight: '600',
+                      padding: '14px 24px',
+                      borderBottom: '1px solid #f0f0f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontFamily: 'inherit',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {item.label}
+                    <ChevronDown
+                      size={16}
+                      style={{
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                      }}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div style={{
+                      backgroundColor: '#fafafa',
+                      borderBottom: '1px solid #f0f0f0',
+                    }}>
+                      {item.children.map(child => {
+                        const childActive = location.pathname === child.to;
+                        return (
+                          <Link
+                            key={child.label}
+                            to={child.to}
+                            onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
+                            style={{
+                              display: 'block',
+                              color: childActive ? '#C8102E' : '#555',
+                              textDecoration: 'none',
+                              fontSize: '0.9rem',
+                              fontWeight: '600',
+                              padding: '12px 24px 12px 40px',
+                              borderTop: '1px solid #efefef',
+                            }}
+                          >
+                            {child.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            const isActive = item.label !== 'Visit Us' && location.pathname === item.to;
+            return (
+              <Link
+                key={item.label}
+                to={item.to}
+                onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
+                style={{
+                  color: isActive ? '#C8102E' : '#555',
+                  textDecoration: 'none',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  padding: '14px 24px',
+                  borderBottom: '1px solid #f0f0f0',
+                  transition: 'background-color 0.2s, color 0.2s',
+                }}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       )}
 
