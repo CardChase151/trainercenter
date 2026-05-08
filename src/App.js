@@ -337,12 +337,12 @@ const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Fri
 // and (for the marked subscribable ones below) per-category email subs.
 // `description` is shown as the chip subtitle and used for SEO meta copy.
 const CATEGORIES = {
+  tc_trade_night: { label: "TC's Beach City Trade Night!", color: '#7c3aed', description: "Trainer Center's biggest event. Last Friday of the month, local vendors set up in the shop, full lineup of trades and finds." },
   trade_night:  { label: 'Trade Night',  color: '#C8102E', description: 'Bring cards. Trade with the community. Walk out with the binder you have been chasing.' },
   tournament:   { label: 'Tournament',   color: '#2563eb', description: 'Compete in TCG, video games, or board games. Prizes for top finishers.' },
   game_day:     { label: 'Game Day',     color: '#0891b2', description: 'Video games, board games, TCG. Bring your stuff or play what is at the shop.' },
   crafts:       { label: 'Crafts & Art', color: '#ec4899', description: 'Family-friendly. Paint Pokemon, do crafts, hang out.' },
   consultation: { label: 'Consultations',color: '#059669', description: 'Book 1-on-1 with Chef for appraisals, strategy, or learn the TCG.' },
-  tc_trade_night: { label: "TC's Beach City Trade Night!", color: '#7c3aed', description: "Trainer Center's biggest event. Last Friday of the month, local vendors set up in the shop, full lineup of trades and finds." },
   on_the_road:  { label: 'On the Road',  color: '#d97706', description: 'Off-site shows where you can find us — Front Row, conventions, regional trade days.' },
   other:        { label: 'Other',        color: '#ea580c', description: 'Everything else on the schedule.' },
 };
