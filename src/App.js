@@ -6026,7 +6026,7 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMod
 // is set by the parent on either close or success.
 const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
 
-function ReminderSignupModal({ onClose, onComplete, isMobile }) {
+function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
   const { user } = useAuth();
   const isLoggedIn = !!user;
   const [step, setStep] = useState('categories'); // 'categories' | 'auth' | 'saving' | 'success' | 'error'
@@ -6192,6 +6192,28 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
                     ? `Save ${selectedCats.size} ${selectedCats.size === 1 ? 'reminder' : 'reminders'}`
                     : `Continue with ${selectedCats.size} selected`}
               </button>
+              {onHideBell && (
+                <button
+                  type="button"
+                  onClick={onHideBell}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    fontSize: '0.78rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    padding: '12px 8px 0',
+                    width: '100%',
+                    textAlign: 'center',
+                    textDecoration: 'underline',
+                  }}
+                  title="Hide the bell on this device"
+                >
+                  Don't show this bell anymore
+                </button>
+              )}
             </>
           )}
 
@@ -11215,10 +11237,10 @@ const buildNavItems = ({ isStaff }) => [
       { label: 'Buy / Sell', to: '/buy-sell' },
       { label: 'Consultation', to: '/consultation' },
       { label: 'Grading', to: '/grading' },
+      { label: 'Blog', to: '/blog' },
       { label: 'Reminders', to: '/reminders' },
     ],
   },
-  { label: 'Blog', to: '/blog' },
 ];
 
 // ─── Unsubscribe page ─────────────────────────────────────
@@ -11489,6 +11511,21 @@ function App() {
     : null;
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Header notification bell — visible by default on every device, hidden
+  // permanently only when the user explicitly opts out via the modal's
+  // "Don't show this bell anymore" link. The flag lives in localStorage so
+  // the choice persists per browser.
+  const BELL_HIDDEN_FLAG = 'tc_reminders_bell_hidden';
+  const [bellHidden, setBellHidden] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return localStorage.getItem(BELL_HIDDEN_FLAG) === '1'; } catch { return false; }
+  });
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const dismissBellForever = () => {
+    try { localStorage.setItem(BELL_HIDDEN_FLAG, '1'); } catch { /* private mode */ }
+    setBellHidden(true);
+    setShowReminderModal(false);
+  };
   // Desktop: which dropdown parent is open (label string), or null.
   // Mobile: which accordion section is expanded inside the drawer.
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -11848,6 +11885,29 @@ function App() {
               </Link>
             );
           })}
+          {/* Reminder bell — wiggle CTA to open the reminder signup modal.
+              Visible until the user explicitly opts out via the modal. */}
+          {!bellHidden && (
+            <button
+              type="button"
+              className="tc-wiggle"
+              onClick={() => setShowReminderModal(true)}
+              title="Sign up for reminders"
+              aria-label="Sign up for reminders"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#C8102E',
+                padding: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Bell size={20} />
+            </button>
+          )}
           {/* Auth badge — Lock when signed out, role label when signed in.
               Staff (admin) wins over Vendor when a user has both roles. */}
           {(() => {
@@ -12079,6 +12139,17 @@ function App() {
         <StaffLogin
           onClose={() => setShowLogin(false)}
           onLogin={() => { /* auth listener handles setStaffUser */ }}
+        />
+      )}
+
+      {/* Reminder signup modal triggered by the header bell. The calendar
+          banner and the /reminders page mount their own copies — this one is
+          for the always-on bell. */}
+      {showReminderModal && (
+        <ReminderSignupModal
+          isMobile={isMobile}
+          onClose={() => setShowReminderModal(false)}
+          onHideBell={dismissBellForever}
         />
       )}
 
