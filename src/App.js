@@ -10706,7 +10706,7 @@ function StaffCommsPage({ isMobile, staff }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                     <input type="checkbox" checked={mustBeMember} onChange={e => setMustBeMember(e.target.checked)} />
-                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people who are also members (signed up via reminders or guest check-in)</span>
+                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people with an account (staff, vendors, or anyone who signed up on the site)</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                     <input type="checkbox" checked={mustBeVendor} onChange={e => setMustBeVendor(e.target.checked)} />
