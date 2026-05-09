@@ -3975,7 +3975,7 @@ function CalendarReminderBanner({ isMobile }) {
       }}>
         <button
           type="button"
-          className={calmed ? '' : 'tc-wiggle'}
+          className={calmed ? '' : 'tc-pulse'}
           onClick={() => { calmDown(); setShowModal(true); }}
           style={{
             flex: 1,

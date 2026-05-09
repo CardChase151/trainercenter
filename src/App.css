@@ -21,6 +21,18 @@
 }
 .tc-wiggle { animation: tcWiggle 2.2s ease-in-out infinite; transform-origin: center; }
 
+/* Wider elements (the calendar reminder banner) read as "violent" with the
+   same translate/rotate that looks fine on a small icon. A subtle scale
+   pulse + shadow breathe gives the same "look at me" cadence without
+   shaking the whole row. */
+@keyframes tcPulse {
+  0%, 70%, 100% { transform: scale(1); box-shadow: 0 8px 28px rgba(200,16,46,0.25); }
+  82% { transform: scale(1.012); box-shadow: 0 12px 32px rgba(200,16,46,0.38); }
+  88% { transform: scale(0.998); box-shadow: 0 8px 28px rgba(200,16,46,0.25); }
+  94% { transform: scale(1.006); box-shadow: 0 10px 30px rgba(200,16,46,0.32); }
+}
+.tc-pulse { animation: tcPulse 2.4s ease-in-out infinite; transform-origin: center; }
+
 /* iOS Safari zooms the viewport when an input has font-size < 16px on focus.
    Forcing 16px on all form elements at mobile breakpoints kills the zoom
    without messing with the desktop design. !important is required because
