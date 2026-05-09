@@ -3951,7 +3951,9 @@ function CalendarReminderBanner({ isMobile }) {
   });
   const [showModal, setShowModal] = useState(false);
 
-  if (hidden) return null;
+  // Don't early-return here — the modal renders in the same fragment, so
+  // unmounting the whole component when `hidden` flips would also unmount
+  // the modal mid-flow. Only the banner div is conditionally rendered.
 
   const flagSeen = () => {
     try { localStorage.setItem(REMINDER_BANNER_FLAG, '1'); } catch { /* private mode */ }
@@ -3960,6 +3962,7 @@ function CalendarReminderBanner({ isMobile }) {
 
   return (
     <>
+      {!hidden && (
       <div style={{
         display: 'flex',
         alignItems: 'stretch',
@@ -4026,6 +4029,7 @@ function CalendarReminderBanner({ isMobile }) {
           <X size={16} />
         </button>
       </div>
+      )}
       {showModal && (
         <ReminderSignupModal
           isMobile={isMobile}
