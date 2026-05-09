@@ -10421,9 +10421,10 @@ function StaffCommsPage({ isMobile, staff }) {
   const [allVendors, setAllVendors] = useState([]);
 
   // Contacts tab state
-  const [contactSubsAny, setContactSubsAny] = useState(new Set()); // empty = no filter
-  const [mustBeMember, setMustBeMember] = useState(false);
-  const [mustBeVendor, setMustBeVendor] = useState(false);
+  const [contactSubsAny, setContactSubsAny] = useState(new Set()); // empty = no category filter
+  // Role buckets: empty by default so a fresh form targets nobody. Admin
+  // has to deliberately pick which audience to email.
+  const [contactRoles, setContactRoles] = useState(new Set());
   const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false);
   const [contactCount, setContactCount] = useState(null);
   const [contactCountLoading, setContactCountLoading] = useState(false);
@@ -10470,10 +10471,9 @@ function StaffCommsPage({ isMobile, staff }) {
   const buildContactAudienceSpec = useCallback(() => ({
     base: 'marketing_contacts',
     include_unsubscribed: includeUnsubscribed,
-    must_be_member: mustBeMember,
-    must_be_vendor: mustBeVendor,
+    roles: Array.from(contactRoles),
     subs_any: Array.from(contactSubsAny),
-  }), [includeUnsubscribed, mustBeMember, mustBeVendor, contactSubsAny]);
+  }), [includeUnsubscribed, contactRoles, contactSubsAny]);
 
   // Refresh marketing_contacts count when filters change.
   useEffect(() => {
@@ -10503,6 +10503,18 @@ function StaffCommsPage({ isMobile, staff }) {
       return next;
     });
   };
+  const toggleRole = (key) => {
+    setContactRoles(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+  const ROLE_OPTIONS = [
+    { key: 'staff',   label: 'Staff Members',                    color: '#C8102E', help: 'Admin accounts.' },
+    { key: 'vendors', label: 'Vendors',                          color: '#16a34a', help: 'Anyone with a vendor profile.' },
+    { key: 'members', label: 'Members (not vendors or staff)',   color: '#0891b2', help: 'Anyone with an account who is not a vendor or staff.' },
+  ];
 
   const sortedEvents = (() => {
     const todayStr = todayISO();
@@ -10668,9 +10680,43 @@ function StaffCommsPage({ isMobile, staff }) {
             </>
           ) : (
             <>
-              <Field label="Subscribed to (any of)">
+              <Field label="Role gates">
                 <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 8px' }}>
-                  Leave all unchecked to include every contact regardless of subscription. Pick one or more to narrow to people who have at least one of those categories on.
+                  Pick at least one role to start including people. Nothing is selected by default — a blank form sends to nobody.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
+                  {ROLE_OPTIONS.map(opt => {
+                    const checked = contactRoles.has(opt.key);
+                    return (
+                      <label key={opt.key} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '10px',
+                        padding: '12px 14px',
+                        backgroundColor: '#fff',
+                        color: checked ? '#1a1a1a' : '#666',
+                        borderRadius: '10px',
+                        border: `1px solid ${checked ? '#e5e7eb' : '#f0f0f0'}`,
+                        borderLeft: `3px solid ${opt.color}`,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRole(opt.key)}
+                          style={{ width: '18px', height: '18px', accentColor: opt.color, flexShrink: 0, marginTop: '2px' }}
+                        />
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '800' }}>{opt.label}</span>
+                          <span style={{ display: 'block', fontSize: '0.75rem', color: '#888', marginTop: '2px', lineHeight: '1.4' }}>{opt.help}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+              <Field label="Mark people with the following notifications">
+                <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 8px' }}>
+                  Optional second filter — narrows the audience to people who have at least one of these categories on. Leave all unchecked to include everyone in the picked roles.
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
                   {REMINDER_CATEGORY_KEYS.map(key => {
@@ -10702,21 +10748,11 @@ function StaffCommsPage({ isMobile, staff }) {
                   })}
                 </div>
               </Field>
-              <Field label="Role gates">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={mustBeMember} onChange={e => setMustBeMember(e.target.checked)} />
-                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people with an account (staff, vendors, or anyone who signed up on the site)</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={mustBeVendor} onChange={e => setMustBeVendor(e.target.checked)} />
-                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people who are also vendors</span>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={includeUnsubscribed} onChange={e => setIncludeUnsubscribed(e.target.checked)} />
-                    <span style={{ fontSize: '0.88rem', color: '#9a3412' }}>Include unsubscribed contacts (use with care — bypasses opt-outs)</span>
-                  </label>
-                </div>
+              <Field label="Advanced">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={includeUnsubscribed} onChange={e => setIncludeUnsubscribed(e.target.checked)} />
+                  <span style={{ fontSize: '0.85rem', color: '#9a3412' }}>Include unsubscribed contacts (use with care — bypasses opt-outs)</span>
+                </label>
               </Field>
               <div style={{
                 backgroundColor: '#f9fafb', border: '1px solid #e5e7eb',
