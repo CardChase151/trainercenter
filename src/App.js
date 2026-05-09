@@ -398,6 +398,12 @@ function StaffLogin({ onClose, onLogin }) {
               >
                 Vendors <ArrowRight size={16} />
               </button>
+              <button onClick={() => goTo('/staff/members')} style={pickerBtn('#C8102E')}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
+              >
+                Member List <ArrowRight size={16} />
+              </button>
               <button onClick={() => goTo('/#visit-us')} style={pickerBtn('#C8102E')}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
@@ -9877,6 +9883,516 @@ function DetailSection({ label, children }) {
   );
 }
 
+// ─── Staff Members Page (/staff/members) ────────────────
+// Admin-only directory of every marketing_contact + role join. Lets staff
+// search, paginate, promote to staff/vendor, remove individual subscription
+// categories, and unsubscribe contacts entirely.
+//
+// Anti-spam guardrail: there is intentionally no UI for *adding* a contact
+// to a subscription category. Staff can only remove subs, not enroll
+// people. Adding a manual contact creates the row with subscriptions={}
+// so no campaigns fire until the contact opts in themselves via the site.
+function StaffMembersPage({ isMobile, staff }) {
+  const [rows, setRows] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+  const [expandedId, setExpandedId] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [actionBusy, setActionBusy] = useState(null); // contact_id while busy
+
+  const fetchPage = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc('staff_list_members', {
+      p_search: search || null,
+      p_role_filter: roleFilter,
+      p_limit: PAGE_SIZE,
+      p_offset: page * PAGE_SIZE,
+    });
+    setLoading(false);
+    if (error) {
+      console.error('[staff/members] fetch failed', error);
+      alert(`Could not load members: ${error.message}`);
+      return;
+    }
+    setRows(data || []);
+    setTotalCount(data && data.length > 0 ? Number(data[0].total_count || 0) : 0);
+  }, [search, roleFilter, page]);
+
+  useEffect(() => { fetchPage(); }, [fetchPage]);
+
+  const submitSearch = (e) => {
+    e?.preventDefault?.();
+    setPage(0);
+    setSearch(searchInput.trim());
+  };
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearch('');
+    setPage(0);
+  };
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const refreshAfterMutation = async () => {
+    await fetchPage();
+  };
+
+  const handleRemoveSubscription = async (row, key) => {
+    if (!window.confirm(`Remove "${key}" from ${row.email}? They will stop receiving emails for that category.`)) return;
+    setActionBusy(row.contact_id);
+    const { error } = await supabase.rpc('staff_remove_subscription', { p_email: row.email, p_category: key });
+    setActionBusy(null);
+    if (error) { alert(error.message); return; }
+    refreshAfterMutation();
+  };
+  const handleUnsubscribeAll = async (row) => {
+    if (!window.confirm(`Unsubscribe ${row.email} from ALL email campaigns? This stops every drip and reminder.`)) return;
+    setActionBusy(row.contact_id);
+    const { error } = await supabase.rpc('staff_unsubscribe_all', { p_email: row.email });
+    setActionBusy(null);
+    if (error) { alert(error.message); return; }
+    refreshAfterMutation();
+  };
+  const handlePromoteAdmin = async (row) => {
+    if (!row.user_id) { alert('This contact has no auth account yet — they need to sign up first.'); return; }
+    if (!window.confirm(`Promote ${row.email} to STAFF (admin)? They will be able to manage events, vendors, and the member list.`)) return;
+    setActionBusy(row.contact_id);
+    const { error } = await supabase.rpc('staff_promote_to_admin', { p_user_id: row.user_id });
+    setActionBusy(null);
+    if (error) { alert(error.message); return; }
+    refreshAfterMutation();
+  };
+  const handlePromoteVendor = async (row) => {
+    if (!row.user_id) { alert('This contact has no auth account yet — they need to sign up first.'); return; }
+    if (!window.confirm(`Promote ${row.email} to VENDOR? An approved vendor row will be created (status: approved). They can fill in their profile via the vendor dashboard.`)) return;
+    setActionBusy(row.contact_id);
+    const proposedName = [row.first_name, row.last_name].filter(Boolean).join(' ') || null;
+    const { error } = await supabase.rpc('staff_promote_to_vendor', { p_user_id: row.user_id, p_name: proposedName });
+    setActionBusy(null);
+    if (error) { alert(error.message); return; }
+    refreshAfterMutation();
+  };
+
+  const activeSubKeys = (subs) => Object.entries(subs || {}).filter(([_, v]) => v === true).map(([k]) => k);
+
+  const roleBadge = (label, color) => (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '4px',
+      fontSize: '0.65rem', fontWeight: '800',
+      color: '#fff', backgroundColor: color,
+      padding: '2px 8px', borderRadius: '12px',
+      textTransform: 'uppercase', letterSpacing: '0.05em',
+    }}>
+      {label}
+    </span>
+  );
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+        <Link to="/staff/vendors" style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to staff dashboard
+        </Link>
+        <SectionHeader title="Member List" subtitle="Everyone in the directory — search, filter, manage" />
+
+        {/* Filter + add bar */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '14px' : '18px 22px', marginBottom: '18px',
+        }}>
+          <form onSubmit={submitSearch} style={{
+            display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
+          }}>
+            <input
+              type="search"
+              placeholder="Search email or name"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              style={{
+                flex: '1 1 220px',
+                padding: '10px 12px', fontSize: '0.9rem',
+                border: '1px solid #ddd', borderRadius: '8px',
+                fontFamily: 'inherit',
+              }}
+            />
+            <select
+              value={roleFilter}
+              onChange={e => { setPage(0); setRoleFilter(e.target.value); }}
+              style={{
+                padding: '10px 12px', fontSize: '0.9rem', cursor: 'pointer',
+                border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#fff',
+                fontFamily: 'inherit',
+              }}
+            >
+              <option value="all">All roles</option>
+              <option value="staff">Staff (admin)</option>
+              <option value="vendor">Vendors</option>
+              <option value="member">Members only</option>
+              <option value="unattached">No account yet</option>
+            </select>
+            <button type="submit" style={{
+              padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700',
+              backgroundColor: '#1a1a1a', color: '#fff',
+              border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              Search
+            </button>
+            {(search || searchInput) && (
+              <button type="button" onClick={clearSearch} style={{
+                padding: '10px 14px', fontSize: '0.85rem', fontWeight: '700',
+                backgroundColor: '#f3f4f6', color: '#666',
+                border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                Clear
+              </button>
+            )}
+            <div style={{ flex: '0 0 auto' }}>
+              <button type="button" onClick={() => setShowAdd(true)} style={{
+                padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700',
+                backgroundColor: '#C8102E', color: '#fff',
+                border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                + Add contact
+              </button>
+            </div>
+          </form>
+          <p style={{ fontSize: '0.78rem', color: '#888', margin: '10px 2px 0' }}>
+            {loading ? 'Loading...' : `${totalCount.toLocaleString()} contact${totalCount === 1 ? '' : 's'} matching · page ${page + 1} of ${totalPages}`}
+          </p>
+        </div>
+
+        {/* Rows */}
+        {!loading && rows.length === 0 && (
+          <div style={{
+            backgroundColor: '#fff', border: '1px dashed #ddd',
+            borderRadius: '14px', padding: '40px 20px', textAlign: 'center',
+            color: '#888', fontSize: '0.9rem',
+          }}>
+            No contacts match the current filter.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {rows.map(row => {
+            const isExpanded = expandedId === row.contact_id;
+            const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ') || (row.vendor_name || null);
+            const activeKeys = activeSubKeys(row.subscriptions);
+            const busy = actionBusy === row.contact_id;
+            const isAdmin = !!row.is_staff_admin;
+            const isVend = !!row.vendor_id;
+            const isMember = !!row.member_id;
+            const hasUser = !!row.user_id;
+            return (
+              <div key={row.contact_id} style={{
+                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+                overflow: 'hidden',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : row.contact_id)}
+                  style={{
+                    width: '100%', textAlign: 'left',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: isMobile ? '12px 14px' : '14px 18px',
+                    fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap',
+                      fontSize: '0.92rem', fontWeight: '700', color: '#1a1a1a', marginBottom: '2px',
+                    }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {row.email || '(no email)'}
+                      </span>
+                      {isAdmin && roleBadge('Staff', '#C8102E')}
+                      {isVend && roleBadge('Vendor', '#16a34a')}
+                      {isMember && !isVend && !isAdmin && roleBadge('Member', '#0891b2')}
+                      {!hasUser && roleBadge('No account', '#6b7280')}
+                      {!row.is_subscribed && roleBadge('Unsubscribed', '#9a3412')}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                      {fullName || '(no name)'}
+                      {row.source && <span style={{ marginLeft: '8px', color: '#999' }}>· {row.source}</span>}
+                      {activeKeys.length > 0 && (
+                        <span style={{ marginLeft: '8px', color: '#15803d' }}>
+                          · {activeKeys.length} active sub{activeKeys.length === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown size={18} style={{
+                    color: '#888',
+                    flexShrink: 0,
+                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s',
+                  }} />
+                </button>
+                {isExpanded && (
+                  <div style={{
+                    borderTop: '1px solid #f3f4f6',
+                    padding: isMobile ? '14px' : '16px 18px',
+                    backgroundColor: '#fafafa',
+                  }}>
+                    {/* Subscriptions list */}
+                    <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>
+                      Email subscriptions
+                    </p>
+                    {!row.is_subscribed && (
+                      <p style={{ fontSize: '0.85rem', color: '#9a3412', margin: '0 0 10px' }}>
+                        This contact is fully unsubscribed. Active categories below are paused until they re-subscribe themselves.
+                      </p>
+                    )}
+                    {activeKeys.length === 0 ? (
+                      <p style={{ fontSize: '0.85rem', color: '#888', margin: '0 0 14px' }}>
+                        No active subscriptions.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+                        {activeKeys.map(k => (
+                          <span key={k} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            backgroundColor: '#fff', border: '1px solid #ddd',
+                            borderRadius: '999px', padding: '4px 6px 4px 12px',
+                            fontSize: '0.8rem', fontWeight: '700', color: '#1a1a1a',
+                          }}>
+                            {k}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSubscription(row, k)}
+                              disabled={busy}
+                              title={`Remove "${k}"`}
+                              style={{
+                                background: '#fef2f2', border: '1px solid #fecaca',
+                                color: '#C8102E', borderRadius: '999px',
+                                width: '22px', height: '22px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: busy ? 'wait' : 'pointer',
+                                padding: 0, fontFamily: 'inherit',
+                              }}
+                            >
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p style={{ fontSize: '0.7rem', color: '#9a3412', margin: '0 0 14px', lineHeight: '1.5' }}>
+                      Anti-spam: staff can remove categories but cannot enroll a contact in new ones. Subscriptions only turn on when the contact opts in themselves.
+                    </p>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {row.is_subscribed && (
+                        <button
+                          type="button"
+                          onClick={() => handleUnsubscribeAll(row)}
+                          disabled={busy}
+                          style={{
+                            padding: '9px 14px', fontSize: '0.82rem', fontWeight: '700',
+                            backgroundColor: '#fef2f2', color: '#991b1b',
+                            border: '1px solid #fecaca', borderRadius: '8px',
+                            cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Unsubscribe from all
+                        </button>
+                      )}
+                      {hasUser && !isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handlePromoteAdmin(row)}
+                          disabled={busy}
+                          style={{
+                            padding: '9px 14px', fontSize: '0.82rem', fontWeight: '700',
+                            backgroundColor: '#fff', color: '#C8102E',
+                            border: '1px solid #fecaca', borderRadius: '8px',
+                            cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Promote to Staff
+                        </button>
+                      )}
+                      {hasUser && !isVend && (
+                        <button
+                          type="button"
+                          onClick={() => handlePromoteVendor(row)}
+                          disabled={busy}
+                          style={{
+                            padding: '9px 14px', fontSize: '0.82rem', fontWeight: '700',
+                            backgroundColor: '#fff', color: '#16a34a',
+                            border: '1px solid #bbf7d0', borderRadius: '8px',
+                            cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Promote to Vendor
+                        </button>
+                      )}
+                      {!hasUser && (
+                        <p style={{ fontSize: '0.78rem', color: '#888', margin: 0, alignSelf: 'center' }}>
+                          No auth account — sign-up needed before promotion.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pagination */}
+        {totalCount > PAGE_SIZE && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', gap: '12px' }}>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0 || loading}
+              style={{
+                padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700',
+                backgroundColor: page === 0 ? '#f3f4f6' : '#fff',
+                color: page === 0 ? '#aaa' : '#1a1a1a',
+                border: '1px solid #ddd', borderRadius: '8px',
+                cursor: page === 0 || loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              ← Previous
+            </button>
+            <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: '700' }}>
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1 || loading}
+              style={{
+                padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700',
+                backgroundColor: page >= totalPages - 1 ? '#f3f4f6' : '#fff',
+                color: page >= totalPages - 1 ? '#aaa' : '#1a1a1a',
+                border: '1px solid #ddd', borderRadius: '8px',
+                cursor: page >= totalPages - 1 || loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
+        {showAdd && (
+          <StaffAddContactModal
+            isMobile={isMobile}
+            onClose={() => setShowAdd(false)}
+            onAdded={() => { setShowAdd(false); setPage(0); fetchPage(); }}
+          />
+        )}
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Add-contact modal — companion to StaffMembersPage. Creates a marketing
+// contact with empty subscriptions (anti-spam: no auto-enrollment).
+function StaffAddContactModal({ onClose, onAdded, isMobile }) {
+  const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) { setError('Email is required.'); return; }
+    setBusy(true); setError('');
+    const { error: rpcError } = await supabase.rpc('staff_add_marketing_contact', {
+      p_email: email.trim(),
+      p_first_name: firstName.trim() || null,
+      p_last_name: lastName.trim() || null,
+      p_phone: phone.trim() || null,
+    });
+    setBusy(false);
+    if (rpcError) { setError(rpcError.message); return; }
+    onAdded();
+  };
+
+  const cardStyle = isMobile ? {
+    backgroundColor: '#fff', width: '100%', height: '100%',
+    display: 'flex', flexDirection: 'column', overflow: 'auto',
+  } : {
+    backgroundColor: '#fff', borderRadius: '16px',
+    width: '100%', maxWidth: '440px',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    maxHeight: '90vh', overflow: 'auto',
+  };
+
+  const inputCss = {
+    width: '100%', padding: '12px 14px', fontSize: '1rem',
+    border: '1px solid #ddd', borderRadius: '10px',
+    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  };
+  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'center',
+      padding: isMobile ? 0 : '24px',
+    }} onClick={onClose}>
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: isMobile ? '16px 20px 12px' : '24px 28px 14px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#C8102E', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>
+              Member List
+            </p>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: '800', margin: 0 }}>Add a contact</h2>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{
+            background: '#f0f0f0', border: 'none', borderRadius: '50%',
+            width: '32px', height: '32px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={submit} style={{ padding: isMobile ? '14px 20px 24px' : '18px 28px 24px' }}>
+          <p style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6', margin: '0 0 14px' }}>
+            New contacts start with empty subscriptions. They have to opt in to specific categories themselves before any campaign emails go out.
+          </p>
+          <label style={labelCss}>Email *</label>
+          <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="contact@example.com" style={inputCss} />
+          <label style={labelCss}>First name</label>
+          <input value={firstName} onChange={e => setFirstName(e.target.value)} style={inputCss} />
+          <label style={labelCss}>Last name</label>
+          <input value={lastName} onChange={e => setLastName(e.target.value)} style={inputCss} />
+          <label style={labelCss}>Phone</label>
+          <input value={phone} onChange={e => setPhone(e.target.value)} style={inputCss} />
+          {error && <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px' }}>{error}</p>}
+          <button type="submit" disabled={busy} style={{
+            width: '100%', padding: '14px', fontSize: '0.95rem', fontWeight: '800',
+            backgroundColor: busy ? '#ccc' : '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '10px',
+            cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+          }}>
+            {busy ? 'Saving...' : 'Add contact'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -12375,6 +12891,7 @@ function App() {
         <Route path="/guest/dashboard" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
       {/* Staff Login Modal */}
