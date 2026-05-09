@@ -3355,15 +3355,59 @@ function ConsultationPage({ isMobile }) {
 // ─── Grading Page ─────────────────────────────────────────
 function GradingPage({ isMobile }) {
   const steps = [
-    { num: '1', title: 'We Evaluate', desc: 'Bring your cards in and we assess condition, help you decide which ones are worth grading.' },
-    { num: '2', title: 'We Submit', desc: 'We handle the entire PSA submission. No account needed, no shipping headaches.' },
+    { num: '1', title: 'We Evaluate', desc: 'Bring your cards in and we assess condition, help you decide which ones are worth grading and which grader makes sense.' },
+    { num: '2', title: 'We Submit', desc: 'We handle the entire submission to PSA, CGC, Beckett, or TAG. No account needed, no shipping headaches.' },
     { num: '3', title: 'You Profit', desc: 'A graded card is worth significantly more. Grading protects and increases your collection value.' },
   ];
+
+  // Companies we send to. Each gets a tab in the "Where do you send them?"
+  // section. Pricing links go to the company's own site so we never have
+  // to chase their fee schedule when they update it.
+  const GRADERS = [
+    {
+      key: 'PSA',
+      name: 'PSA',
+      fullName: 'Professional Sports Authenticator',
+      blurb: 'The most recognized grader in the Pokemon market. PSA-graded cards command premium resale prices and are the default choice for high-end English vintage and modern chase cards. Strict on centering and surface, which is why a PSA 10 is the gold standard.',
+      bestFor: 'High-end Pokemon, vintage holos, modern alt arts where resale matters most.',
+      pricingUrl: 'https://www.psacard.com',
+      pricingLabel: 'View PSA pricing on psacard.com',
+    },
+    {
+      key: 'CGC',
+      name: 'CGC',
+      fullName: 'Certified Guaranty Company',
+      blurb: 'Trusted grader with transparent sub-grades on every label and a popular slab design. Faster turnaround than PSA in most tiers and a strong following among modern collectors. Their Perfect 10 grade is harder to earn but valued.',
+      bestFor: 'Collectors who want detailed sub-grades and a clean modern slab look.',
+      pricingUrl: 'https://www.cgccards.com',
+      pricingLabel: 'View CGC pricing on cgccards.com',
+    },
+    {
+      key: 'Beckett',
+      name: 'Beckett',
+      fullName: 'Beckett Grading Services (BGS)',
+      blurb: 'The legacy sports grader with deep credibility and the iconic gold and black labels. Beckett shows sub-grades on every slab and the Black Label (a 10 across all four sub-grades) is one of the rarest grades in the hobby.',
+      bestFor: 'Cards expected to grade pristine where a Black Label premium matters.',
+      pricingUrl: 'https://www.beckett.com',
+      pricingLabel: 'View Beckett pricing on beckett.com',
+    },
+    {
+      key: 'TAG',
+      name: 'TAG',
+      fullName: 'Technical Authentication & Grading',
+      blurb: 'AI-powered grading with full HD scans and the most granular sub-grade reports in the industry. Newest of the four, fastest-growing, and the digital report on every graded card is a strong differentiator for modern collectors.',
+      bestFor: 'Collectors who want the most detailed condition data on every card.',
+      pricingUrl: 'https://taggrading.com',
+      pricingLabel: 'View TAG pricing on taggrading.com',
+    },
+  ];
+  const [activeGrader, setActiveGrader] = useState('PSA');
+  const grader = GRADERS.find(g => g.key === activeGrader) || GRADERS[0];
 
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Grading" subtitle="PSA Grading Services" />
+        <SectionHeader title="Grading" subtitle="PSA · CGC · Beckett · TAG" />
 
         {/* YES hero */}
         <div style={{
@@ -3371,9 +3415,9 @@ function GradingPage({ isMobile }) {
           borderRadius: '16px',
           padding: isMobile ? '32px 20px' : '48px 40px',
           textAlign: 'center',
-          marginBottom: '32px',
+          marginBottom: '24px',
           maxWidth: '900px',
-          margin: '0 auto 32px'
+          margin: '0 auto 24px'
         }}>
           <p style={{ fontSize: isMobile ? '0.9rem' : '1.1rem', color: '#999', fontWeight: '600', margin: '0 0 8px 0' }}>
             Do you guys help grade cards?
@@ -3381,9 +3425,45 @@ function GradingPage({ isMobile }) {
           <h2 style={{ fontSize: isMobile ? '3rem' : '4.5rem', fontWeight: '900', color: '#C8102E', margin: '0 0 12px 0', letterSpacing: '-0.03em' }}>
             YES
           </h2>
-          <p style={{ fontSize: isMobile ? '0.85rem' : '1rem', color: '#ccc', margin: 0, maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto', lineHeight: '1.6' }}>
-            We evaluate your cards, handle the PSA submission, and get them back to you graded and protected.
+          <p style={{ fontSize: isMobile ? '0.85rem' : '1rem', color: '#ccc', margin: 0, maxWidth: '560px', marginLeft: 'auto', marginRight: 'auto', lineHeight: '1.6' }}>
+            We evaluate your cards, submit to PSA, CGC, Beckett, or TAG, and get them back to you graded and protected.
           </p>
+        </div>
+
+        {/* Service charge banner — top of page so the per-card fee is visible
+            before anyone reads through the rest. Plain language, framed as a
+            cost-coverage line not a markup. */}
+        <div style={{
+          backgroundColor: '#fff7ed',
+          border: '1px solid #fed7aa',
+          borderRadius: '14px',
+          padding: isMobile ? '18px 20px' : '22px 28px',
+          maxWidth: '900px',
+          margin: '0 auto 32px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '14px',
+        }}>
+          <div style={{
+            flexShrink: 0,
+            width: '40px', height: '40px', borderRadius: '10px',
+            backgroundColor: '#fed7aa', color: '#9a3412',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.1rem', fontWeight: '900',
+          }}>
+            $
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: '800', color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px 0' }}>
+              Submission service fee
+            </p>
+            <p style={{ fontSize: '0.95rem', color: '#7c2d12', margin: '0 0 6px 0', lineHeight: '1.55', fontWeight: '700' }}>
+              $3 to $5 per card on top of the grader's fee.
+            </p>
+            <p style={{ fontSize: '0.85rem', color: '#9a3412', margin: 0, lineHeight: '1.6' }}>
+              The exact rate depends on how many cards you send in a single shipment. This covers packaging, insured tracked shipping both ways, and the time we spend prepping the order. It's a cost-coverage charge, not a markup on the grader's pricing.
+            </p>
+          </div>
         </div>
 
         {/* 3 Steps with arrows */}
@@ -3445,7 +3525,9 @@ function GradingPage({ isMobile }) {
           ))}
         </div>
 
-        {/* Details + Pricing */}
+        {/* Where do you send them? — tabbed view of every grader we submit to.
+            Pricing always lives on the grader's own site so we never have to
+            chase their fee schedule when they update it. */}
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
@@ -3454,7 +3536,7 @@ function GradingPage({ isMobile }) {
           maxWidth: '900px',
           margin: '0 auto'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
             <div style={{
               width: '48px', height: '48px', borderRadius: '12px',
               backgroundColor: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -3462,49 +3544,127 @@ function GradingPage({ isMobile }) {
               <Award size={24} color="#C8102E" />
             </div>
             <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
-              PSA Pricing Tiers
+              Where do you send them?
             </h3>
           </div>
           <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', marginBottom: '20px' }}>
-            PSA (Professional Sports Authenticator) is the most recognized grading service in the hobby. Here are their current pricing tiers:
+            We submit to all four major Pokemon graders. Pick a tab to see what each one is best for, then jump to their site for current pricing.
           </p>
 
-          <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#1a1a1a' }}>
-                  {['Service', 'Price/Card', 'Turnaround', 'Max Value'].map(h => (
-                    <th key={h} style={{
-                      padding: '12px 16px', textAlign: 'left', color: '#fff',
-                      fontWeight: '700', fontSize: '0.8rem'
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ['Value Bulk', '$25', '~95 days', '$500'],
-                  ['Value', '$33', '~75 days', '$500'],
-                  ['Value Plus', '$50', '~45 days', '$1,000'],
-                  ['Value Max', '$65', '~35 days', '$1,500'],
-                  ['Regular', '$80', '~25 days', '$1,500'],
-                  ['Express', '$160', '~10 days', '$2,999'],
-                  ['Super Express', '$300', '~5 days', '$4,999'],
-                ].map(([service, price, time, max], i) => (
-                  <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fafafa' : '#ffffff' }}>
-                    <td style={{ padding: '10px 16px', fontWeight: '600', color: '#1a1a1a', borderBottom: '1px solid #f0f0f0' }}>{service}</td>
-                    <td style={{ padding: '10px 16px', color: '#C8102E', fontWeight: '700', borderBottom: '1px solid #f0f0f0' }}>{price}</td>
-                    <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{time}</td>
-                    <td style={{ padding: '10px 16px', color: '#666', borderBottom: '1px solid #f0f0f0' }}>{max}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Tab strip */}
+          <div role="tablist" style={{
+            display: 'flex',
+            gap: '6px',
+            padding: '4px',
+            backgroundColor: '#f3f4f6',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            overflowX: 'auto',
+          }}>
+            {GRADERS.map(g => {
+              const active = g.key === activeGrader;
+              return (
+                <button
+                  key={g.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveGrader(g.key)}
+                  style={{
+                    flex: 1,
+                    minWidth: '80px',
+                    background: active ? '#1a1a1a' : 'transparent',
+                    border: '1px solid transparent',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    color: active ? '#fff' : '#444',
+                    fontSize: '0.95rem',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    transition: 'background-color 0.15s, color 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {g.name}
+                </button>
+              );
+            })}
           </div>
 
-          <p style={{ fontSize: '0.8rem', color: '#999', marginBottom: '0', lineHeight: '1.5' }}>
-            Prices are per card and set by PSA. Value Bulk requires a 20-card minimum. Max Value is the maximum declared value per card for that tier. Prices as of early 2026 and subject to change.
+          {/* Active grader panel */}
+          <div role="tabpanel" style={{
+            backgroundColor: '#fafafa',
+            border: '1px solid #f0f0f0',
+            borderRadius: '12px',
+            padding: isMobile ? '18px' : '24px 28px',
+          }}>
+            <p style={{ fontSize: '0.7rem', fontWeight: '800', color: '#C8102E', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px 0' }}>
+              {grader.fullName}
+            </p>
+            <h4 style={{ fontSize: '1.4rem', fontWeight: '900', color: '#1a1a1a', margin: '0 0 12px 0' }}>
+              {grader.name}
+            </h4>
+            <p style={{ fontSize: '0.95rem', color: '#333', lineHeight: '1.65', margin: '0 0 12px 0' }}>
+              {grader.blurb}
+            </p>
+            <p style={{ fontSize: '0.85rem', color: '#555', lineHeight: '1.55', margin: '0 0 18px 0' }}>
+              <strong style={{ color: '#1a1a1a' }}>Best for:</strong> {grader.bestFor}
+            </p>
+            <a
+              href={grader.pricingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#1a1a1a',
+                color: '#fff',
+                padding: '12px 20px',
+                borderRadius: '10px',
+                textDecoration: 'none',
+                fontSize: '0.9rem',
+                fontWeight: '700',
+              }}
+            >
+              {grader.pricingLabel} <ArrowRight size={16} />
+            </a>
+            <p style={{ fontSize: '0.78rem', color: '#888', lineHeight: '1.55', margin: '14px 0 0 0' }}>
+              We link directly to {grader.name}'s site because graders update tiers, turnaround estimates, and fees regularly. Their pricing page is always the current source of truth.
+            </p>
+          </div>
+        </div>
+
+        {/* Card-handling disclaimer — sets expectations both for what we
+            cover (in-shop tracking, prep, insured shipping) and what we
+            cannot (carrier handling, grader processing). */}
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #eee',
+          padding: isMobile ? '24px 16px' : '36px 40px',
+          maxWidth: '900px',
+          margin: '32px auto 0',
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 8px 0' }}>
+            How we handle your cards
+          </h3>
+          <p style={{ fontSize: '0.95rem', color: '#444', lineHeight: '1.7', margin: '0 0 14px 0' }}>
+            From the moment you drop your cards off to the moment we hand them back, Trainer Center tracks every card in your submission. We sleeve, semi-rigid, and pack each card in front of you at the counter, log every line on the order form, and use insured tracked shipping for both legs of the journey. We treat your cards like our own and use the most careful service available.
           </p>
+          <div style={{
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '10px',
+            padding: isMobile ? '16px 18px' : '18px 22px',
+            marginTop: '6px',
+          }}>
+            <p style={{ fontSize: '0.78rem', fontWeight: '800', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px 0' }}>
+              Once a package leaves Trainer Center
+            </p>
+            <p style={{ fontSize: '0.92rem', color: '#7f1d1d', lineHeight: '1.65', margin: 0 }}>
+              Once your submission ships out, your cards are no longer in our possession. That includes both the time the package is in transit with the carrier and the time it spends at the grading company. We pick reputable carriers and graders, but the in-transit and at-grader phases are theirs to manage. We pass along every tracking and milestone update we receive.
+            </p>
+          </div>
         </div>
 
         {/* Which cards are worth grading */}
@@ -3520,7 +3680,7 @@ function GradingPage({ isMobile }) {
             Which Pokemon cards are actually worth grading?
           </h3>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
-            The honest answer is: not most of them. Grading a card costs between twenty-five dollars on the cheapest PSA tier and several hundred on the express tiers, and those fees do not include shipping or the time the card spends out of your hands. If the raw ungraded card is worth ten dollars, a PSA 9 might bring it to twenty-five and a PSA 10 to seventy. That math works on a few cards. It does not work on a binder full of bulk.
+            The honest answer is: not most of them. Grading a card costs from the bulk tier on any of the four graders up through several hundred dollars on express, and those fees do not include shipping or the time the card spends out of your hands. If the raw ungraded card is worth ten dollars, a 9 might bring it to twenty-five and a 10 to seventy. That math works on a few cards. It does not work on a binder full of bulk.
           </p>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '16px' }}>
             Cards that tend to make sense for grading fall into a few buckets. Vintage holographics from Base Set, Jungle, Fossil, and Neo era cards are almost always candidates because the population is fixed and demand is steady. Modern chase cards like alt arts, special illustration rares, and secret rares from newer sets are candidates when the raw market price is already meaningfully above the grading fee. Error cards, first editions, and cards with strong centering and clean surfaces are almost always worth at least an evaluation.
@@ -3543,7 +3703,7 @@ function GradingPage({ isMobile }) {
             What do the grades 1 through 10 actually mean?
           </h3>
           <p style={{ fontSize: '1rem', color: '#333', lineHeight: '1.8', marginBottom: '20px' }}>
-            PSA grades four things on every Pokemon card: centering, corners, edges, and surface. Your final grade is capped by the weakest of those four. A perfect surface cannot save a card with off-center borders, and sharp corners cannot save a card with a print line on the holo. Here is a plain-English breakdown of where each grade lands.
+            All four graders score on a 1 to 10 scale and look at the same four things: centering, corners, edges, and surface. Your final grade is capped by the weakest of those four. A perfect surface cannot save a card with off-center borders, and sharp corners cannot save a card with a print line on the holo. Here is a plain-English breakdown of where each grade lands — the labels below use PSA's terms, but CGC, Beckett, and TAG land in the same neighborhood at each tier.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '0' }}>
             {[
@@ -3576,12 +3736,16 @@ function GradingPage({ isMobile }) {
           </h3>
           {[
             {
-              q: 'Do I need a PSA account to submit through you?',
-              a: 'No. We submit on our shop account, so you skip the signup, the bulk requirements, the shipping supplies, and the hassle of insuring your own package. You hand the cards to us over the counter, we track everything, and you get them back graded and encapsulated.'
+              q: 'Do I need an account with the grader to submit through you?',
+              a: 'No. We submit on our shop accounts at PSA, CGC, Beckett, and TAG, so you skip the signup, the bulk requirements, the shipping supplies, and the hassle of insuring your own package. You hand the cards to us over the counter, we track everything, and you get them back graded and encapsulated.'
+            },
+            {
+              q: 'How do I pick which grader to use?',
+              a: 'For most high-value English Pokemon cards, PSA is still the resale gold standard. CGC is great when you want detailed sub-grades and faster turnaround. Beckett is the right call for cards expected to grade pristine where the Black Label premium matters. TAG is best when you want the deepest condition data and full HD scans of every card. We walk you through the right pick during the in-store evaluation.'
             },
             {
               q: 'How long does the whole process take?',
-              a: 'It depends on which PSA tier we use. Value Bulk runs around 95 business days, Regular runs about 25, and Express is typically back in 10. These are PSA turnaround estimates, not promises, and they move based on their internal queue. We update you when PSA receives the order, when grading is complete, and when the cards ship back.'
+              a: 'It depends on the grader and the tier. Bulk tiers across all four can run 60 to 90+ business days. Mid tiers usually land in the 20 to 45 day range. Express tiers come back in 5 to 15. Every grader publishes current turnaround on their own site, and we pass along milestone updates as we get them.'
             },
             {
               q: 'Can I watch you sleeve and package the submission?',
@@ -3589,15 +3753,11 @@ function GradingPage({ isMobile }) {
             },
             {
               q: 'What if the card comes back a lower grade than expected?',
-              a: 'We tell you what we think before we submit. If we say we think a card is borderline 9, we will tell you honestly. PSA grades strictly and small flaws matter. The only way to guarantee a grade is to never submit, so we only recommend sending in cards where we believe the expected grade outweighs the fee.'
-            },
-            {
-              q: 'Do you grade anything other than PSA?',
-              a: 'We primarily use PSA because it is the most recognized grader in the Pokemon market and resale prices reflect that. We can walk you through CGC and BGS if a specific card benefits from their slab style or rules, but for most Pokemon cards PSA is the right call.'
+              a: 'We tell you what we think before we submit. If we say we think a card is borderline 9, we will tell you honestly. Graders score strictly and small flaws matter. The only way to guarantee a grade is to never submit, so we only recommend sending in cards where we believe the expected grade outweighs the fee.'
             },
             {
               q: 'Can you grade Japanese Pokemon cards?',
-              a: 'Yes. PSA grades Japanese cards on the same scale as English. Japanese vintage and modern alt arts are a growing segment of the hobby, and we submit them regularly. Bring them in and we will evaluate them the same way.'
+              a: 'Yes. PSA, CGC, Beckett, and TAG all grade Japanese cards on the same scale as English. Japanese vintage and modern alt arts are a growing segment of the hobby, and we submit them regularly. Bring them in and we will evaluate them the same way.'
             }
           ].map((item, i) => (
             <div key={i} style={{
