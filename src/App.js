@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useContext, createCont
 import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2 } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -3937,6 +3937,277 @@ function BuySellPage({ isMobile }) {
   );
 }
 
+// ─── Calendar Reminder Banner ───────────────────────────
+// Wiggling CTA at the top of the calendar that opens the reminder signup
+// modal. Hidden permanently after the user opens the modal (via click)
+// or dismisses it via the X — both write the same localStorage flag,
+// so visitors only see this banner once per device.
+const REMINDER_BANNER_FLAG = 'tc_reminders_banner_seen';
+function CalendarReminderBanner({ isMobile }) {
+  const [hidden, setHidden] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try { return localStorage.getItem(REMINDER_BANNER_FLAG) === '1'; }
+    catch { return false; }
+  });
+  const [showModal, setShowModal] = useState(false);
+
+  if (hidden) return null;
+
+  const flagSeen = () => {
+    try { localStorage.setItem(REMINDER_BANNER_FLAG, '1'); } catch { /* private mode */ }
+    setHidden(true);
+  };
+
+  return (
+    <>
+      <div style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: '8px',
+        marginBottom: '20px',
+      }}>
+        <button
+          type="button"
+          className="tc-wiggle"
+          onClick={() => { flagSeen(); setShowModal(true); }}
+          style={{
+            flex: 1,
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '14px',
+            padding: isMobile ? '14px 16px' : '16px 22px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            fontSize: isMobile ? '0.92rem' : '1rem',
+            fontWeight: '800',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 8px 28px rgba(200,16,46,0.25)',
+            textAlign: 'left',
+          }}
+        >
+          <div style={{
+            flexShrink: 0,
+            width: '38px', height: '38px', borderRadius: '10px',
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Bell size={18} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85, marginBottom: '2px' }}>
+              Trainer Center reminders
+            </div>
+            <div style={{ lineHeight: 1.25 }}>
+              Want to be reminded of these events?
+            </div>
+          </div>
+          <ArrowRight size={18} style={{ flexShrink: 0 }} />
+        </button>
+        <button
+          type="button"
+          onClick={flagSeen}
+          aria-label="Dismiss"
+          title="No thanks"
+          style={{
+            flexShrink: 0,
+            width: '38px',
+            background: '#f3f4f6',
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            color: '#666',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <X size={16} />
+        </button>
+      </div>
+      {showModal && (
+        <ReminderSignupModal
+          isMobile={isMobile}
+          onClose={() => setShowModal(false)}
+          onComplete={() => { /* flag already set when user opened the modal */ }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Reminders Page ─────────────────────────────────────
+// Dedicated /reminders landing page that walks visitors through what TC
+// membership is and why to sign up. The CTA opens the same
+// ReminderSignupModal the calendar wiggle uses, so the actual signup
+// surface is never duplicated.
+function RemindersPage({ isMobile }) {
+  const [showModal, setShowModal] = useState(false);
+  const benefits = [
+    { title: 'Pick what you want to hear about', desc: 'Choose any combination of Trade Night, Tournament, Game Day, Crafts, TC Beach City Trade Night, and more. We only email about events on your list.' },
+    { title: 'No spam, ever', desc: 'You only get a heads-up when something on your list is coming up. Every email has a one-click unsubscribe.' },
+    { title: 'Update any time', desc: 'Change your reminder list whenever you want. Your account is the source of truth.' },
+    { title: 'Free TC member account', desc: 'Just an email and a password. No fees, no card required, no other commitment.' },
+  ];
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Reminders" subtitle="Never miss a Trainer Center event" />
+
+        {/* Hero */}
+        <div style={{
+          backgroundColor: '#1a1a1a',
+          borderRadius: '16px',
+          padding: isMobile ? '32px 22px' : '48px 40px',
+          textAlign: 'center',
+          marginBottom: '32px',
+          maxWidth: '900px',
+          margin: '0 auto 32px',
+        }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '64px', height: '64px',
+            borderRadius: '14px',
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            color: '#C8102E',
+            marginBottom: '18px',
+          }}>
+            <Bell size={28} />
+          </div>
+          <h2 style={{
+            fontSize: isMobile ? '1.6rem' : '2.2rem',
+            fontWeight: '900',
+            color: '#fff',
+            margin: '0 0 10px 0',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.2,
+          }}>
+            Become a TC member.<br />Never miss an event.
+          </h2>
+          <p style={{
+            fontSize: isMobile ? '0.92rem' : '1.05rem',
+            color: '#ccc',
+            margin: '0 auto 24px',
+            maxWidth: '560px',
+            lineHeight: '1.6',
+          }}>
+            Trainer Center hosts Trade Nights, Tournaments, Game Days, Crafts, and Beach City Trade Nights every month. Sign up for free and we'll email you a reminder for the ones you actually care about.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            style={{
+              backgroundColor: '#C8102E',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '14px 26px',
+              fontSize: '0.95rem',
+              fontWeight: '800',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 8px 24px rgba(200,16,46,0.35)',
+            }}
+          >
+            Sign me up <ArrowRight size={18} />
+          </button>
+        </div>
+
+        {/* Benefits grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gap: '14px',
+          maxWidth: '900px',
+          margin: '0 auto 32px',
+        }}>
+          {benefits.map((b, i) => (
+            <div key={i} style={{
+              backgroundColor: '#fff',
+              border: '1px solid #eee',
+              borderRadius: '14px',
+              padding: '22px 24px',
+            }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: '36px', height: '36px',
+                borderRadius: '10px',
+                backgroundColor: '#fff0f0',
+                color: '#C8102E',
+                marginBottom: '12px',
+              }}>
+                <CheckCircle2 size={18} />
+              </div>
+              <h3 style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 6px 0' }}>{b.title}</h3>
+              <p style={{ fontSize: '0.88rem', color: '#666', lineHeight: '1.6', margin: 0 }}>{b.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* How it works */}
+        <div style={{
+          backgroundColor: '#fff',
+          border: '1px solid #eee',
+          borderRadius: '16px',
+          padding: isMobile ? '24px 18px' : '36px 40px',
+          maxWidth: '900px',
+          margin: '0 auto',
+        }}>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 18px 0' }}>
+            How it works
+          </h3>
+          <ol style={{ paddingLeft: '20px', margin: 0, color: '#444', lineHeight: '1.8', fontSize: '0.95rem' }}>
+            <li style={{ marginBottom: '8px' }}>
+              <strong style={{ color: '#1a1a1a' }}>Click "Sign me up."</strong> Pick which event categories you want reminders for — leave the ones you don't care about unchecked.
+            </li>
+            <li style={{ marginBottom: '8px' }}>
+              <strong style={{ color: '#1a1a1a' }}>Make a free TC account</strong> with your email and a password. That's it. No phone, no payment, no other info.
+            </li>
+            <li style={{ marginBottom: '8px' }}>
+              <strong style={{ color: '#1a1a1a' }}>Get reminders only when you want them.</strong> We send a heads-up before events on your list. Update or unsubscribe any time from any email we send.
+            </li>
+          </ol>
+          <div style={{ marginTop: '24px', textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              style={{
+                backgroundColor: '#1a1a1a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '14px 26px',
+                fontSize: '0.95rem',
+                fontWeight: '800',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+              }}
+            >
+              Sign me up <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+      {showModal && (
+        <ReminderSignupModal
+          isMobile={isMobile}
+          onClose={() => setShowModal(false)}
+          onComplete={() => { /* page CTA needs no localStorage flag — visitors come here on purpose */ }}
+        />
+      )}
+    </PageWrapper>
+  );
+}
+
 // ─── Calendar Page ────────────────────────────────────────
 function CalendarPage({ isMobile, isAdmin, staff }) {
   const { siteSettings, specialHours } = useSite();
@@ -4184,6 +4455,8 @@ function CalendarPage({ isMobile, isAdmin, staff }) {
     <PageWrapper isMobile={isMobile}>
       <div style={{ position: 'relative' }}>
         <SectionHeader title="Calendar" subtitle="Upcoming events and activities" />
+
+        <CalendarReminderBanner isMobile={isMobile} />
 
         {/* What's Happening Today / Next Up */}
         {(todayEvents.length > 0 || nextDayEvents.length > 0) && (() => {
@@ -5733,6 +6006,263 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMod
         }
       </button>
     </form>
+  );
+}
+
+// ─── Reminder Signup Modal ──────────────────────────────
+// Two-step signup that doubles as TC member registration:
+//   1. Pick which event categories to be reminded about (checkbox grid
+//      driven by CATEGORIES so the picker stays in sync if categories
+//      change — "consultation" is excluded since it's a 1:1 booking, not
+//      a blast-worthy event).
+//   2. Email + password account (reuses PasswordAuthCard).
+// On signup success, calls the subscribe_to_reminders RPC which creates the
+// members row and upserts the marketing_contacts row with the picked
+// subscriptions object. The localStorage flag that hides the wiggle banner
+// is set by the parent on either close or success.
+const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
+
+function ReminderSignupModal({ onClose, onComplete, isMobile }) {
+  const [step, setStep] = useState('categories'); // 'categories' | 'auth' | 'saving' | 'success' | 'error'
+  // Default all categories selected — most users want everything, then uncheck
+  // what they don't care about.
+  const [selectedCats, setSelectedCats] = useState(new Set(REMINDER_CATEGORY_KEYS));
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const toggleCat = (key) => {
+    setSelectedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleAuthSuccess = async () => {
+    setStep('saving');
+    setErrorMsg('');
+    // Build subscriptions object with the user's picks. Every key in
+    // CATEGORIES is included so future code that iterates the object can
+    // assume completeness — unchecked categories are explicit `false`, not
+    // missing.
+    const subs = REMINDER_CATEGORY_KEYS.reduce((acc, key) => {
+      acc[key] = selectedCats.has(key);
+      return acc;
+    }, {});
+    const { error } = await supabase.rpc('subscribe_to_reminders', { p_subscriptions: subs });
+    if (error) {
+      setErrorMsg(error.message);
+      setStep('error');
+      return;
+    }
+    setStep('success');
+    // Tell parent the flow ran — used to flip the localStorage flag and hide
+    // the wiggle banner forever.
+    if (onComplete) onComplete();
+  };
+
+  const overlayStyle = {
+    position: 'fixed', inset: 0, zIndex: 9999,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: isMobile ? 'stretch' : 'center',
+    justifyContent: 'center',
+    padding: isMobile ? '0' : '24px',
+  };
+  const cardStyle = isMobile ? {
+    backgroundColor: '#fff', width: '100%', height: '100%',
+    display: 'flex', flexDirection: 'column', overflow: 'auto',
+  } : {
+    backgroundColor: '#fff', borderRadius: '16px',
+    width: '100%', maxWidth: '480px',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    maxHeight: '90vh',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+  };
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{
+          padding: isMobile ? '16px 20px 12px' : '22px 28px 14px',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex', alignItems: 'flex-start', gap: '10px',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: '0.7rem', color: '#C8102E', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px 0' }}>
+              Trainer Center reminders
+            </p>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#1a1a1a', margin: 0 }}>
+              {step === 'categories' && 'Which events do you want reminders for?'}
+              {step === 'auth' && 'Create your account'}
+              {step === 'saving' && 'Saving your picks...'}
+              {step === 'success' && "You're all set!"}
+              {step === 'error' && 'Something went wrong'}
+            </h2>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{
+            background: '#f0f0f0', border: 'none', borderRadius: '50%',
+            width: '32px', height: '32px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: isMobile ? '14px 20px 20px' : '18px 28px 24px', overflowY: 'auto', flex: 1 }}>
+          {step === 'categories' && (
+            <>
+              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+                Pick the events you'd like a heads-up for. We'll only email you when something on your list is coming up.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '20px' }}>
+                {REMINDER_CATEGORY_KEYS.map(key => {
+                  const cat = CATEGORIES[key];
+                  if (!cat) return null;
+                  const checked = selectedCats.has(key);
+                  return (
+                    <label key={key} style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      padding: '12px 14px',
+                      backgroundColor: checked ? cat.color : '#fafafa',
+                      color: checked ? '#fff' : '#444',
+                      borderRadius: '10px',
+                      border: `1px solid ${checked ? cat.color : '#ddd'}`,
+                      cursor: 'pointer',
+                      fontSize: '0.9rem', fontWeight: '700',
+                      userSelect: 'none',
+                      transition: 'background-color 0.15s, color 0.15s',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleCat(key)}
+                        style={{ width: '18px', height: '18px', accentColor: '#fff', cursor: 'pointer' }}
+                      />
+                      {cat.label}
+                    </label>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setStep('auth')}
+                disabled={selectedCats.size === 0}
+                style={{
+                  width: '100%', padding: '14px',
+                  backgroundColor: selectedCats.size === 0 ? '#ccc' : '#C8102E',
+                  color: '#fff',
+                  border: 'none', borderRadius: '10px',
+                  fontWeight: '800', fontSize: '0.95rem',
+                  cursor: selectedCats.size === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {selectedCats.size === 0 ? 'Pick at least one' : `Continue with ${selectedCats.size} selected`}
+              </button>
+            </>
+          )}
+
+          {step === 'auth' && (
+            <>
+              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+                Make a free TC account with just an email and password. We'll save your reminder picks and let you update them any time.
+              </p>
+              <PasswordAuthCard
+                accent="red"
+                defaultMode="signup"
+                signupCopy="New here? Pick an email and password — we'll create your account and save your reminder picks."
+                loginCopy="Already have an account? Log in and we'll save these picks to it."
+                onSuccess={handleAuthSuccess}
+              />
+              <button
+                type="button"
+                onClick={() => setStep('categories')}
+                style={{
+                  marginTop: '8px',
+                  background: 'none', border: 'none', color: '#666',
+                  fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
+                  padding: '6px 0',
+                }}
+              >
+                ← Back to categories
+              </button>
+            </>
+          )}
+
+          {step === 'saving' && (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <Loader2 size={32} color="#C8102E" className="spin" />
+              <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '14px' }}>Saving your reminder preferences...</p>
+            </div>
+          )}
+
+          {step === 'success' && (
+            <>
+              <div style={{
+                backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+                borderRadius: '12px', padding: '18px 20px', marginBottom: '18px',
+                display: 'flex', alignItems: 'flex-start', gap: '12px',
+              }}>
+                <CheckCircle2 size={24} color="#16a34a" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <p style={{ fontSize: '0.95rem', fontWeight: '800', color: '#15803d', margin: '0 0 4px 0' }}>
+                    Welcome to Trainer Center!
+                  </p>
+                  <p style={{ fontSize: '0.85rem', color: '#166534', lineHeight: '1.6', margin: 0 }}>
+                    We'll email you about the {selectedCats.size} {selectedCats.size === 1 ? 'category' : 'categories'} you picked. Update or unsubscribe any time from any email we send.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  width: '100%', padding: '14px',
+                  backgroundColor: '#1a1a1a', color: '#fff',
+                  border: 'none', borderRadius: '10px',
+                  fontWeight: '800', fontSize: '0.95rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Done
+              </button>
+            </>
+          )}
+
+          {step === 'error' && (
+            <>
+              <div style={{
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '12px', padding: '18px 20px', marginBottom: '18px',
+              }}>
+                <p style={{ fontSize: '0.9rem', fontWeight: '700', color: '#991b1b', margin: '0 0 6px 0' }}>
+                  We couldn't save your preferences.
+                </p>
+                <p style={{ fontSize: '0.85rem', color: '#7f1d1d', lineHeight: '1.5', margin: 0 }}>
+                  {errorMsg || 'Please try again.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStep('categories')}
+                style={{
+                  width: '100%', padding: '14px',
+                  backgroundColor: '#C8102E', color: '#fff',
+                  border: 'none', borderRadius: '10px',
+                  fontWeight: '800', fontSize: '0.95rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Try again
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -10655,6 +11185,7 @@ const buildNavItems = ({ isStaff }) => [
       { label: 'Buy / Sell', to: '/buy-sell' },
       { label: 'Consultation', to: '/consultation' },
       { label: 'Grading', to: '/grading' },
+      { label: 'Reminders', to: '/reminders' },
     ],
   },
   { label: 'Blog', to: '/blog' },
@@ -11492,6 +12023,7 @@ function App() {
         <Route path="/unsubscribe" element={<UnsubscribePage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
+        <Route path="/reminders" element={<RemindersPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
