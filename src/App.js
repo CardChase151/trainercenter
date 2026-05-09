@@ -6190,6 +6190,10 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
     return new Set(REMINDER_CATEGORY_KEYS);
   });
   const [errorMsg, setErrorMsg] = useState('');
+  // Surface a "welcome back" notice when a returning visitor logs in via the
+  // modal and we discover they already had reminder prefs saved. We pre-fill
+  // the picker from their existing subs instead of silently overwriting.
+  const [returningExisting, setReturningExisting] = useState(false);
 
   const toggleCat = (key) => {
     setSelectedCats(prev => {
@@ -6223,7 +6227,32 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
     if (onComplete) onComplete();
   };
 
-  const handleAuthSuccess = () => persistSubscriptions();
+  // Post-auth: if the user already has reminder prefs on file (signed up
+  // before, switched browsers, etc.), don't blow them away. Pre-fill the
+  // picker from existing subs and show a "welcome back" prompt so they can
+  // adjust deliberately before saving.
+  const handleAuthSuccess = async () => {
+    setStep('saving');
+    setErrorMsg('');
+    const { data, error } = await supabase.rpc('get_my_reminders');
+    if (error) {
+      setErrorMsg(error.message);
+      setStep('error');
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    const existing = row && row.has_record ? (row.subscriptions || {}) : null;
+    if (existing && Object.keys(existing).length > 0) {
+      const prior = REMINDER_CATEGORY_KEYS.filter(k => !!existing[k]);
+      setSelectedCats(new Set(prior));
+      setReturningExisting(true);
+      setStep('categories');
+      if (refreshReminders) refreshReminders();
+      return;
+    }
+    // No existing record — save the picks the user just made.
+    persistSubscriptions();
+  };
   const handleContinueFromCategories = () => {
     if (selectedCats.size === 0) return;
     if (isLoggedIn) persistSubscriptions();
@@ -6289,16 +6318,18 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
               </p>
               {isLoggedIn && (
                 <div style={{
-                  backgroundColor: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
+                  backgroundColor: returningExisting ? '#eff6ff' : '#f0fdf4',
+                  border: returningExisting ? '1px solid #bfdbfe' : '1px solid #bbf7d0',
                   borderRadius: '10px',
                   padding: '10px 14px',
                   marginBottom: '14px',
                   fontSize: '0.82rem',
-                  color: '#166534',
+                  color: returningExisting ? '#1e3a8a' : '#166534',
                   fontWeight: '700',
                 }}>
-                  Signed in as {user.email} — we'll save these picks straight to your account.
+                  {returningExisting
+                    ? <>Welcome back, {user.email}. We loaded your existing reminders below — adjust if you'd like, then save.</>
+                    : <>Signed in as {user.email} — we'll save these picks straight to your account.</>}
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '20px' }}>
@@ -12108,12 +12139,21 @@ function App() {
             );
           })}
           {/* Auth badge — Lock when signed out, role label when signed in.
-              Staff (admin) wins over Vendor when a user has both roles. */}
+              Priority: Staff (admin) > Vendor > Member. Members are users
+              who signed up via reminders; they get a cyan badge so the
+              icon doesn't read as logged-out when they actually are. */}
           {(() => {
             const showStaffBadge = !!staffUser && isAdmin;
             const showVendorBadge = !!staffUser && !isAdmin && !!vendor;
-            const badgeColor = showStaffBadge ? '#C8102E' : showVendorBadge ? '#16a34a' : '#1a1a1a';
-            const badgeLabel = showStaffBadge ? 'Staff' : showVendorBadge ? 'Vendor' : null;
+            const showMemberBadge = !!staffUser && !isAdmin && !vendor && !!member;
+            const badgeColor = showStaffBadge ? '#C8102E'
+              : showVendorBadge ? '#16a34a'
+              : showMemberBadge ? '#0891b2'
+              : '#1a1a1a';
+            const badgeLabel = showStaffBadge ? 'Staff'
+              : showVendorBadge ? 'Vendor'
+              : showMemberBadge ? 'Member'
+              : null;
             return (
               <button
                 onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
@@ -12133,6 +12173,7 @@ function App() {
                 title={
                   showStaffBadge ? 'Signed in as Staff (click to log out)'
                   : showVendorBadge ? 'Signed in as Vendor (click to log out)'
+                  : showMemberBadge ? 'Signed in as Member (click to log out)'
                   : 'Staff & Vendor Login'
                 }
               >
