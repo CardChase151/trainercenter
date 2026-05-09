@@ -10393,6 +10393,403 @@ function StaffAddContactModal({ onClose, onAdded, isMobile }) {
   );
 }
 
+// ─── Staff Communications Page (/staff/comms) ──────────
+// Single broadcast surface for admins. Two tabs:
+//   - To Vendors: status-based or event-scoped vendor blasts (replaces
+//     the old VendorCommsModal flow on the StaffVendorsPage).
+//   - To Contacts: any subset of marketing_contacts filtered by
+//     subscription category, member/vendor role, and unsubscribed gate.
+// Both tabs share the subject/body composer at the bottom and route
+// through the send-vendor-email edge function. Audience resolution is
+// admin-gated SECURITY DEFINER on the SQL side, so a malicious client
+// can't smuggle in arbitrary recipient lists.
+function StaffCommsPage({ isMobile, staff }) {
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'contacts' ? 'contacts' : 'vendors';
+  const [tab, setTab] = useState(initialTab);
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  // Vendors tab state (mirrors the legacy VendorCommsModal)
+  const [vendorAudience, setVendorAudience] = useState('approved_all');
+  const [vendorEventId, setVendorEventId] = useState('');
+  const [vendorAttachEvent, setVendorAttachEvent] = useState(true);
+  const [events, setEvents] = useState([]);
+  const [allVendors, setAllVendors] = useState([]);
+
+  // Contacts tab state
+  const [contactSubsAny, setContactSubsAny] = useState(new Set()); // empty = no filter
+  const [mustBeMember, setMustBeMember] = useState(false);
+  const [mustBeVendor, setMustBeVendor] = useState(false);
+  const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false);
+  const [contactCount, setContactCount] = useState(null);
+  const [contactCountLoading, setContactCountLoading] = useState(false);
+
+  // Fetch supporting data once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [evRes, vRes] = await Promise.all([
+        supabase.from('events')
+          .select('id, title, event_date, has_vendors, vendor_applications(id, vendor_id, status)')
+          .eq('has_vendors', true)
+          .order('event_date', { ascending: false }),
+        supabase.from('vendors').select('id, status'),
+      ]);
+      if (cancelled) return;
+      setEvents(evRes.data || []);
+      setAllVendors(vRes.data || []);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Live count for vendor audience (cheap client-side derivation)
+  const vendorEventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event'];
+  const vendorNeedsEvent = vendorEventScoped.includes(vendorAudience);
+  const vendorCount = (() => {
+    if (vendorAudience === 'all') return allVendors.length;
+    if (vendorAudience === 'approved_all') return allVendors.filter(v => v.status === 'approved').length;
+    if (vendorAudience === 'pending_all') return allVendors.filter(v => v.status === 'pending').length;
+    if (!vendorNeedsEvent || !vendorEventId) return null;
+    const ev = events.find(e => e.id === vendorEventId);
+    if (!ev) return null;
+    const apps = ev.vendor_applications || [];
+    if (vendorAudience === 'approved_not_applied') {
+      const applied = new Set(apps.map(a => a.vendor_id));
+      return allVendors.filter(v => v.status === 'approved' && !applied.has(v.id)).length;
+    }
+    if (vendorAudience === 'applied_any') return apps.length;
+    if (vendorAudience === 'approved_for_event') return apps.filter(a => a.status === 'approved').length;
+    if (vendorAudience === 'pending_for_event') return apps.filter(a => a.status === 'pending').length;
+    return null;
+  })();
+
+  const buildContactAudienceSpec = useCallback(() => ({
+    base: 'marketing_contacts',
+    include_unsubscribed: includeUnsubscribed,
+    must_be_member: mustBeMember,
+    must_be_vendor: mustBeVendor,
+    subs_any: Array.from(contactSubsAny),
+  }), [includeUnsubscribed, mustBeMember, mustBeVendor, contactSubsAny]);
+
+  // Refresh marketing_contacts count when filters change.
+  useEffect(() => {
+    if (tab !== 'contacts') return;
+    let cancelled = false;
+    setContactCountLoading(true);
+    (async () => {
+      const { data, error: e } = await supabase.rpc('staff_audience_count', {
+        p_audience: buildContactAudienceSpec(),
+      });
+      if (cancelled) return;
+      setContactCountLoading(false);
+      if (e) {
+        console.error('[comms/contacts] count failed', e);
+        setContactCount(null);
+        return;
+      }
+      setContactCount(Number(data || 0));
+    })();
+    return () => { cancelled = true; };
+  }, [tab, buildContactAudienceSpec]);
+
+  const toggleSubsKey = (key) => {
+    setContactSubsAny(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const sortedEvents = (() => {
+    const todayStr = todayISO();
+    return events.slice().sort((a, b) => {
+      const aPast = a.event_date < todayStr;
+      const bPast = b.event_date < todayStr;
+      if (aPast !== bPast) return aPast ? 1 : -1;
+      return aPast
+        ? b.event_date.localeCompare(a.event_date)
+        : a.event_date.localeCompare(b.event_date);
+    });
+  })();
+  const fmtEventOption = (ev) => {
+    const todayStr = todayISO();
+    const d = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const past = ev.event_date < todayStr;
+    return `${past ? '(past) ' : ''}${ev.title || 'Vendor Day'} · ${d}`;
+  };
+
+  const send = async () => {
+    setError('');
+    setResult(null);
+    if (!subject.trim()) { setError('Subject is required.'); return; }
+    if (!body.trim()) { setError('Message body is required.'); return; }
+
+    let payload;
+    let recipientCount;
+    if (tab === 'vendors') {
+      if (vendorNeedsEvent && !vendorEventId) { setError('Pick an event for this audience.'); return; }
+      if (vendorCount === 0) { setError('No vendors match this audience.'); return; }
+      recipientCount = vendorCount;
+      payload = {
+        type: 'vendor_broadcast',
+        audience: vendorAudience,
+        event_id: vendorNeedsEvent ? vendorEventId : undefined,
+        subject: subject.trim(),
+        body_text: body.trim(),
+        attach_event: vendorNeedsEvent && vendorAttachEvent,
+      };
+    } else {
+      if (contactCount === null || contactCount === 0) { setError('No contacts match this filter.'); return; }
+      recipientCount = contactCount;
+      payload = {
+        type: 'marketing_contacts_broadcast',
+        audience_spec: buildContactAudienceSpec(),
+        subject: subject.trim(),
+        body_text: body.trim(),
+      };
+    }
+
+    if (!window.confirm(`Send to ${recipientCount} ${tab === 'vendors' ? 'vendor' : 'contact'}${recipientCount === 1 ? '' : 's'}? BCC will go to chef@trainercenter.com.`)) return;
+    setSending(true);
+    try {
+      const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-vendor-email`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || process.env.REACT_APP_SUPABASE_ANON_KEY;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Send failed');
+      setResult(data);
+      setSubject('');
+      setBody('');
+    } catch (err) {
+      setError(err.message);
+    }
+    setSending(false);
+  };
+
+  const tabBtn = (key, label) => (
+    <button
+      type="button"
+      onClick={() => { setTab(key); setResult(null); setError(''); }}
+      style={{
+        flex: 1,
+        background: tab === key ? '#fff' : 'transparent',
+        border: tab === key ? '1px solid #e5e7eb' : '1px solid transparent',
+        boxShadow: tab === key ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        fontSize: '0.9rem',
+        fontWeight: '800',
+        color: tab === key ? '#1a1a1a' : '#6b7280',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '900px', margin: '0 auto 64px' }}>
+        <Link to="/staff/vendors" style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to staff dashboard
+        </Link>
+        <SectionHeader title="Communication" subtitle="Compose a broadcast — vendors or contacts" />
+
+        {/* Tab strip */}
+        <div role="tablist" style={{
+          display: 'flex',
+          gap: '6px',
+          padding: '4px',
+          backgroundColor: '#f3f4f6',
+          borderRadius: '12px',
+          marginBottom: '20px',
+        }}>
+          {tabBtn('vendors', 'To Vendors')}
+          {tabBtn('contacts', 'To Contacts')}
+        </div>
+
+        {/* Audience picker per tab */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '18px' : '22px 26px', marginBottom: '18px',
+        }}>
+          {tab === 'vendors' ? (
+            <>
+              <Field label="Audience">
+                <select value={vendorAudience} onChange={e => setVendorAudience(e.target.value)} style={selectStyle}>
+                  <option value="approved_all">All approved partners</option>
+                  <option value="pending_all">All pending applicants</option>
+                  <option value="all">Every vendor (approved + pending + suspended)</option>
+                  <option value="approved_not_applied">Approved partners NOT signed up for this event</option>
+                  <option value="approved_for_event">Approved for this event</option>
+                  <option value="pending_for_event">Pending for this event</option>
+                  <option value="applied_any">Anyone who applied for this event (any status)</option>
+                </select>
+              </Field>
+              {vendorNeedsEvent && (
+                <Field label="Event">
+                  <select value={vendorEventId} onChange={e => setVendorEventId(e.target.value)} style={selectStyle}>
+                    <option value="">— Pick an event —</option>
+                    {sortedEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>{fmtEventOption(ev)}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              {vendorNeedsEvent && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', marginBottom: '12px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={vendorAttachEvent} onChange={e => setVendorAttachEvent(e.target.checked)} />
+                  <span style={{ fontSize: '0.85rem', color: '#444' }}>Attach an event card at the bottom of the email</span>
+                </label>
+              )}
+              <div style={{
+                backgroundColor: '#f9fafb', border: '1px solid #e5e7eb',
+                borderRadius: '8px', padding: '12px 14px',
+                fontSize: '0.9rem', color: '#1f2937',
+              }}>
+                <strong>{vendorCount === null ? '—' : vendorCount}</strong> vendor{vendorCount === 1 ? '' : 's'} will receive this email.
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="Subscribed to (any of)">
+                <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 8px' }}>
+                  Leave all unchecked to include every contact regardless of subscription. Pick one or more to narrow to people who have at least one of those categories on.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
+                  {REMINDER_CATEGORY_KEYS.map(key => {
+                    const cat = CATEGORIES[key];
+                    if (!cat) return null;
+                    const checked = contactSubsAny.has(key);
+                    return (
+                      <label key={key} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '10px 12px',
+                        backgroundColor: '#fff',
+                        color: checked ? '#1a1a1a' : '#888',
+                        borderRadius: '8px',
+                        border: `1px solid ${checked ? '#e5e7eb' : '#f0f0f0'}`,
+                        borderLeft: `3px solid ${cat.color}`,
+                        cursor: 'pointer',
+                        fontSize: '0.85rem', fontWeight: '700',
+                        userSelect: 'none',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSubsKey(key)}
+                          style={{ width: '16px', height: '16px', accentColor: cat.color, flexShrink: 0 }}
+                        />
+                        {cat.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+              <Field label="Role gates">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={mustBeMember} onChange={e => setMustBeMember(e.target.checked)} />
+                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people who are also members (signed up via reminders or guest check-in)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={mustBeVendor} onChange={e => setMustBeVendor(e.target.checked)} />
+                    <span style={{ fontSize: '0.88rem', color: '#444' }}>Only people who are also vendors</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={includeUnsubscribed} onChange={e => setIncludeUnsubscribed(e.target.checked)} />
+                    <span style={{ fontSize: '0.88rem', color: '#9a3412' }}>Include unsubscribed contacts (use with care — bypasses opt-outs)</span>
+                  </label>
+                </div>
+              </Field>
+              <div style={{
+                backgroundColor: '#f9fafb', border: '1px solid #e5e7eb',
+                borderRadius: '8px', padding: '12px 14px',
+                fontSize: '0.9rem', color: '#1f2937',
+              }}>
+                {contactCountLoading
+                  ? 'Counting…'
+                  : <><strong>{contactCount === null ? '—' : contactCount.toLocaleString()}</strong> contact{contactCount === 1 ? '' : 's'} will receive this email.</>}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Composer */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '18px' : '22px 26px',
+        }}>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 14px' }}>
+            BCCs <code style={{ fontSize: '0.85rem' }}>chef@trainercenter.com</code> on every send. Plain text — line breaks become paragraphs in the email body.
+          </p>
+          <Field label="Subject">
+            <input
+              type="text"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              placeholder="e.g. Quick update on May 29 layout"
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="Message">
+            <textarea
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              placeholder="Plain text. Line breaks become paragraphs."
+              rows={isMobile ? 8 : 10}
+              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5' }}
+            />
+          </Field>
+          {error && (
+            <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px' }}>{error}</p>
+          )}
+          {result && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              borderRadius: '8px', padding: '12px 14px', marginBottom: '14px',
+              fontSize: '0.9rem', color: '#15803d',
+            }}>
+              Sent to <strong>{result.count}</strong>{result.failed && result.failed.length > 0 ? ` · ${result.failed.length} failed` : ''}.
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={send}
+              disabled={sending}
+              style={{
+                padding: '13px 26px', fontSize: '0.95rem', fontWeight: '800',
+                backgroundColor: sending ? '#ccc' : '#C8102E', color: '#fff',
+                border: 'none', borderRadius: '10px',
+                cursor: sending ? 'wait' : 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {sending ? 'Sending…' : `Send to ${tab === 'vendors' ? (vendorCount ?? '?') : (contactCount ?? '?')}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -10407,7 +10804,6 @@ function StaffVendorsPage({ isMobile, staff }) {
   // Vendor detail modal — clicking any vendor card opens this with full info.
   const [detailVendor, setDetailVendor] = useState(null);
   // Comms broadcast modal — Chef-composed email blast to vendor audiences.
-  const [showComms, setShowComms] = useState(false);
 
   const isAdmin = !!staff?.isAdmin;
 
@@ -10560,16 +10956,19 @@ function StaffVendorsPage({ isMobile, staff }) {
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title="Vendor Admin" subtitle="Approve vendor profiles, then schedule them per Vendor Day" />
 
-        {/* Top action bar — comms broadcast lives here so it's accessible from any tab */}
+        {/* Top action bar — comms broadcast lives on /staff/comms now so all
+            broadcast surfaces (vendors + marketing contacts) live in one
+            place. The button here just deep-links into the page on the
+            Vendors tab so the muscle memory still works. */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', maxWidth: '1100px', margin: '0 auto 12px' }}>
-          <button onClick={() => setShowComms(true)} style={{
+          <Link to="/staff/comms?tab=vendors" style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
-            backgroundColor: '#1a1a1a', color: '#fff', border: 'none',
+            backgroundColor: '#1a1a1a', color: '#fff',
             padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
-            fontSize: '0.85rem', cursor: 'pointer'
+            fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'none',
           }}>
             <Mail size={14} /> Comms broadcast
-          </button>
+          </Link>
         </div>
 
         {/* Tabs */}
@@ -10633,13 +11032,6 @@ function StaffVendorsPage({ isMobile, staff }) {
         />
       )}
 
-      {showComms && (
-        <VendorCommsModal
-          events={events}
-          allVendors={allVendors}
-          onClose={() => setShowComms(false)}
-        />
-      )}
     </PageWrapper>
   );
 }
@@ -12228,6 +12620,22 @@ function App() {
     : null;
   const [showLogin, setShowLogin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Staff badge dropdown — exposes Edit Calendar, Manage Vendors,
+  // Manage Members, Communication, Business Hours, Log out. Only renders
+  // when logged in as a staff admin; vendors/members still get a plain
+  // logout-on-click badge.
+  const [staffMenuOpen, setStaffMenuOpen] = useState(false);
+  const staffMenuRef = useRef(null);
+  useEffect(() => {
+    if (!staffMenuOpen) return;
+    const onClick = (e) => {
+      if (staffMenuRef.current && !staffMenuRef.current.contains(e.target)) {
+        setStaffMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [staffMenuOpen]);
   // Header notification bell — visible by default on every device, hidden
   // permanently only when the user explicitly opts out via the modal's
   // "Don't show this bell anymore" link. The flag lives in localStorage so
@@ -12671,31 +13079,125 @@ function App() {
               : showVendorBadge ? 'Vendor'
               : showMemberBadge ? 'Member'
               : null;
+
+            // Staff path: badge toggles the admin dropdown rather than
+            // logging out. Vendor/Member: keep the simple click-to-log-out
+            // behavior. Logged out: open the auth modal.
+            const handleBadgeClick = () => {
+              if (showStaffBadge) {
+                setStaffMenuOpen(o => !o);
+              } else if (staffUser) {
+                handleLogout();
+              } else {
+                setShowLogin(true);
+              }
+            };
+
+            const staffMenuItems = [
+              { label: 'Edit Calendar', to: '/calendar' },
+              { label: 'Manage Vendors', to: '/staff/vendors' },
+              { label: 'Manage Members', to: '/staff/members' },
+              { label: 'Communication', to: '/staff/comms' },
+              { label: 'Business Hours', to: '/#visit-us' },
+            ];
+
             return (
-              <button
-                onClick={() => staffUser ? handleLogout() : setShowLogin(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: badgeLabel ? '0.85rem' : '1rem',
-                  fontWeight: badgeLabel ? '800' : 'inherit',
-                  color: badgeColor,
-                  padding: '4px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  fontFamily: 'inherit',
-                  transition: 'color 0.2s',
-                }}
-                title={
-                  showStaffBadge ? 'Signed in as Staff (click to log out)'
-                  : showVendorBadge ? 'Signed in as Vendor (click to log out)'
-                  : showMemberBadge ? 'Signed in as Member (click to log out)'
-                  : 'Staff & Vendor Login'
-                }
-              >
-                {badgeLabel || <Lock size={20} />}
-              </button>
+              <div ref={staffMenuRef} style={{ position: 'relative', display: 'inline-flex' }}>
+                <button
+                  onClick={handleBadgeClick}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: badgeLabel ? '0.85rem' : '1rem',
+                    fontWeight: badgeLabel ? '800' : 'inherit',
+                    color: badgeColor,
+                    padding: '4px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: showStaffBadge ? '4px' : 0,
+                    fontFamily: 'inherit',
+                    transition: 'color 0.2s',
+                  }}
+                  title={
+                    showStaffBadge ? 'Staff menu'
+                    : showVendorBadge ? 'Signed in as Vendor (click to log out)'
+                    : showMemberBadge ? 'Signed in as Member (click to log out)'
+                    : 'Staff & Vendor Login'
+                  }
+                >
+                  {badgeLabel || <Lock size={20} />}
+                  {showStaffBadge && (
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        transform: staffMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s',
+                      }}
+                    />
+                  )}
+                </button>
+                {showStaffBadge && staffMenuOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 14px)',
+                    right: 0,
+                    backgroundColor: '#fff',
+                    border: '1px solid #eee',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    padding: '6px',
+                    minWidth: '210px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    zIndex: 1001,
+                  }}>
+                    {staffMenuItems.map(it => (
+                      <Link
+                        key={it.label}
+                        to={it.to}
+                        onClick={() => setStaffMenuOpen(false)}
+                        style={{
+                          color: '#1a1a1a',
+                          textDecoration: 'none',
+                          fontSize: '0.85rem',
+                          fontWeight: '700',
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap',
+                          transition: 'background-color 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#1a1a1a'; }}
+                      >
+                        {it.label}
+                      </Link>
+                    ))}
+                    <div style={{ borderTop: '1px solid #eee', marginTop: '6px', paddingTop: '6px' }}>
+                      <button
+                        onClick={() => { handleLogout(); setStaffMenuOpen(false); }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          width: '100%',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          color: '#C8102E',
+                          fontSize: '0.85rem',
+                          fontWeight: '800',
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          fontFamily: 'inherit',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fff0f0'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        Log out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })()}
           {/* Hamburger menu button - mobile only */}
@@ -12892,6 +13394,7 @@ function App() {
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
       {/* Staff Login Modal */}

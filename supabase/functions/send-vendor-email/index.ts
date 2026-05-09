@@ -31,7 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast' | 'marketing_contacts_broadcast'
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
@@ -46,6 +46,10 @@ type Payload = {
   body_html?: string
   body_text?: string
   attach_event?: boolean
+  // 'marketing_contacts_broadcast' uses the staff_audience_emails RPC to
+  // resolve recipients server-side. The frontend builds this jsonb from the
+  // /staff/comms picker (population, sub filters, role gates).
+  audience_spec?: Record<string, unknown>
 }
 
 async function sendResendEmail(to: string[], subject: string, html: string, text: string, bcc?: string[]) {
@@ -631,6 +635,50 @@ Deno.serve(async (req: Request) => {
         }
       }
       return json({ ok: true, sent: sentTo, count: sentTo.length, failed, audience })
+    }
+
+    if (type === 'marketing_contacts_broadcast') {
+      // Audience resolution lives in the staff_audience_emails RPC so it
+      // matches the count preview the page just showed the admin. We never
+      // trust client-supplied recipient lists.
+      const subject = (payload.subject || '').trim()
+      const bodyHtml = (payload.body_html || '').trim()
+      const bodyText = (payload.body_text || '').trim()
+      const audienceSpec = payload.audience_spec
+      if (!audienceSpec) return json({ error: 'audience_spec required' }, 400)
+      if (!subject) return json({ error: 'subject required' }, 400)
+      if (!bodyHtml && !bodyText) return json({ error: 'body required' }, 400)
+
+      const { data: rows, error: rpcErr } = await supabase
+        .rpc('staff_audience_emails', { p_audience: audienceSpec, p_limit: 1000 })
+      if (rpcErr) return json({ error: rpcErr.message }, 500)
+      const targets = ((rows || []) as { email: string; first_name: string | null; last_name: string | null }[])
+        .filter(r => r.email)
+
+      // Wrap once; each recipient gets the same body. The HTML preserves
+      // line breaks from a plain-text composition by promoting blank lines
+      // to paragraphs.
+      const html = wrapHtml(
+        bodyHtml || `<p>${bodyText.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`
+      )
+      const text = bodyText || bodyHtml.replace(/<[^>]+>/g, '')
+
+      const sentTo: string[] = []
+      const failed: string[] = []
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+      let firstSend = true
+      for (const r of targets) {
+        if (!firstSend) await sleep(550) // ~2/sec to respect Resend rate limit
+        firstSend = false
+        try {
+          await sendResendEmail([r.email], subject, html, text, ['chef@trainercenter.com'])
+          sentTo.push(r.email)
+        } catch (err) {
+          console.error('[marketing_contacts_broadcast] failed for', r.email, err)
+          failed.push(r.email)
+        }
+      }
+      return json({ ok: true, sent: sentTo, count: sentTo.length, failed })
     }
 
     return json({ error: `unknown type: ${type}` }, 400)
