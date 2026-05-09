@@ -11,13 +11,13 @@
    shakes for ~0.5s before resting again. */
 @keyframes tcWiggle {
   0%, 65%, 100% { transform: translateX(0) rotate(0); }
-  68%  { transform: translateX(-4px) rotate(-3deg); }
-  72%  { transform: translateX(4px)  rotate(3deg); }
-  76%  { transform: translateX(-4px) rotate(-3deg); }
-  80%  { transform: translateX(4px)  rotate(3deg); }
-  84%  { transform: translateX(-3px) rotate(-2deg); }
-  88%  { transform: translateX(3px)  rotate(2deg); }
-  92%  { transform: translateX(-2px) rotate(-1deg); }
+  68%  { transform: translateX(-1.5px) rotate(-1.5deg); }
+  72%  { transform: translateX(1.5px)  rotate(1.5deg); }
+  76%  { transform: translateX(-1.5px) rotate(-1.5deg); }
+  80%  { transform: translateX(1.5px)  rotate(1.5deg); }
+  84%  { transform: translateX(-1px)   rotate(-1deg); }
+  88%  { transform: translateX(1px)    rotate(1deg); }
+  92%  { transform: translateX(-0.5px) rotate(-0.5deg); }
 }
 .tc-wiggle { animation: tcWiggle 2.2s ease-in-out infinite; transform-origin: center; }
 
