@@ -6131,20 +6131,22 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
                     <label key={key} style={{
                       display: 'flex', alignItems: 'center', gap: '10px',
                       padding: '12px 14px',
-                      backgroundColor: checked ? cat.color : '#fafafa',
-                      color: checked ? '#fff' : '#444',
+                      backgroundColor: '#fff',
+                      color: checked ? '#1a1a1a' : '#888',
                       borderRadius: '10px',
-                      border: `1px solid ${checked ? cat.color : '#ddd'}`,
+                      border: `1px solid ${checked ? '#e5e7eb' : '#f0f0f0'}`,
+                      borderLeft: `3px solid ${cat.color}`,
                       cursor: 'pointer',
                       fontSize: '0.9rem', fontWeight: '700',
                       userSelect: 'none',
-                      transition: 'background-color 0.15s, color 0.15s',
+                      transition: 'color 0.15s, border-color 0.15s',
+                      boxShadow: checked ? `0 1px 2px rgba(0,0,0,0.04)` : 'none',
                     }}>
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleCat(key)}
-                        style={{ width: '18px', height: '18px', accentColor: '#fff', cursor: 'pointer' }}
+                        style={{ width: '18px', height: '18px', accentColor: cat.color, cursor: 'pointer', flexShrink: 0 }}
                       />
                       {cat.label}
                     </label>
