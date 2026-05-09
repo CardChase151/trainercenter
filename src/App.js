@@ -6027,6 +6027,8 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMod
 const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
 
 function ReminderSignupModal({ onClose, onComplete, isMobile }) {
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
   const [step, setStep] = useState('categories'); // 'categories' | 'auth' | 'saving' | 'success' | 'error'
   // Default all categories selected — most users want everything, then uncheck
   // what they don't care about.
@@ -6042,13 +6044,12 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
     });
   };
 
-  const handleAuthSuccess = async () => {
+  // Persist the picks to the DB. Used by both the post-signup path
+  // (handleAuthSuccess) and the already-logged-in shortcut (saveAndFinish)
+  // so the RPC call lives in one place.
+  const persistSubscriptions = async () => {
     setStep('saving');
     setErrorMsg('');
-    // Build subscriptions object with the user's picks. Every key in
-    // CATEGORIES is included so future code that iterates the object can
-    // assume completeness — unchecked categories are explicit `false`, not
-    // missing.
     const subs = REMINDER_CATEGORY_KEYS.reduce((acc, key) => {
       acc[key] = selectedCats.has(key);
       return acc;
@@ -6060,9 +6061,14 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
       return;
     }
     setStep('success');
-    // Tell parent the flow ran — used to flip the localStorage flag and hide
-    // the wiggle banner forever.
     if (onComplete) onComplete();
+  };
+
+  const handleAuthSuccess = () => persistSubscriptions();
+  const handleContinueFromCategories = () => {
+    if (selectedCats.size === 0) return;
+    if (isLoggedIn) persistSubscriptions();
+    else setStep('auth');
   };
 
   const overlayStyle = {
@@ -6122,6 +6128,20 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
               <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
                 Pick the events you'd like a heads-up for. We'll only email you when something on your list is coming up.
               </p>
+              {isLoggedIn && (
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  fontSize: '0.82rem',
+                  color: '#166534',
+                  fontWeight: '700',
+                }}>
+                  Signed in as {user.email} — we'll save these picks straight to your account.
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '20px' }}>
                 {REMINDER_CATEGORY_KEYS.map(key => {
                   const cat = CATEGORIES[key];
@@ -6155,7 +6175,7 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
               </div>
               <button
                 type="button"
-                onClick={() => setStep('auth')}
+                onClick={handleContinueFromCategories}
                 disabled={selectedCats.size === 0}
                 style={{
                   width: '100%', padding: '14px',
@@ -6166,7 +6186,11 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
                   cursor: selectedCats.size === 0 ? 'not-allowed' : 'pointer',
                 }}
               >
-                {selectedCats.size === 0 ? 'Pick at least one' : `Continue with ${selectedCats.size} selected`}
+                {selectedCats.size === 0
+                  ? 'Pick at least one'
+                  : isLoggedIn
+                    ? `Save ${selectedCats.size} ${selectedCats.size === 1 ? 'reminder' : 'reminders'}`
+                    : `Continue with ${selectedCats.size} selected`}
               </button>
             </>
           )}
@@ -6215,7 +6239,7 @@ function ReminderSignupModal({ onClose, onComplete, isMobile }) {
                 <CheckCircle2 size={24} color="#16a34a" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <p style={{ fontSize: '0.95rem', fontWeight: '800', color: '#15803d', margin: '0 0 4px 0' }}>
-                    Welcome to Trainer Center!
+                    {isLoggedIn ? 'Reminder preferences saved' : 'Welcome to Trainer Center!'}
                   </p>
                   <p style={{ fontSize: '0.85rem', color: '#166534', lineHeight: '1.6', margin: 0 }}>
                     We'll email you about the {selectedCats.size} {selectedCats.size === 1 ? 'category' : 'categories'} you picked. Update or unsubscribe any time from any email we send.
