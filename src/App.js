@@ -11693,6 +11693,13 @@ function App() {
   const [staffProfile, setStaffProfile] = useState(null);
   const [vendor, setVendor] = useState(null);
   const [member, setMember] = useState(null);
+  // Reminder preferences for the logged-in user. Drives the "My Reminders"
+  // nav label, the editable preferences card on /reminders, and the
+  // pre-fill in ReminderSignupModal so re-engaging visitors see their
+  // current picks instead of an all-checked default. Declared up here
+  // because NAV_ITEMS reads `hasReminders` further down in the same render.
+  const [reminderSubs, setReminderSubs] = useState(null);
+  const [hasReminders, setHasReminders] = useState(false);
   const [authRolesLoading, setAuthRolesLoading] = useState(true);
   const profileFetchRef = useRef(null);
   const isAdmin = !!staffProfile?.is_admin;
@@ -11883,12 +11890,6 @@ function App() {
     setReminderSubs(null);
   };
 
-  // Reminder preferences for the logged-in user. Drives the "My Reminders"
-  // nav label, the editable preferences card on /reminders, and the
-  // pre-fill in ReminderSignupModal so re-engaging visitors see their
-  // current picks instead of an all-checked default.
-  const [reminderSubs, setReminderSubs] = useState(null); // null | jsonb-shaped object
-  const [hasReminders, setHasReminders] = useState(false);
   const refreshReminders = useCallback(async () => {
     if (!staffUser?.id) {
       setReminderSubs(null);
