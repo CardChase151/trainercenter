@@ -3938,31 +3938,29 @@ function BuySellPage({ isMobile }) {
 }
 
 // ─── Calendar Reminder Banner ───────────────────────────
-// Wiggling CTA at the top of the calendar that opens the reminder signup
-// modal. Hidden permanently after the user opens the modal (via click)
-// or dismisses it via the X — both write the same localStorage flag,
-// so visitors only see this banner once per device.
+// CTA pinned to the top of the calendar that opens the reminder signup
+// modal. The banner itself stays visible forever — users may want to
+// circle back to it later — but the wiggle animation stops after the
+// first interaction (either clicking through to the modal or hitting
+// the calm-down X). The localStorage flag persists that calmed state
+// per device.
 const REMINDER_BANNER_FLAG = 'tc_reminders_banner_seen';
 function CalendarReminderBanner({ isMobile }) {
-  const [hidden, setHidden] = useState(() => {
+  const [calmed, setCalmed] = useState(() => {
     if (typeof window === 'undefined') return true;
     try { return localStorage.getItem(REMINDER_BANNER_FLAG) === '1'; }
     catch { return false; }
   });
   const [showModal, setShowModal] = useState(false);
 
-  // Don't early-return here — the modal renders in the same fragment, so
-  // unmounting the whole component when `hidden` flips would also unmount
-  // the modal mid-flow. Only the banner div is conditionally rendered.
-
-  const flagSeen = () => {
+  const calmDown = () => {
+    if (calmed) return;
     try { localStorage.setItem(REMINDER_BANNER_FLAG, '1'); } catch { /* private mode */ }
-    setHidden(true);
+    setCalmed(true);
   };
 
   return (
     <>
-      {!hidden && (
       <div style={{
         display: 'flex',
         alignItems: 'stretch',
@@ -3971,8 +3969,8 @@ function CalendarReminderBanner({ isMobile }) {
       }}>
         <button
           type="button"
-          className="tc-wiggle"
-          onClick={() => { flagSeen(); setShowModal(true); }}
+          className={calmed ? '' : 'tc-wiggle'}
+          onClick={() => { calmDown(); setShowModal(true); }}
           style={{
             flex: 1,
             background: 'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 50%, #C8102E 100%)',
@@ -4010,26 +4008,27 @@ function CalendarReminderBanner({ isMobile }) {
           </div>
           <ArrowRight size={18} style={{ flexShrink: 0 }} />
         </button>
-        <button
-          type="button"
-          onClick={flagSeen}
-          aria-label="Dismiss"
-          title="No thanks"
-          style={{
-            flexShrink: 0,
-            width: '38px',
-            background: '#f3f4f6',
-            border: '1px solid #e5e7eb',
-            borderRadius: '12px',
-            cursor: 'pointer',
-            color: '#666',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <X size={16} />
-        </button>
+        {!calmed && (
+          <button
+            type="button"
+            onClick={calmDown}
+            aria-label="Stop the wiggle"
+            title="Stop the wiggle"
+            style={{
+              flexShrink: 0,
+              width: '38px',
+              background: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              color: '#666',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
-      )}
       {showModal && (
         <ReminderSignupModal
           isMobile={isMobile}
