@@ -11738,6 +11738,31 @@ function App() {
           </span>
         </Link>
         <div style={{ display: 'flex', gap: '28px', alignItems: 'center' }}>
+          {/* Reminder bell — leftmost in the right cluster so it sits
+              right before Home in the visual order. Wiggles to draw
+              attention; hidden permanently after the user opts out
+              via the modal. */}
+          {!bellHidden && (
+            <button
+              type="button"
+              className="tc-wiggle"
+              onClick={() => setShowReminderModal(true)}
+              title="Sign up for reminders"
+              aria-label="Sign up for reminders"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#C8102E',
+                padding: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Bell size={20} />
+            </button>
+          )}
           {/* Desktop nav links */}
           {!isMobile && NAV_ITEMS.map(item => {
             // Dropdown parent — click toggles, child click navigates.
@@ -11885,29 +11910,6 @@ function App() {
               </Link>
             );
           })}
-          {/* Reminder bell — wiggle CTA to open the reminder signup modal.
-              Visible until the user explicitly opts out via the modal. */}
-          {!bellHidden && (
-            <button
-              type="button"
-              className="tc-wiggle"
-              onClick={() => setShowReminderModal(true)}
-              title="Sign up for reminders"
-              aria-label="Sign up for reminders"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#C8102E',
-                padding: '4px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Bell size={20} />
-            </button>
-          )}
           {/* Auth badge — Lock when signed out, role label when signed in.
               Staff (admin) wins over Vendor when a user has both roles. */}
           {(() => {

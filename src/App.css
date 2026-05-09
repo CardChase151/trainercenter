@@ -6,20 +6,20 @@
 }
 .spin { animation: spin 1s linear infinite; }
 
-/* Periodic wiggle for the calendar reminder banner. The animation runs on
-   a long cycle so the button rests most of the time and only shakes for a
-   fraction of a second every few seconds — enough to draw the eye without
-   being annoying. */
+/* Periodic wiggle for reminder CTAs (header bell + calendar banner). The
+   cycle is short enough to feel alive — the icon rests for ~1.5s and then
+   shakes for ~0.5s before resting again. */
 @keyframes tcWiggle {
-  0%, 88%, 100% { transform: translateX(0) rotate(0); }
-  90%   { transform: translateX(-3px) rotate(-1.5deg); }
-  91.5% { transform: translateX(3px)  rotate(1.5deg); }
-  93%   { transform: translateX(-3px) rotate(-1.5deg); }
-  94.5% { transform: translateX(3px)  rotate(1.5deg); }
-  96%   { transform: translateX(-2px) rotate(-1deg); }
-  97.5% { transform: translateX(2px)  rotate(1deg); }
+  0%, 65%, 100% { transform: translateX(0) rotate(0); }
+  68%  { transform: translateX(-4px) rotate(-3deg); }
+  72%  { transform: translateX(4px)  rotate(3deg); }
+  76%  { transform: translateX(-4px) rotate(-3deg); }
+  80%  { transform: translateX(4px)  rotate(3deg); }
+  84%  { transform: translateX(-3px) rotate(-2deg); }
+  88%  { transform: translateX(3px)  rotate(2deg); }
+  92%  { transform: translateX(-2px) rotate(-1deg); }
 }
-.tc-wiggle { animation: tcWiggle 5s ease-in-out infinite; transform-origin: center; }
+.tc-wiggle { animation: tcWiggle 2.2s ease-in-out infinite; transform-origin: center; }
 
 /* iOS Safari zooms the viewport when an input has font-size < 16px on focus.
    Forcing 16px on all form elements at mobile breakpoints kills the zoom
