@@ -504,6 +504,12 @@ const AuthContext = createContext({
   isVendor: false,
   isGuest: false,
   isLoading: true,
+  // Reminder subscriptions (the user's marketing_contacts.subscriptions JSONB).
+  // null when the user has never signed up for reminders, otherwise a map
+  // like { trade_night: true, tournament: false, ... }.
+  reminderSubs: null,
+  hasReminders: false,
+  refreshReminders: async () => {},
   signOut: async () => {},
   refresh: async () => {},
 });
@@ -4046,7 +4052,60 @@ function CalendarReminderBanner({ isMobile }) {
 // ReminderSignupModal the calendar wiggle uses, so the actual signup
 // surface is never duplicated.
 function RemindersPage({ isMobile }) {
+  const { user, reminderSubs, hasReminders, refreshReminders } = useAuth();
   const [showModal, setShowModal] = useState(false);
+
+  // ─── Manage existing prefs (logged-in returning visitors) ──
+  // Local copy of the picks so the user can toggle without writing on every
+  // click. Resets whenever the upstream subs change (e.g. after a successful
+  // save the parent context refresh fires and resync occurs here).
+  const buildPrefsFromSubs = (subs) => {
+    const next = new Set();
+    REMINDER_CATEGORY_KEYS.forEach(key => {
+      if (subs && subs[key]) next.add(key);
+    });
+    return next;
+  };
+  const [editPrefs, setEditPrefs] = useState(() => buildPrefsFromSubs(reminderSubs));
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [prefsError, setPrefsError] = useState('');
+  const [prefsSavedAt, setPrefsSavedAt] = useState(0);
+  // Resync when the upstream subs change (login, refresh, save complete).
+  useEffect(() => {
+    setEditPrefs(buildPrefsFromSubs(reminderSubs));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminderSubs]);
+
+  const togglePref = (key) => {
+    setEditPrefs(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+  const dirty = (() => {
+    const current = buildPrefsFromSubs(reminderSubs);
+    if (current.size !== editPrefs.size) return true;
+    for (const k of editPrefs) if (!current.has(k)) return true;
+    return false;
+  })();
+  const savePrefs = async () => {
+    setSavingPrefs(true);
+    setPrefsError('');
+    const subs = REMINDER_CATEGORY_KEYS.reduce((acc, key) => {
+      acc[key] = editPrefs.has(key);
+      return acc;
+    }, {});
+    const { error } = await supabase.rpc('subscribe_to_reminders', { p_subscriptions: subs });
+    setSavingPrefs(false);
+    if (error) {
+      setPrefsError(error.message);
+      return;
+    }
+    setPrefsSavedAt(Date.now());
+    if (refreshReminders) refreshReminders();
+  };
+
   const benefits = [
     { title: 'Pick what you want to hear about', desc: 'Choose any combination of Trade Night, Tournament, Game Day, Crafts, TC Beach City Trade Night, and more. We only email about events on your list.' },
     { title: 'No spam, ever', desc: 'You only get a heads-up when something on your list is coming up. Every email has a one-click unsubscribe.' },
@@ -4057,7 +4116,100 @@ function RemindersPage({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
-        <SectionHeader title="Reminders" subtitle="Never miss a Trainer Center event" />
+        <SectionHeader
+          title={hasReminders ? 'My Reminders' : 'Reminders'}
+          subtitle={hasReminders ? 'Manage what you get a heads-up about' : 'Never miss a Trainer Center event'}
+        />
+
+        {/* Logged-in preferences card — shown only for users who already
+            have a reminder record. Lets them toggle categories and save
+            without re-running the signup flow. */}
+        {user && hasReminders && (
+          <div style={{
+            backgroundColor: '#fff',
+            border: '1px solid #eee',
+            borderRadius: '16px',
+            padding: isMobile ? '20px 18px' : '28px 32px',
+            maxWidth: '900px',
+            margin: '0 auto 28px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '12px',
+                backgroundColor: '#fff0f0', color: '#C8102E',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Bell size={20} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ fontSize: '0.65rem', fontWeight: '800', color: '#C8102E', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>
+                  Signed in as
+                </p>
+                <p style={{ fontSize: '0.9rem', fontWeight: '800', color: '#1a1a1a', margin: '2px 0 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {user.email}
+                </p>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+              Toggle the categories you want reminders for. Changes don't save until you click Save.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', marginBottom: '16px' }}>
+              {REMINDER_CATEGORY_KEYS.map(key => {
+                const cat = CATEGORIES[key];
+                if (!cat) return null;
+                const checked = editPrefs.has(key);
+                return (
+                  <label key={key} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '12px 14px',
+                    backgroundColor: '#fff',
+                    color: checked ? '#1a1a1a' : '#888',
+                    borderRadius: '10px',
+                    border: `1px solid ${checked ? '#e5e7eb' : '#f0f0f0'}`,
+                    borderLeft: `3px solid ${cat.color}`,
+                    cursor: 'pointer',
+                    fontSize: '0.9rem', fontWeight: '700',
+                    userSelect: 'none',
+                    transition: 'color 0.15s, border-color 0.15s',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePref(key)}
+                      style={{ width: '18px', height: '18px', accentColor: cat.color, cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    {cat.label}
+                  </label>
+                );
+              })}
+            </div>
+            {prefsError && (
+              <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 10px 0' }}>{prefsError}</p>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={savePrefs}
+                disabled={!dirty || savingPrefs}
+                style={{
+                  padding: '12px 22px',
+                  backgroundColor: (!dirty || savingPrefs) ? '#ccc' : '#C8102E',
+                  color: '#fff', border: 'none', borderRadius: '10px',
+                  fontWeight: '800', fontSize: '0.9rem',
+                  cursor: (!dirty || savingPrefs) ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {savingPrefs ? 'Saving...' : dirty ? 'Save changes' : 'No changes'}
+              </button>
+              {prefsSavedAt > 0 && !dirty && (
+                <span style={{ fontSize: '0.82rem', color: '#16a34a', fontWeight: '700' }}>
+                  Saved.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Hero */}
         <div style={{
@@ -6026,12 +6178,17 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMod
 const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
 
 function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
-  const { user } = useAuth();
+  const { user, reminderSubs, refreshReminders } = useAuth();
   const isLoggedIn = !!user;
   const [step, setStep] = useState('categories'); // 'categories' | 'auth' | 'saving' | 'success' | 'error'
-  // Default all categories selected — most users want everything, then uncheck
-  // what they don't care about.
-  const [selectedCats, setSelectedCats] = useState(new Set(REMINDER_CATEGORY_KEYS));
+  // Pre-fill from the user's saved subs when re-engaging, otherwise default
+  // all categories on so first-time users don't have to tick every one.
+  const [selectedCats, setSelectedCats] = useState(() => {
+    if (reminderSubs && Object.keys(reminderSubs).length > 0) {
+      return new Set(REMINDER_CATEGORY_KEYS.filter(k => !!reminderSubs[k]));
+    }
+    return new Set(REMINDER_CATEGORY_KEYS);
+  });
   const [errorMsg, setErrorMsg] = useState('');
 
   const toggleCat = (key) => {
@@ -6060,6 +6217,9 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
       return;
     }
     setStep('success');
+    // Refresh AuthContext so the nav label flips to "My Reminders" and the
+    // /reminders preferences card stays in sync without a page reload.
+    if (refreshReminders) refreshReminders();
     if (onComplete) onComplete();
   };
 
@@ -11217,7 +11377,7 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
 // accordion sections (mobile). The parent label itself never navigates —
 // it only toggles its child menu. Staff users land on the staff vendor
 // console; everyone else lands on the regular vendor dashboard.
-const buildNavItems = ({ isStaff }) => [
+const buildNavItems = ({ isStaff, hasReminders }) => [
   { label: 'Home', to: '/' },
   { label: 'Calendar', to: '/calendar' },
   { label: 'Visit Us', to: '/#visit-us' },
@@ -11237,7 +11397,11 @@ const buildNavItems = ({ isStaff }) => [
       { label: 'Consultation', to: '/consultation' },
       { label: 'Grading', to: '/grading' },
       { label: 'Blog', to: '/blog' },
-      { label: 'Reminders', to: '/reminders' },
+      // Logged-in users with active reminders see "My Reminders" in red so
+      // they can spot the preferences shortcut at a glance.
+      hasReminders
+        ? { label: 'My Reminders', to: '/reminders', accent: '#C8102E' }
+        : { label: 'Reminders', to: '/reminders' },
     ],
   },
 ];
@@ -11560,7 +11724,7 @@ function App() {
     });
 
   // Auth-aware nav (Dashboard child differs for staff vs vendor).
-  const NAV_ITEMS = buildNavItems({ isStaff: !!staff });
+  const NAV_ITEMS = buildNavItems({ isStaff: !!staff, hasReminders });
 
   // Site settings + special hours (editable Visit Us section + holiday overrides)
   const [siteSettings, setSiteSettings] = useState(null);
@@ -11685,7 +11849,36 @@ function App() {
     setStaffProfile(null);
     setVendor(null);
     setMember(null);
+    setReminderSubs(null);
   };
+
+  // Reminder preferences for the logged-in user. Drives the "My Reminders"
+  // nav label, the editable preferences card on /reminders, and the
+  // pre-fill in ReminderSignupModal so re-engaging visitors see their
+  // current picks instead of an all-checked default.
+  const [reminderSubs, setReminderSubs] = useState(null); // null | jsonb-shaped object
+  const [hasReminders, setHasReminders] = useState(false);
+  const refreshReminders = useCallback(async () => {
+    if (!staffUser?.id) {
+      setReminderSubs(null);
+      setHasReminders(false);
+      return;
+    }
+    const { data, error } = await supabase.rpc('get_my_reminders');
+    if (error) {
+      console.error('[reminders] fetch failed', error);
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row && row.has_record) {
+      setReminderSubs(row.subscriptions || {});
+      setHasReminders(!!row.is_subscribed && Object.values(row.subscriptions || {}).some(Boolean));
+    } else {
+      setReminderSubs(null);
+      setHasReminders(false);
+    }
+  }, [staffUser?.id]);
+  useEffect(() => { refreshReminders(); }, [refreshReminders]);
 
   const authValue = {
     session: staffUser ? { user: staffUser } : null,
@@ -11697,6 +11890,9 @@ function App() {
     isVendor,
     isGuest,
     isLoading: authRolesLoading,
+    reminderSubs,
+    hasReminders,
+    refreshReminders,
     signOut: handleLogout,
     refresh: refreshAuthRoles,
   };
@@ -11816,23 +12012,25 @@ function App() {
                     }}>
                       {item.children.map(child => {
                         const childActive = location.pathname === pathOnly(child.to);
+                        const restingColor = child.accent || '#1a1a1a';
+                        const childWeight = child.accent ? '800' : '600';
                         return (
                           <Link
                             key={child.label}
                             to={child.to}
                             onClick={() => setOpenDropdown(null)}
                             style={{
-                              color: childActive ? '#C8102E' : '#1a1a1a',
+                              color: childActive ? '#C8102E' : restingColor,
                               textDecoration: 'none',
                               fontSize: '0.85rem',
-                              fontWeight: '600',
+                              fontWeight: childWeight,
                               padding: '10px 14px',
                               borderRadius: '6px',
                               whiteSpace: 'nowrap',
                               transition: 'background-color 0.15s, color 0.15s',
                             }}
                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; if (!childActive) e.currentTarget.style.color = '#1a1a1a'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; if (!childActive) e.currentTarget.style.color = restingColor; }}
                           >
                             {child.label}
                           </Link>
@@ -12021,6 +12219,8 @@ function App() {
                     }}>
                       {item.children.map(child => {
                         const childActive = location.pathname === pathOnly(child.to);
+                        const restingColor = child.accent || '#555';
+                        const childWeight = child.accent ? '800' : '600';
                         return (
                           <Link
                             key={child.label}
@@ -12028,10 +12228,10 @@ function App() {
                             onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
                             style={{
                               display: 'block',
-                              color: childActive ? '#C8102E' : '#555',
+                              color: childActive ? '#C8102E' : restingColor,
                               textDecoration: 'none',
                               fontSize: '0.9rem',
-                              fontWeight: '600',
+                              fontWeight: childWeight,
                               padding: '12px 24px 12px 40px',
                               borderTop: '1px solid #efefef',
                             }}
