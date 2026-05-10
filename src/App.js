@@ -611,6 +611,10 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
   // per-row times in `dateEntries`.
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('20:00');
+  // editEventDate holds the date for the row being edited. Populated from
+  // editingEvent.event_date on load; user can change it via the date picker
+  // and the new value is what we save. Empty when not in edit mode.
+  const [editEventDate, setEditEventDate] = useState('');
   const [location, setLocation] = useState('');
   const [categories, setCategories] = useState(['other']);
   const [recurrence, setRecurrence] = useState('none');
@@ -639,6 +643,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
     setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate('');
     setHasVendors(false); setVendorStartTime(''); setVendorEndTime(''); setVendorNote('');
     setEditingEvent(null);
+    setEditEventDate('');
     setScheduleMode('specific');
     setDateEntries([makeEntry(initialDateISO)]);
     setApplyToSeries(false);
@@ -651,6 +656,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
     setDescription(event.description || '');
     setStartTime(event.start_time?.slice(0, 5) || '18:00');
     setEndTime(event.end_time?.slice(0, 5) || '20:00');
+    setEditEventDate(event.event_date || initialDateISO);
     setLocation(event.location || '');
     setCategories(event.categories?.length ? event.categories : ['other']);
     setRecurrence(event.recurrence || 'none');
@@ -720,7 +726,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
         id: editingEvent.id,
         title: trimmedTitle,
         description: trimmedDescription,
-        event_date: editingEvent.event_date,
+        event_date: editEventDate || editingEvent.event_date,
         start_time: editStartTime,
         end_time: editEndTime,
         location: trimmedLocation,
@@ -907,7 +913,12 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
                     {editingEvent.title}
                   </h2>
                   <p style={{ fontSize: '0.78rem', color: '#888', margin: 0 }}>
-                    {dateStr}
+                    {(() => {
+                      const d = editEventDate ? new Date(editEventDate + 'T12:00:00') : null;
+                      return d
+                        ? d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                        : dateStr;
+                    })()}
                     {editingEvent.start_time && ` · ${formatTime12h(editingEvent.start_time)} – ${formatTime12h(editingEvent.end_time)}`}
                   </p>
                 </>
@@ -1231,6 +1242,13 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
         ) : (
           // Editing an existing single row — keep the original simple form.
           <>
+            <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Date</label>
+            <input
+              type="date"
+              value={editEventDate}
+              onChange={e => setEditEventDate(e.target.value)}
+              style={inputStyle}
+            />
             <div style={{ display: 'flex', gap: '8px' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>Start</label>

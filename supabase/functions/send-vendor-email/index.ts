@@ -14,6 +14,12 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 
+// RESEND_API_KEY — stored as a Supabase secret on this project (tfneuzbhiqsdvnhhdfsw).
+// Mirror locations (keep in sync when rotating):
+//   - Supabase secret: supabase secrets set RESEND_API_KEY=... --project-ref tfneuzbhiqsdvnhhdfsw
+//   - Netlify env:     cd ~/Apps/trainercenter && netlify env:set RESEND_API_KEY ...
+//   - Local dev:       ~/Apps/trainercenter/.env (gitignored)
+// See ~/Apps/trainercenter/vendor-emails/README.md for the full workflow.
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 const FROM_ADDRESS = 'Trainer Center HB <noreply@mysendz.com>'
 const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'Sethmcparty@gmail.com']
