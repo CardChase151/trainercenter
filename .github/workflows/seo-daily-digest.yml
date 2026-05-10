@@ -25,4 +25,7 @@ jobs:
         env:
           GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Optional — when set, the digest reads public.page_visits to
+          # break down traffic by source (IG/AI/direct etc).
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python3 scripts/seo-daily-digest.py

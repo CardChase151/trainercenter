@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+// First-party visit tracking — fires once per session, logs source to
+// public.page_visits so the daily SEO digest can attribute Instagram, AI
+// assistants, direct traffic, etc beyond what GSC sees.
+import './lib/trackVisit';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

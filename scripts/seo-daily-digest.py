@@ -27,6 +27,11 @@ SITE = 'https://pokemontrainercenter.com/'
 RECIPIENT = 'thek2way17@gmail.com'
 FROM_ADDRESS = 'Trainer Center HB SEO <noreply@mysendz.com>'
 
+# Supabase project for first-party visit tracking. Reads from page_visits
+# via service_role so we can break down traffic by source (Google, IG, AI,
+# direct) alongside the GSC-only Google search numbers above.
+SUPABASE_URL = 'https://tfneuzbhiqsdvnhhdfsw.supabase.co'
+
 # ─── GSC data fetch ──────────────────────────────────────────────────────────
 
 
@@ -62,6 +67,98 @@ def get_access_token(sa_json):
     )
     creds.refresh(Request())
     return creds.token
+
+
+# ─── First-party visit attribution (Supabase page_visits) ────────────────────
+
+
+def categorize_referrer(host, ai_bot):
+    """Bucket a referrer hostname into a friendly source label."""
+    if ai_bot:
+        return {
+            'chatgpt': 'ChatGPT',
+            'claude': 'Claude',
+            'perplexity': 'Perplexity',
+            'gemini': 'Gemini',
+            'copilot': 'Copilot',
+            'other-ai': 'Other AI',
+        }.get(ai_bot, ai_bot.title())
+    if not host:
+        return 'Direct'
+    h = host.lower()
+    if 'google.' in h:
+        return 'Google Search'
+    if 'bing.com' in h or 'duckduckgo.com' in h:
+        return 'Bing/DuckDuckGo'
+    if 'instagram.com' in h or 'l.instagram.com' in h or 'lm.facebook.com' in h:
+        return 'Instagram'
+    if 'tiktok.com' in h:
+        return 'TikTok'
+    if 'facebook.com' in h or 'fb.com' in h or 'm.facebook.com' in h:
+        return 'Facebook'
+    if 'twitter.com' in h or 't.co' in h or 'x.com' in h:
+        return 'Twitter / X'
+    if 'reddit.com' in h:
+        return 'Reddit'
+    if 'linkedin.com' in h or 'lnkd.in' in h:
+        return 'LinkedIn'
+    if 'youtube.com' in h or 'youtu.be' in h:
+        return 'YouTube'
+    if 'pokemontrainercenter.com' in h:
+        return None  # internal nav — skip
+    return host
+
+
+def fetch_visit_sources(supabase_url, service_role_key, target_date):
+    """Returns a list of (label, visits, unique_sessions) buckets sorted by visits."""
+    if not service_role_key:
+        return []
+    # Pull yesterday's visits. We use service_role to bypass RLS read protection.
+    start_iso = f"{target_date.isoformat()}T00:00:00Z"
+    end_iso = f"{(target_date + datetime.timedelta(days=1)).isoformat()}T00:00:00Z"
+    params = {
+        'select': 'referrer_host,ai_bot,session_id',
+        'created_at': f'gte.{start_iso}',
+        'and': f'(created_at.lt.{end_iso})',
+    }
+    url = f"{supabase_url}/rest/v1/page_visits?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(
+        url,
+        headers={
+            'apikey': service_role_key,
+            'Authorization': f'Bearer {service_role_key}',
+            'Accept': 'application/json',
+            'User-Agent': 'TrainerCenterHB-SEODigest/1.0',
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            rows = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print(f'[page_visits] HTTP {e.code}: {e.read().decode()[:200]}')
+        return []
+    except Exception as e:
+        print(f'[page_visits] {type(e).__name__}: {e}')
+        return []
+
+    buckets = {}
+    for r in rows:
+        label = categorize_referrer(r.get('referrer_host'), r.get('ai_bot'))
+        if not label:
+            continue
+        if label not in buckets:
+            buckets[label] = {'visits': 0, 'sessions': set()}
+        buckets[label]['visits'] += 1
+        sid = r.get('session_id')
+        if sid:
+            buckets[label]['sessions'].add(sid)
+
+    out = [
+        (label, b['visits'], len(b['sessions']))
+        for label, b in buckets.items()
+    ]
+    out.sort(key=lambda x: x[1], reverse=True)
+    return out
 
 
 # ─── Analysis ────────────────────────────────────────────────────────────────
@@ -104,7 +201,43 @@ def color_for_delta(new, old):
 # ─── Email rendering ────────────────────────────────────────────────────────
 
 
-def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days):
+def render_sources_section(visit_sources, date_str):
+    """Render the 'where visitors came from' block. Returns empty string if
+    no data (e.g. tracking script hasn't deployed yet or no visits that day)."""
+    if not visit_sources:
+        return f'''<div style="margin:26px 0 0;padding:14px 16px;background:#f4f6f9;border-radius:6px">
+          <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">🌐 Where visitors came from</div>
+          <p style="margin:0;font-size:13px;color:#666;line-height:1.55">No first-party visit data for {html.escape(date_str)} yet. Either no visits, or the page-visit tracking is still gathering its first day of data. (This section will populate once the tracker is live.)</p>
+        </div>'''
+
+    total_visits = sum(v for _, v, _ in visit_sources)
+    total_sessions = sum(s for _, _, s in visit_sources)
+
+    rows = []
+    for label, visits, sessions in visit_sources[:8]:
+        pct = (visits / total_visits * 100) if total_visits > 0 else 0
+        ppl = '1 person' if sessions == 1 else f'{sessions} people'
+        rows.append(f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr>
+          <td style="padding:10px 14px;background:#fafafa;border-radius:6px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-size:14px;font-weight:700;color:#1a1a1a">{html.escape(label)}</span>
+              <span style="font-size:13px;color:#1a1a1a;font-weight:700">{visits} visit{"s" if visits != 1 else ""}</span>
+            </div>
+            <div style="font-size:12px;color:#525252;margin-top:3px">{ppl} · {pct:.0f}% of traffic</div>
+          </td>
+        </tr></table>''')
+
+    return f'''<div style="margin:26px 0 0">
+      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">🌐 Where visitors came from</div>
+      <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">
+        <strong>{total_visits} total visits</strong> from <strong>{total_sessions} unique sessions</strong> on {html.escape(date_str)}. Sources detected via the on-page tracker (not GSC, which only sees Google Search).
+      </div>
+      {''.join(rows)}
+    </div>'''
+
+
+
+def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources=None):
     date_obj = datetime.date.fromisoformat(latest_day['keys'][0])
     date_str = date_obj.strftime('%A, %B %-d')
     cur_clicks = int(latest_day.get('clicks', 0))
@@ -118,90 +251,181 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
     avg_clicks = week_avg['clicks']
     avg_imp = week_avg['impressions']
 
-    def cell(label, value, sub_html=''):
-        return f'''<td valign="top" style="padding:14px 16px;border:1px solid #eee;border-radius:8px;background:#fafafa">
+    high_clicks = int(max_clicks_day.get('clicks', 0))
+    low_clicks = int(min_clicks_day.get('clicks', 0))
+    is_new_high = max_clicks_day == latest_day and cur_clicks > 0
+    is_new_low = min_clicks_day == latest_day and cur_clicks == low_clicks
+
+    # ─── Plain-English TL;DR ──────────────────────────────────
+    if cur_clicks == 0 and cur_imp == 0:
+        summary = f"On {date_str}, no one searched for or saw your site. Quiet day."
+    elif cur_clicks == 0:
+        summary = f"On {date_str}, your site showed up <strong>{cur_imp:,} times</strong> in Google search results, but no one clicked through. Common when ranking on page 2 or lower."
+    else:
+        people = "1 person" if cur_clicks == 1 else f"<strong>{cur_clicks} people</strong>"
+        summary = f"On {date_str}, your site showed up <strong>{cur_imp:,} times</strong> in Google search results. {people} clicked through to visit. That's a <strong>{cur_ctr:.1f}%</strong> click-through rate, with your average ranking at position <strong>{cur_pos:.1f}</strong> across all the searches you appeared in."
+
+    # Comparison sentence
+    if prev_clicks == cur_clicks:
+        compare_dod = f"Same as the day before ({prev_clicks} clicks)."
+    elif cur_clicks > prev_clicks:
+        diff = cur_clicks - prev_clicks
+        compare_dod = f'<span style="color:#16a34a;font-weight:700">▲ Up {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+    else:
+        diff = prev_clicks - cur_clicks
+        compare_dod = f'<span style="color:#dc2626;font-weight:700">▼ Down {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+
+    if avg_clicks > 0:
+        if cur_clicks > avg_clicks * 1.1:
+            compare_avg = f'<span style="color:#16a34a;font-weight:700">Above</span> the trailing 7-day average of {avg_clicks:.1f} clicks/day.'
+        elif cur_clicks < avg_clicks * 0.9:
+            compare_avg = f'<span style="color:#dc2626;font-weight:700">Below</span> the trailing 7-day average of {avg_clicks:.1f} clicks/day.'
+        else:
+            compare_avg = f"Roughly in line with the trailing 7-day average of {avg_clicks:.1f} clicks/day."
+    else:
+        compare_avg = "No clicks at all in the trailing 7 days, so no average to compare to."
+
+    if is_new_high and cur_clicks > 0:
+        compare_range = f"<strong>🎉 New {lookback_days}-day high.</strong> Best day in the window."
+    elif is_new_low:
+        compare_range = f"Tied or matching the {lookback_days}-day low ({low_clicks} clicks)."
+    else:
+        compare_range = f'In the {lookback_days}-day window, the best day had <strong>{high_clicks}</strong> clicks and the worst had <strong>{low_clicks}</strong>.'
+
+    # ─── Metric cards (single column, always stacked) ─────────
+    def metric_block(label, value, plain_english, sublines=None):
+        sublines_html = ''
+        if sublines:
+            for s in sublines:
+                sublines_html += f'<div style="font-size:13px;color:#525252;line-height:1.55;margin-top:4px">{s}</div>'
+        return f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px"><tr><td style="padding:14px 18px;border:1px solid #eee;border-radius:8px;background:#fafafa">
           <div style="font-size:10px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase">{label}</div>
-          <div style="font-size:22px;font-weight:800;color:#1a1a1a;margin-top:2px;line-height:1.2">{value}</div>
-          {sub_html}
-        </td>'''
+          <div style="font-size:28px;font-weight:800;color:#1a1a1a;margin-top:2px;line-height:1.1">{value}</div>
+          <div style="font-size:12px;color:#666;margin-top:6px;line-height:1.5;font-style:italic">{plain_english}</div>
+          {sublines_html}
+        </td></tr></table>'''
 
+    clicks_block = metric_block(
+        'Clicks',
+        cur_clicks,
+        'People who clicked from Google to your site.',
+        sublines=[compare_dod, compare_avg, compare_range],
+    )
+    imp_block = metric_block(
+        'Impressions',
+        f'{cur_imp:,}',
+        'Times your site appeared in Google search results, even if no one clicked.',
+        sublines=[
+            f"Day before: {prev_imp:,} · 7-day avg: {avg_imp:,.0f}/day"
+        ],
+    )
+    ctr_block = metric_block(
+        'Click-through rate (CTR)',
+        f'{cur_ctr:.2f}%',
+        f'Of the {cur_imp:,} people who saw you in results, {cur_ctr:.1f}% clicked through. Anything above 3% is healthy for a local-business niche.',
+    )
+    pos_block = metric_block(
+        'Average position',
+        f'{cur_pos:.1f}',
+        f'Your average rank across all searches you appeared in. 1 = top of page 1, 10 = bottom of page 1, 11+ = page 2 or beyond. {"You\'re ranking on page 1 — strong." if cur_pos <= 10 else "Most of your impressions are on page 2 or below — a likely growth area."}',
+    )
+
+    # ─── Top queries (single-column, plain rows) ──────────────
     def query_row(q):
-        return f'''<tr>
-          <td style="padding:6px 10px 6px 0;font-size:13px;color:#1a1a1a">{html.escape(q['keys'][0])[:55]}</td>
-          <td align="right" style="padding:6px 0;font-size:13px;color:#1a1a1a;font-weight:700;width:60px">{int(q.get('clicks',0))}</td>
-          <td align="right" style="padding:6px 0 6px 16px;font-size:12px;color:#888;width:80px">pos {q.get('position',0):.1f}</td>
-        </tr>'''
+        query_text = html.escape(q['keys'][0])
+        clicks = int(q.get('clicks', 0))
+        imps = int(q.get('impressions', 0))
+        pos = q.get('position', 0)
+        people = '1 person' if clicks == 1 else f'{clicks} people'
+        if clicks > 0:
+            line = f'{people} clicked · ranked <strong>#{pos:.0f}</strong> · seen {imps} times'
+        else:
+            line = f'Seen {imps} times · ranked <strong>#{pos:.0f}</strong> · no clicks'
+        return f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px"><tr><td style="padding:10px 14px;background:#fafafa;border-radius:6px;border-left:3px solid #C8102E">
+          <div style="font-size:14px;font-weight:700;color:#1a1a1a;line-height:1.4">"{query_text}"</div>
+          <div style="font-size:12px;color:#525252;margin-top:3px">{line}</div>
+        </td></tr></table>'''
 
+    queries_with_clicks = [q for q in top_queries if int(q.get('clicks', 0)) > 0][:5]
+    if queries_with_clicks:
+        queries_html = '\n'.join(query_row(q) for q in queries_with_clicks)
+    elif top_queries:
+        # No clicks, but show top impression queries so you can see what
+        # Google is putting you in front of, even when no one clicks.
+        queries_html = '<p style="margin:0 0 12px;font-size:12px;color:#888;font-style:italic">No clicks on any queries that day. Showing top impressions instead — these are searches you appeared in but no one clicked:</p>' + '\n'.join(query_row(q) for q in top_queries[:5])
+    else:
+        queries_html = '<p style="margin:0;font-size:13px;color:#888;font-style:italic">No queries logged that day.</p>'
+
+    # ─── Top pages ────────────────────────────────────────────
     def page_row(p):
         url = p['keys'][0].replace('https://pokemontrainercenter.com', '') or '/'
-        return f'''<tr>
-          <td style="padding:6px 10px 6px 0;font-size:13px;color:#1a1a1a">{html.escape(url)[:60]}</td>
-          <td align="right" style="padding:6px 0;font-size:13px;color:#1a1a1a;font-weight:700;width:60px">{int(p.get('clicks',0))}</td>
-        </tr>'''
+        clicks = int(p.get('clicks', 0))
+        imps = int(p.get('impressions', 0))
+        people = '1 click' if clicks == 1 else f'{clicks} clicks'
+        return f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr><td style="padding:10px 14px;background:#fafafa;border-radius:6px">
+          <div style="font-size:14px;font-weight:700;color:#1a1a1a;font-family:monospace">{html.escape(url)}</div>
+          <div style="font-size:12px;color:#525252;margin-top:3px">{people} · seen {imps} times</div>
+        </td></tr></table>'''
 
-    queries_html = '\n'.join(query_row(q) for q in top_queries[:6]) or '<tr><td colspan="3" style="padding:6px 0;color:#888;font-size:13px">No queries with clicks yesterday</td></tr>'
-    pages_html = '\n'.join(page_row(p) for p in top_pages[:5]) or '<tr><td colspan="2" style="padding:6px 0;color:#888;font-size:13px">No pages with clicks yesterday</td></tr>'
+    pages_with_clicks = [p for p in top_pages if int(p.get('clicks', 0)) > 0][:5]
+    if pages_with_clicks:
+        pages_html = '\n'.join(page_row(p) for p in pages_with_clicks)
+    else:
+        pages_html = '<p style="margin:0;font-size:13px;color:#888;font-style:italic">No pages got clicks that day.</p>'
 
-    high_label = 'New high!' if max_clicks_day == latest_day else f"{lookback_days}-day high: {int(max_clicks_day.get('clicks',0))}"
-    low_label = f"{lookback_days}-day low: {int(min_clicks_day.get('clicks',0))}"
-
-    dod_color = color_for_delta(cur_clicks, prev_clicks)
-    avg_color = color_for_delta(cur_clicks, avg_clicks)
+    # ─── Section helper ───────────────────────────────────────
+    def section(title, sub, body):
+        return f'''<div style="margin:26px 0 0">
+          <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">{title}</div>
+          <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">{sub}</div>
+          {body}
+        </div>'''
 
     return f'''<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><title>Trainer Center HB — Daily SEO Digest</title></head>
 <body style="margin:0;padding:0;background:#f4f6f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:28px 16px"><tr><td align="center">
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.06)">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px"><tr><td align="center">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.06)">
 
-    <tr><td style="background:#C8102E;padding:20px 28px;text-align:center">
-      <h1 style="margin:0;color:#fff;font-size:18px;font-weight:800">Trainer Center HB · Daily SEO Digest</h1>
-      <p style="margin:3px 0 0;color:#f5b3b9;font-size:11px;letter-spacing:0.04em">Most recent complete day: {date_str}</p>
+    <tr><td style="background:#C8102E;padding:20px 24px;text-align:center">
+      <h1 style="margin:0;color:#fff;font-size:18px;font-weight:800">Daily SEO Digest</h1>
+      <p style="margin:3px 0 0;color:#f5b3b9;font-size:12px">Trainer Center HB · {date_str}</p>
     </td></tr>
 
-    <tr><td style="padding:24px 28px">
+    <tr><td style="padding:22px 24px">
 
-      <!-- Hero stats -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>
-        {cell('Clicks', cur_clicks, f'<div style="font-size:11px;color:{dod_color};font-weight:700;margin-top:4px">{fmt_pct_delta(cur_clicks, prev_clicks)} day-over-day</div>')}
-      </tr></table>
+      <!-- TL;DR plain-English summary -->
+      <div style="padding:16px 18px;background:#fff7e6;border-left:3px solid #d97706;border-radius:6px;margin:0 0 22px">
+        <div style="font-size:10px;font-weight:800;color:#92400e;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">In plain English</div>
+        <p style="margin:0;font-size:14px;line-height:1.55;color:#1a1a1a">{summary}</p>
+      </div>
 
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>
-        {cell('Impressions', f'{cur_imp:,}', f'<div style="font-size:11px;color:{color_for_delta(cur_imp, prev_imp)};font-weight:700;margin-top:4px">{fmt_pct_delta(cur_imp, prev_imp)} DoD</div>')}
-        <td style="width:14px"></td>
-        {cell('CTR', f'{cur_ctr:.2f}%')}
-        <td style="width:14px"></td>
-        {cell('Avg pos', f'{cur_pos:.1f}')}
-      </tr></table>
+      {clicks_block}
+      {imp_block}
+      {ctr_block}
+      {pos_block}
 
-      <!-- Comparison table -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0;border-collapse:separate;border-spacing:0">
-        <tr><td colspan="2" style="padding-bottom:8px;font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase">How this day compares</td></tr>
-        <tr><td style="padding:8px 10px;font-size:13px;color:#444;border-bottom:1px solid #eee">Day before</td><td align="right" style="padding:8px 0;font-size:13px;color:#1a1a1a;font-weight:700;border-bottom:1px solid #eee">{prev_clicks} clicks · {prev_imp:,} imp</td></tr>
-        <tr><td style="padding:8px 10px;font-size:13px;color:#444;border-bottom:1px solid #eee">7-day average</td><td align="right" style="padding:8px 0;font-size:13px;color:{avg_color};font-weight:700;border-bottom:1px solid #eee">{avg_clicks:.1f} clicks · {avg_imp:,.0f} imp · {fmt_pct_delta(cur_clicks, avg_clicks)}</td></tr>
-        <tr><td style="padding:8px 10px;font-size:13px;color:#444;border-bottom:1px solid #eee">{lookback_days}-day high</td><td align="right" style="padding:8px 0;font-size:13px;color:#1a1a1a;font-weight:700;border-bottom:1px solid #eee">{high_label}</td></tr>
-        <tr><td style="padding:8px 10px;font-size:13px;color:#444">{lookback_days}-day low</td><td align="right" style="padding:8px 0;font-size:13px;color:#1a1a1a;font-weight:700">{low_label}</td></tr>
-      </table>
+      {render_sources_section(visit_sources, date_str)}
 
-      <!-- Top queries -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0">
-        <tr><td colspan="3" style="padding-bottom:6px;font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase">Top queries that day</td></tr>
-        {queries_html}
-      </table>
+      {section(
+        '🔍 What people searched to find you',
+        f"The actual queries someone typed into Google on {date_str} that surfaced your site. Numbers below show how many of those searchers actually visited.",
+        queries_html
+      )}
 
-      <!-- Top pages -->
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 0">
-        <tr><td colspan="2" style="padding-bottom:6px;font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase">Top pages that day</td></tr>
-        {pages_html}
-      </table>
+      {section(
+        '📄 Which pages got the visits',
+        f"Where the {cur_clicks} click{'s' if cur_clicks != 1 else ''} on {date_str} landed.",
+        pages_html
+      )}
 
       <!-- Footer link -->
-      <p style="margin:28px 0 0;text-align:center"><a href="https://search.google.com/search-console?resource_id={urllib.parse.quote(SITE, safe='')}" style="font-size:13px;color:#C8102E;font-weight:600;text-decoration:none">Open in Search Console →</a></p>
+      <p style="margin:30px 0 0;text-align:center"><a href="https://search.google.com/search-console" style="font-size:13px;color:#C8102E;font-weight:700;text-decoration:none">Open Google Search Console →</a></p>
 
     </td></tr>
 
-    <tr><td style="background:#fafafa;padding:14px 28px;text-align:center;border-top:1px solid #eee">
-      <p style="font-size:11px;color:#999;margin:0;line-height:1.5">Auto-sent at 8 AM Pacific via GitHub Actions. Data is from Google Search Console with its standard 2-3 day lag.</p>
+    <tr><td style="background:#fafafa;padding:14px 24px;text-align:center;border-top:1px solid #eee">
+      <p style="font-size:11px;color:#999;margin:0;line-height:1.55">Auto-sent at 8 AM Pacific via GitHub Actions. Google Search Console data has a standard 2-3 day lag, so "{date_str}" is the most recent day with complete data.</p>
     </td></tr>
 
   </table>
@@ -319,13 +543,19 @@ def main():
     top_pages = gsc_query(token, ['page'], latest_date, latest_date, row_limit=10).get('rows', [])
     top_pages.sort(key=lambda r: int(r.get('clicks', 0)), reverse=True)
 
+    # First-party visit sources (Supabase page_visits). Reads SERVICE_ROLE key
+    # from env (set as GitHub secret in the workflow). Optional — if missing,
+    # the digest just skips the by-source section.
+    service_role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+    visit_sources = fetch_visit_sources(SUPABASE_URL, service_role, latest_date)
+
     cur_clicks = int(latest_day.get('clicks', 0))
     prev_clicks = int(prev_day.get('clicks', 0)) if prev_day else 0
     delta_label = fmt_pct_delta(cur_clicks, prev_clicks).replace('▲ ', '+').replace('▼ ', '')
     date_short = latest_date.strftime('%a %b %-d')
     subject = f'TC HB · {date_short}: {cur_clicks} clicks ({delta_label} DoD)'
 
-    body = render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days)
+    body = render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources)
 
     send_email(resend_key, args.to, subject, body, dry_run=args.dry_run)
     if not args.dry_run:
