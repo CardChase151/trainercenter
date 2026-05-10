@@ -231,24 +231,60 @@ def render_sources_section(visit_sources, date_str):
     total_visits = sum(v for _, v, _ in visit_sources)
     total_sessions = sum(s for _, _, s in visit_sources)
 
+    # Source styling: AI tools get a purple bar/tag, Direct gets gray with
+    # a clarifying note about Grok, search gets blue, social gets pink.
+    AI_LABELS = {'ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Copilot', 'Grok', 'Other AI', 'You.com'}
+    SEARCH_LABELS = {'Google Search', 'Bing/DuckDuckGo'}
+    SOCIAL_LABELS = {'Instagram', 'TikTok', 'Facebook', 'Twitter / X', 'Reddit', 'LinkedIn', 'YouTube'}
+
+    def style_for(label):
+        if label in AI_LABELS:
+            return {'tag': 'AI', 'tag_bg': '#ede9fe', 'tag_fg': '#6d28d9', 'bar': '#7c3aed'}
+        if label in SEARCH_LABELS:
+            return {'tag': 'Search', 'tag_bg': '#dbeafe', 'tag_fg': '#1d4ed8', 'bar': '#2563eb'}
+        if label in SOCIAL_LABELS:
+            return {'tag': 'Social', 'tag_bg': '#fce7f3', 'tag_fg': '#be185d', 'bar': '#db2777'}
+        if label == 'Direct':
+            return {'tag': 'Direct', 'tag_bg': '#f3f4f6', 'tag_fg': '#525252', 'bar': '#9ca3af'}
+        # Unknown / unmatched referrer host
+        return {'tag': 'Other', 'tag_bg': '#fef3c7', 'tag_fg': '#92400e', 'bar': '#d97706'}
+
     rows = []
-    for label, visits, sessions in visit_sources[:8]:
+    for label, visits, sessions in visit_sources[:10]:
         pct = (visits / total_visits * 100) if total_visits > 0 else 0
         ppl = '1 person' if sessions == 1 else f'{sessions} people'
-        rows.append(f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr>
-          <td style="padding:10px 14px;background:#fafafa;border-radius:6px">
-            <div style="display:flex;justify-content:space-between;align-items:baseline">
-              <span style="font-size:14px;font-weight:700;color:#1a1a1a">{html.escape(label)}</span>
-              <span style="font-size:13px;color:#1a1a1a;font-weight:700">{visits} visit{"s" if visits != 1 else ""}</span>
-            </div>
-            <div style="font-size:12px;color:#525252;margin-top:3px">{ppl} · {pct:.0f}% of traffic</div>
+        style = style_for(label)
+        # Inline progress bar — uses a fixed-width table cell so it renders in email clients
+        bar_width = max(int(pct), 2)  # min 2% so even tiny sources show a sliver
+        note_html = ''
+        if label == 'Direct':
+            note_html = '<div style="font-size:11px;color:#888;margin-top:4px;font-style:italic">Typed URLs, bookmarks, Grok citations, and other referrer-stripped tools</div>'
+        rows.append(f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px"><tr>
+          <td style="padding:12px 14px;background:#fafafa;border-radius:6px">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td style="font-size:14px;font-weight:700;color:#1a1a1a">
+                <span style="display:inline-block;background:{style['tag_bg']};color:{style['tag_fg']};font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-right:8px;vertical-align:middle">{style['tag']}</span>
+                {html.escape(label)}
+              </td>
+              <td align="right" style="font-size:14px;color:#1a1a1a;font-weight:800;white-space:nowrap">{visits} visit{"s" if visits != 1 else ""} · {pct:.0f}%</td>
+            </tr></table>
+            <!-- Progress bar -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px"><tr>
+              <td style="height:6px;background:#e5e7eb;border-radius:3px;line-height:0;font-size:0">
+                <table width="{bar_width}%" cellpadding="0" cellspacing="0"><tr>
+                  <td style="height:6px;background:{style['bar']};border-radius:3px;line-height:0;font-size:0">&nbsp;</td>
+                </tr></table>
+              </td>
+            </tr></table>
+            <div style="font-size:12px;color:#525252;margin-top:6px">{ppl}</div>
+            {note_html}
           </td>
         </tr></table>''')
 
     return f'''<div style="margin:26px 0 0">
       <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">🌐 Where visitors came from</div>
       <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">
-        <strong>{total_visits} total visits</strong> from <strong>{total_sessions} unique sessions</strong> on {html.escape(date_str)}. Sources detected via the on-page tracker (not GSC, which only sees Google Search).
+        <strong>{total_visits} total visit{"s" if total_visits != 1 else ""}</strong> from <strong>{total_sessions} unique session{"s" if total_sessions != 1 else ""}</strong> on {html.escape(date_str)}. Each row is the best guess at where that visit started.
       </div>
       {''.join(rows)}
     </div>'''
