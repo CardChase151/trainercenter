@@ -10979,7 +10979,7 @@ function StaffAnalyticsPage({ isMobile }) {
   // Default: last 30 days ending today (so includes everything we have).
   // endDate is exclusive of the future, startDate is rangeDays-1 days before.
   const [endDate, setEndDate] = useState(toISO(todayPT));
-  const [startDate, setStartDate] = useState(toISO(shiftDays(toISO(todayPT), -29)));
+  const [startDate, setStartDate] = useState(shiftDays(toISO(todayPT), -29));
   const [gscData, setGscData] = useState(null);
   const [gscError, setGscError] = useState(null);
   const [gscLoading, setGscLoading] = useState(false);
