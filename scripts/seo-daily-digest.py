@@ -72,6 +72,32 @@ def get_access_token(sa_json):
 # ─── First-party visit attribution (Supabase page_visits) ────────────────────
 
 
+def friendly_path(path):
+    """Turn a URL path into a human-readable label for emails/dashboards.
+    Examples:
+      /                              -> Home
+      /calendar                      -> Calendar
+      /buy-sell                      -> Buy / Sell
+      /vendor-day                    -> Vendor Day
+      /vendors/dashboard             -> Vendors › Dashboard
+      /blog/what-is-cardchase        -> Blog › What Is Cardchase
+      /vendor-day?event=abc...       -> Vendor Day  (query string stripped)
+    """
+    if not path:
+        return 'Home'
+    # Strip query string
+    path = path.split('?')[0].split('#')[0]
+    if path == '/' or path == '':
+        return 'Home'
+    parts = [p for p in path.strip('/').split('/') if p]
+    pretty_parts = []
+    for p in parts:
+        # Replace dashes / underscores with spaces and title-case each word
+        words = p.replace('-', ' ').replace('_', ' ').split()
+        pretty_parts.append(' '.join(w.capitalize() for w in words))
+    return ' › '.join(pretty_parts)
+
+
 def categorize_referrer(host, ai_bot):
     """Bucket a referrer hostname into a friendly source label."""
     if ai_bot:
@@ -127,15 +153,16 @@ def categorize_referrer(host, ai_bot):
     return host
 
 
-def fetch_visit_sources(supabase_url, service_role_key, target_date):
-    """Returns a list of (label, visits, unique_sessions) buckets sorted by visits."""
+def fetch_visit_rows(supabase_url, service_role_key, target_date):
+    """Returns the raw page_visits rows for `target_date` (00:00 UTC to
+    24:00 UTC). Caller does the bucketing — keeps the API call to one round
+    trip so we can compute multiple stats from the same data."""
     if not service_role_key:
         return []
-    # Pull yesterday's visits. We use service_role to bypass RLS read protection.
     start_iso = f"{target_date.isoformat()}T00:00:00Z"
     end_iso = f"{(target_date + datetime.timedelta(days=1)).isoformat()}T00:00:00Z"
     params = {
-        'select': 'referrer_host,ai_bot,session_id',
+        'select': 'path,referrer_host,ai_bot,session_id,user_agent',
         'created_at': f'gte.{start_iso}',
         'and': f'(created_at.lt.{end_iso})',
     }
@@ -151,7 +178,7 @@ def fetch_visit_sources(supabase_url, service_role_key, target_date):
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            rows = json.loads(resp.read())
+            return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         print(f'[page_visits] HTTP {e.code}: {e.read().decode()[:200]}')
         return []
@@ -159,6 +186,9 @@ def fetch_visit_sources(supabase_url, service_role_key, target_date):
         print(f'[page_visits] {type(e).__name__}: {e}')
         return []
 
+
+def bucket_sources(rows):
+    """From a list of page_visits rows, returns sources sorted by visits."""
     buckets = {}
     for r in rows:
         label = categorize_referrer(r.get('referrer_host'), r.get('ai_bot'))
@@ -170,13 +200,36 @@ def fetch_visit_sources(supabase_url, service_role_key, target_date):
         sid = r.get('session_id')
         if sid:
             buckets[label]['sessions'].add(sid)
-
-    out = [
-        (label, b['visits'], len(b['sessions']))
-        for label, b in buckets.items()
-    ]
+    out = [(label, b['visits'], len(b['sessions'])) for label, b in buckets.items()]
     out.sort(key=lambda x: x[1], reverse=True)
     return out
+
+
+def bucket_pages(rows):
+    """From a list of page_visits rows, returns top-viewed pages sorted by views."""
+    pages = {}
+    for r in rows:
+        path = r.get('path') or '/'
+        if path not in pages:
+            pages[path] = {'views': 0, 'sessions': set()}
+        pages[path]['views'] += 1
+        sid = r.get('session_id')
+        if sid:
+            pages[path]['sessions'].add(sid)
+    out = [(path, p['views'], len(p['sessions'])) for path, p in pages.items()]
+    out.sort(key=lambda x: x[1], reverse=True)
+    return out
+
+
+def session_stats(rows):
+    """Computes total pageviews, unique sessions, avg pages per session."""
+    if not rows:
+        return {'pageviews': 0, 'sessions': 0, 'avg_pages_per_session': 0}
+    pageviews = len(rows)
+    session_ids = set(r.get('session_id') for r in rows if r.get('session_id'))
+    sessions = len(session_ids)
+    avg = pageviews / sessions if sessions > 0 else 0
+    return {'pageviews': pageviews, 'sessions': sessions, 'avg_pages_per_session': avg}
 
 
 # ─── Analysis ────────────────────────────────────────────────────────────────
@@ -219,17 +272,121 @@ def color_for_delta(new, old):
 # ─── Email rendering ────────────────────────────────────────────────────────
 
 
-def render_sources_section(visit_sources, date_str):
+def render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, visits_date):
+    """Most-viewed pages + pageviews + pages-per-session from Supabase
+    page_visits. Different from the GSC 'top pages' section (which only
+    counts pages that got clicks from Google). This counts every internal
+    nav too — what people actually look at once they're on the site."""
+    if not sess_stats or sess_stats.get('pageviews', 0) == 0:
+        return ''
+
+    visits_date_str = visits_date.strftime('%A, %B %-d') if visits_date else 'yesterday'
+    pageviews = sess_stats['pageviews']
+    sessions = sess_stats['sessions']
+    avg_pps = sess_stats['avg_pages_per_session']
+
+    # DoD comparison on pageviews
+    prev_pv = sess_stats_prev.get('pageviews', 0) if sess_stats_prev else 0
+    if prev_pv == 0:
+        dod_pv = ''
+    elif pageviews == prev_pv:
+        dod_pv = f'Same as the day before ({prev_pv} pageviews).'
+    elif pageviews > prev_pv:
+        pct = (pageviews - prev_pv) / prev_pv * 100
+        dod_pv = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from the day before ({prev_pv} pageviews).'
+    else:
+        pct = (prev_pv - pageviews) / prev_pv * 100
+        dod_pv = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from the day before ({prev_pv} pageviews).'
+
+    # Most-viewed pages block
+    page_rows_html = ''
+    if top_pages_supabase:
+        rows = []
+        max_views = max(p[1] for p in top_pages_supabase[:6]) if top_pages_supabase else 1
+        for path, views, sessions_for_page in top_pages_supabase[:6]:
+            pct_of_max = max(int(views / max_views * 100), 4)
+            label = friendly_path(path)
+            raw = path if len(path) <= 60 else path[:57] + '...'
+            ppl = '1 person' if sessions_for_page == 1 else f'{sessions_for_page} people'
+            rows.append(f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr>
+              <td style="padding:10px 14px;background:#fafafa;border-radius:6px">
+                <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                  <td style="font-size:14px;font-weight:700;color:#1a1a1a">{html.escape(label)}<br/><span style="font-size:11px;color:#888;font-weight:500;font-family:monospace">{html.escape(raw)}</span></td>
+                  <td align="right" valign="top" style="font-size:14px;color:#1a1a1a;font-weight:800;white-space:nowrap">{views} view{"s" if views != 1 else ""}</td>
+                </tr></table>
+                <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px"><tr>
+                  <td style="height:5px;background:#e5e7eb;border-radius:3px;line-height:0;font-size:0">
+                    <table width="{pct_of_max}%" cellpadding="0" cellspacing="0"><tr>
+                      <td style="height:5px;background:#0284c7;border-radius:3px;line-height:0;font-size:0">&nbsp;</td>
+                    </tr></table>
+                  </td>
+                </tr></table>
+                <div style="font-size:12px;color:#525252;margin-top:6px">{ppl}</div>
+              </td>
+            </tr></table>''')
+        page_rows_html = ''.join(rows)
+
+    # Metric cards (pageviews, sessions, pages/session)
+    def small_metric(label, value, sub=''):
+        return f'''<td valign="top" style="padding:12px 14px;border:1px solid #eee;border-radius:8px;background:#fafafa">
+          <div style="font-size:10px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase">{label}</div>
+          <div style="font-size:20px;font-weight:800;color:#1a1a1a;margin-top:2px;line-height:1.1">{value}</div>
+          {f'<div style="font-size:11px;color:#666;margin-top:4px">{sub}</div>' if sub else ''}
+        </td>'''
+
+    return f'''<div style="margin:26px 0 0">
+      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Engagement &amp; most-viewed pages · {html.escape(visits_date_str)}</div>
+      <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">
+        How deep did visitors go? <strong>{pageviews} total pageviews</strong> across <strong>{sessions} session{"s" if sessions != 1 else ""}</strong> ({avg_pps:.1f} pages per session on average). {dod_pv}
+        <br/><span style="font-size:11px;color:#999;font-style:italic">Counts every internal nav too, so a session that hit Home then Calendar = 2 pageviews.</span>
+      </div>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>
+        {small_metric('Pageviews', pageviews)}
+        <td style="width:10px"></td>
+        {small_metric('Sessions', sessions, 'unique visits')}
+        <td style="width:10px"></td>
+        {small_metric('Pages/session', f'{avg_pps:.1f}', 'higher = stickier')}
+      </tr></table>
+
+      <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Most-viewed pages</div>
+      {page_rows_html if page_rows_html else '<p style="margin:0;font-size:13px;color:#888;font-style:italic">No pages viewed yet.</p>'}
+    </div>'''
+
+
+def render_sources_section(visit_sources, visit_sources_prev=None, visits_date=None):
     """Render the 'where visitors came from' block. Returns empty string if
-    no data (e.g. tracking script hasn't deployed yet or no visits that day)."""
+    no data (e.g. tracking script hasn't deployed yet or no visits that day).
+
+    Uses its own date (visits_date — calendar yesterday in PT) because the
+    Supabase tracker logs in realtime, unlike GSC which has a 2-3 day lag.
+    """
+    visits_date_str = visits_date.strftime('%A, %B %-d') if visits_date else 'yesterday'
+
     if not visit_sources:
         return f'''<div style="margin:26px 0 0;padding:14px 16px;background:#f4f6f9;border-radius:6px">
-          <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from</div>
-          <p style="margin:0;font-size:13px;color:#666;line-height:1.55">No first-party visit data for {html.escape(date_str)} yet. Either no visits, or the page-visit tracking is still gathering its first day of data. (This section will populate once the tracker is live.)</p>
+          <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from · {html.escape(visits_date_str)}</div>
+          <p style="margin:0;font-size:13px;color:#666;line-height:1.55">No first-party visit data for {html.escape(visits_date_str)}. Either no visits, or the page-visit tracking is still gathering data. (This section populates from <code>public.page_visits</code> in Supabase, separate from the GSC data above.)</p>
         </div>'''
 
     total_visits = sum(v for _, v, _ in visit_sources)
     total_sessions = sum(s for _, _, s in visit_sources)
+
+    # DoD comparison from Supabase (separate from GSC's DoD above)
+    if visit_sources_prev:
+        prev_total_visits = sum(v for _, v, _ in visit_sources_prev)
+        if prev_total_visits == 0:
+            dod_str = f"{total_visits} visits — no comparable data the day before."
+        elif total_visits == prev_total_visits:
+            dod_str = f"Same as the day before ({prev_total_visits} visits)."
+        elif total_visits > prev_total_visits:
+            pct = (total_visits - prev_total_visits) / prev_total_visits * 100
+            dod_str = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from the day before ({prev_total_visits} visits).'
+        else:
+            pct = (prev_total_visits - total_visits) / prev_total_visits * 100
+            dod_str = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from the day before ({prev_total_visits} visits).'
+    else:
+        dod_str = ''
 
     # Source styling: AI tools get a purple bar/tag, Direct gets gray with
     # a clarifying note about Grok, search gets blue, social gets pink.
@@ -282,16 +439,17 @@ def render_sources_section(visit_sources, date_str):
         </tr></table>''')
 
     return f'''<div style="margin:26px 0 0">
-      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from</div>
+      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from · {html.escape(visits_date_str)}</div>
       <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">
-        <strong>{total_visits} total visit{"s" if total_visits != 1 else ""}</strong> from <strong>{total_sessions} unique session{"s" if total_sessions != 1 else ""}</strong> on {html.escape(date_str)}. Each row is the best guess at where that visit started.
+        <strong>{total_visits} total visit{"s" if total_visits != 1 else ""}</strong> from <strong>{total_sessions} unique session{"s" if total_sessions != 1 else ""}</strong>. {dod_str}
+        <br/><span style="font-size:11px;color:#999;font-style:italic">Logged in realtime from Supabase. Separate dataset from the GSC numbers above (which lag 2-3 days).</span>
       </div>
       {''.join(rows)}
     </div>'''
 
 
 
-def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources=None):
+def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources=None, visit_sources_prev=None, visits_date=None, top_pages_supabase=None, sess_stats=None, sess_stats_prev=None):
     date_obj = datetime.date.fromisoformat(latest_day['keys'][0])
     date_str = date_obj.strftime('%A, %B %-d')
     cur_clicks = int(latest_day.get('clicks', 0))
@@ -410,15 +568,17 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
     else:
         queries_html = '<p style="margin:0;font-size:13px;color:#888;font-style:italic">No queries logged that day.</p>'
 
-    # ─── Top pages ────────────────────────────────────────────
+    # ─── Top pages (GSC, clicks from Google) ──────────────────
     def page_row(p):
         url = p['keys'][0].replace('https://pokemontrainercenter.com', '') or '/'
+        label = friendly_path(url)
         clicks = int(p.get('clicks', 0))
         imps = int(p.get('impressions', 0))
         people = '1 click' if clicks == 1 else f'{clicks} clicks'
         return f'''<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr><td style="padding:10px 14px;background:#fafafa;border-radius:6px">
-          <div style="font-size:14px;font-weight:700;color:#1a1a1a;font-family:monospace">{html.escape(url)}</div>
-          <div style="font-size:12px;color:#525252;margin-top:3px">{people} · seen {imps} times</div>
+          <div style="font-size:14px;font-weight:700;color:#1a1a1a">{html.escape(label)}</div>
+          <div style="font-size:11px;color:#888;margin-top:1px;font-family:monospace">{html.escape(url)}</div>
+          <div style="font-size:12px;color:#525252;margin-top:5px">{people} · seen {imps} times</div>
         </td></tr></table>'''
 
     pages_with_clicks = [p for p in top_pages if int(p.get('clicks', 0)) > 0][:5]
@@ -459,7 +619,9 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
       {ctr_block}
       {pos_block}
 
-      {render_sources_section(visit_sources, date_str)}
+      {render_sources_section(visit_sources, visit_sources_prev, visits_date)}
+
+      {render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, visits_date)}
 
       {section(
         'What people searched to find you',
@@ -600,8 +762,23 @@ def main():
     # First-party visit sources (Supabase page_visits). Reads SERVICE_ROLE key
     # from env (set as GitHub secret in the workflow). Optional — if missing,
     # the digest just skips the by-source section.
+    #
+    # IMPORTANT: Supabase uses YESTERDAY in Pacific time, not GSC's
+    # most-recent-complete-day. The two queries cover different dates because
+    # GSC has a 2-3 day lag but our tracker logs in realtime. The email labels
+    # each section with its own date so it's clear what's what.
     service_role = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '').strip()
-    visit_sources = fetch_visit_sources(SUPABASE_URL, service_role, latest_date)
+    # "Yesterday" in Pacific time. UTC offset 7-8 hours; we just subtract a
+    # day from today (good enough — minor edge case is morning visits before
+    # the script runs land in "today's" bucket).
+    yesterday_pt = today - datetime.timedelta(days=1)
+    visit_rows = fetch_visit_rows(SUPABASE_URL, service_role, yesterday_pt)
+    visit_rows_prev = fetch_visit_rows(SUPABASE_URL, service_role, yesterday_pt - datetime.timedelta(days=1))
+    visit_sources = bucket_sources(visit_rows)
+    visit_sources_prev = bucket_sources(visit_rows_prev)
+    top_pages_supabase = bucket_pages(visit_rows)
+    sess_stats = session_stats(visit_rows)
+    sess_stats_prev = session_stats(visit_rows_prev)
 
     cur_clicks = int(latest_day.get('clicks', 0))
     prev_clicks = int(prev_day.get('clicks', 0)) if prev_day else 0
@@ -609,7 +786,12 @@ def main():
     date_short = latest_date.strftime('%a %b %-d')
     subject = f'TC HB · {date_short}: {cur_clicks} clicks ({delta_label} DoD)'
 
-    body = render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources)
+    body = render_email(
+        latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
+        top_queries, top_pages, lookback_days,
+        visit_sources, visit_sources_prev, yesterday_pt,
+        top_pages_supabase, sess_stats, sess_stats_prev,
+    )
 
     send_email(resend_key, args.to, subject, body, dry_run=args.dry_run)
     if not args.dry_run:

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useContext, createCont
 import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
+import { usePageViewTracker } from './lib/usePageViewTracker';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -10947,6 +10948,450 @@ function StaffCommsPage({ isMobile, staff }) {
   );
 }
 
+// ─── Staff Analytics Page (/staff/analytics) ───────────────
+// Admin-only dashboard mirroring the daily SEO digest email. Pulls:
+//   - GSC clicks/queries/pages via the staff-gsc-analytics Edge Function
+//     (the function holds the service-account key and verifies admin)
+//   - page_visits aggregations via direct client query (admin RLS policy)
+// Lets staff pick any date (default: yesterday) and see hero metrics,
+// where visitors came from, engagement, top queries, and top pages.
+function StaffAnalyticsPage({ isMobile }) {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
+
+  // Default to "yesterday" in Pacific time, same window as the daily email
+  const todayPT = new Date();
+  const yesterdayPT = new Date(todayPT);
+  yesterdayPT.setDate(yesterdayPT.getDate() - 1);
+  const toISO = (d) => {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(toISO(yesterdayPT));
+  const [gscData, setGscData] = useState(null);
+  const [gscError, setGscError] = useState(null);
+  const [gscLoading, setGscLoading] = useState(false);
+  const [visits, setVisits] = useState(null);
+  const [visitsPrev, setVisitsPrev] = useState(null);
+  const [visitsError, setVisitsError] = useState(null);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+
+  // ─── Source categorization (mirrors trackVisit.js + python digest) ───
+  const categorize = (host, aiBot) => {
+    if (aiBot) {
+      const map = { chatgpt: 'ChatGPT', claude: 'Claude', gemini: 'Gemini', perplexity: 'Perplexity', copilot: 'Copilot', grok: 'Grok', 'other-ai': 'Other AI' };
+      return map[aiBot] || aiBot;
+    }
+    if (!host) return 'Direct';
+    const h = host.toLowerCase();
+    if (h.includes('chatgpt.com') || h.includes('chat.openai') || h.includes('openai.com')) return 'ChatGPT';
+    if (h.includes('claude.ai') || h.includes('anthropic.com')) return 'Claude';
+    if (h.includes('perplexity.ai') || h.includes('perplexity.com')) return 'Perplexity';
+    if (h.includes('gemini.google') || h.includes('bard.google') || h.includes('aistudio.google')) return 'Gemini';
+    if (h.includes('copilot.microsoft') || h.includes('bing.com/chat')) return 'Copilot';
+    if (h.includes('grok.com') || h.includes('x.ai')) return 'Grok';
+    if (h.includes('you.com')) return 'You.com';
+    if (h.includes('google.')) return 'Google Search';
+    if (h.includes('bing.com') || h.includes('duckduckgo.com')) return 'Bing/DuckDuckGo';
+    if (h.includes('instagram.com') || h.includes('l.instagram.com')) return 'Instagram';
+    if (h.includes('tiktok.com')) return 'TikTok';
+    if (h.includes('facebook.com') || h.includes('fb.com') || h.includes('m.facebook.com')) return 'Facebook';
+    if (h.includes('twitter.com') || h === 't.co' || h.includes('x.com')) return 'Twitter / X';
+    if (h.includes('reddit.com')) return 'Reddit';
+    if (h.includes('linkedin.com') || h.includes('lnkd.in')) return 'LinkedIn';
+    if (h.includes('youtube.com') || h.includes('youtu.be')) return 'YouTube';
+    if (h.includes('pokemontrainercenter.com')) return null;
+    return host;
+  };
+
+  const friendlyPath = (path) => {
+    if (!path || path === '/') return 'Home';
+    const clean = path.split('?')[0].split('#')[0];
+    if (clean === '/' || clean === '') return 'Home';
+    return clean.replace(/^\//, '').split('/').map(p =>
+      p.split(/[-_]/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+    ).join(' › ');
+  };
+
+  const styleForSource = (label) => {
+    const AI = ['ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Copilot', 'Grok', 'Other AI', 'You.com'];
+    const SEARCH = ['Google Search', 'Bing/DuckDuckGo'];
+    const SOCIAL = ['Instagram', 'TikTok', 'Facebook', 'Twitter / X', 'Reddit', 'LinkedIn', 'YouTube'];
+    if (AI.includes(label)) return { tag: 'AI', tagBg: '#ede9fe', tagFg: '#6d28d9', bar: '#7c3aed' };
+    if (SEARCH.includes(label)) return { tag: 'Search', tagBg: '#dbeafe', tagFg: '#1d4ed8', bar: '#2563eb' };
+    if (SOCIAL.includes(label)) return { tag: 'Social', tagBg: '#fce7f3', tagFg: '#be185d', bar: '#db2777' };
+    if (label === 'Direct') return { tag: 'Direct', tagBg: '#f3f4f6', tagFg: '#525252', bar: '#9ca3af' };
+    return { tag: 'Other', tagBg: '#fef3c7', tagFg: '#92400e', bar: '#d97706' };
+  };
+
+  // ─── Fetch GSC for the selected date via Edge Function ───
+  const fetchGsc = useCallback(async (date) => {
+    setGscLoading(true);
+    setGscError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not logged in');
+      const resp = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/staff-gsc-analytics`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ startDate: date, endDate: date }),
+        }
+      );
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error || `HTTP ${resp.status}`);
+      setGscData(json);
+    } catch (err) {
+      setGscError(err.message);
+      setGscData(null);
+    } finally {
+      setGscLoading(false);
+    }
+  }, []);
+
+  // ─── Fetch page_visits for the selected date + day before ───
+  const fetchVisits = useCallback(async (date) => {
+    setVisitsLoading(true);
+    setVisitsError(null);
+    try {
+      const start = new Date(date + 'T00:00:00Z');
+      const end = new Date(date + 'T00:00:00Z');
+      end.setDate(end.getDate() + 1);
+      const prevStart = new Date(date + 'T00:00:00Z');
+      prevStart.setDate(prevStart.getDate() - 1);
+      const prevEnd = new Date(date + 'T00:00:00Z');
+
+      const [cur, prev] = await Promise.all([
+        supabase.from('page_visits')
+          .select('path,referrer_host,ai_bot,session_id,created_at')
+          .gte('created_at', start.toISOString())
+          .lt('created_at', end.toISOString()),
+        supabase.from('page_visits')
+          .select('path,referrer_host,ai_bot,session_id,created_at')
+          .gte('created_at', prevStart.toISOString())
+          .lt('created_at', prevEnd.toISOString()),
+      ]);
+      if (cur.error) throw cur.error;
+      if (prev.error) throw prev.error;
+      setVisits(cur.data || []);
+      setVisitsPrev(prev.data || []);
+    } catch (err) {
+      setVisitsError(err.message);
+      setVisits(null);
+      setVisitsPrev(null);
+    } finally {
+      setVisitsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchGsc(selectedDate);
+    fetchVisits(selectedDate);
+  }, [selectedDate, isAdmin, fetchGsc, fetchVisits]);
+
+  // ─── Aggregations ───
+  const aggregate = (rows) => {
+    if (!rows) return { pageviews: 0, sessions: 0, sources: [], pages: [], multiPage: [] };
+    const pageviews = rows.length;
+    const sessionIds = new Set(rows.map(r => r.session_id).filter(Boolean));
+    const sessions = sessionIds.size;
+    // Sources
+    const srcMap = {};
+    for (const r of rows) {
+      const label = categorize(r.referrer_host, r.ai_bot);
+      if (!label) continue;
+      if (!srcMap[label]) srcMap[label] = { visits: 0, sessions: new Set() };
+      srcMap[label].visits++;
+      if (r.session_id) srcMap[label].sessions.add(r.session_id);
+    }
+    const sources = Object.entries(srcMap)
+      .map(([label, v]) => ({ label, visits: v.visits, sessions: v.sessions.size }))
+      .sort((a, b) => b.visits - a.visits);
+    // Top pages
+    const pageMap = {};
+    for (const r of rows) {
+      const p = r.path || '/';
+      if (!pageMap[p]) pageMap[p] = { views: 0, sessions: new Set() };
+      pageMap[p].views++;
+      if (r.session_id) pageMap[p].sessions.add(r.session_id);
+    }
+    const pages = Object.entries(pageMap)
+      .map(([path, v]) => ({ path, views: v.views, sessions: v.sessions.size }))
+      .sort((a, b) => b.views - a.views);
+    // Multi-page sessions (with paths in order + duration approx)
+    const sessMap = {};
+    for (const r of rows) {
+      if (!r.session_id) continue;
+      if (!sessMap[r.session_id]) sessMap[r.session_id] = [];
+      sessMap[r.session_id].push({ path: r.path, ts: new Date(r.created_at).getTime() });
+    }
+    const multiPage = Object.entries(sessMap)
+      .filter(([_, evs]) => evs.length > 1)
+      .map(([sid, evs]) => {
+        evs.sort((a, b) => a.ts - b.ts);
+        return {
+          sessionId: sid,
+          paths: evs.map(e => e.path),
+          durationSec: Math.round((evs[evs.length - 1].ts - evs[0].ts) / 1000),
+        };
+      })
+      .sort((a, b) => b.paths.length - a.paths.length);
+    return { pageviews, sessions, sources, pages, multiPage };
+  };
+
+  const agg = aggregate(visits);
+  const aggPrev = aggregate(visitsPrev);
+  const avgPagesPerSession = agg.sessions > 0 ? agg.pageviews / agg.sessions : 0;
+
+  const pctDelta = (cur, prev) => {
+    if (prev === 0 && cur === 0) return { label: 'flat', color: '#666' };
+    if (prev === 0) return { label: 'new', color: '#16a34a' };
+    const p = ((cur - prev) / prev) * 100;
+    if (p > 0) return { label: `Up ${p.toFixed(0)}%`, color: '#16a34a' };
+    if (p < 0) return { label: `Down ${(-p).toFixed(0)}%`, color: '#dc2626' };
+    return { label: 'flat', color: '#666' };
+  };
+
+  // ─── Auth gate ───
+  if (authLoading) {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}>Loading...</p></PageWrapper>;
+  }
+  if (!user) {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}>Please log in.</p></PageWrapper>;
+  }
+  if (!isAdmin) {
+    return <StaffBypassScreen isMobile={isMobile} title="Staff only" body="The analytics dashboard is admin-only." linkTo="/" linkLabel="Back to home" />;
+  }
+
+  // ─── Render helpers ───
+  const Card = ({ children }) => (
+    <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: isMobile ? 20 : 24, marginBottom: 18 }}>
+      {children}
+    </div>
+  );
+
+  const eyebrow = (text, accent = '#C8102E') => (
+    <div style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>{text}</div>
+  );
+
+  const HeroStat = ({ label, value, sub, deltaInfo }) => (
+    <div style={{ flex: 1, minWidth: isMobile ? '100%' : 160, padding: '14px 16px', background: '#fafafa', border: '1px solid #eee', borderRadius: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 800, color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: '#1a1a1a', marginTop: 2, lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#666', marginTop: 6, fontStyle: 'italic', lineHeight: 1.4 }}>{sub}</div>}
+      {deltaInfo && <div style={{ fontSize: 11, color: deltaInfo.color, marginTop: 4, fontWeight: 700 }}>{deltaInfo.label} vs day before</div>}
+    </div>
+  );
+
+  // Date preset helpers
+  const setPreset = (daysAgo) => {
+    const d = new Date(todayPT);
+    d.setDate(d.getDate() - daysAgo);
+    setSelectedDate(toISO(d));
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: 900, margin: '0 auto', marginBottom: 64 }}>
+        <SectionHeader title="Analytics" subtitle="Daily SEO digest, on demand. Admin only." />
+
+        {/* Date selector bar */}
+        <Card>
+          {eyebrow('Date', '#C8102E')}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <input
+              type="date"
+              value={selectedDate}
+              max={toISO(todayPT)}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{ padding: '8px 12px', fontSize: 14, border: '1px solid #ddd', borderRadius: 8 }}
+            />
+            <button onClick={() => setPreset(1)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: selectedDate === toISO(yesterdayPT) ? '#1a1a1a' : '#fff', color: selectedDate === toISO(yesterdayPT) ? '#fff' : '#1a1a1a', cursor: 'pointer' }}>Yesterday</button>
+            <button onClick={() => setPreset(0)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: selectedDate === toISO(todayPT) ? '#1a1a1a' : '#fff', color: selectedDate === toISO(todayPT) ? '#fff' : '#1a1a1a', cursor: 'pointer' }}>Today (live)</button>
+            <button onClick={() => setPreset(7)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>7 days ago</button>
+            <button onClick={() => { fetchGsc(selectedDate); fetchVisits(selectedDate); }} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 8, background: '#C8102E', color: '#fff', cursor: 'pointer', marginLeft: 'auto' }}>Refresh</button>
+          </div>
+        </Card>
+
+        {/* Hero stats */}
+        <Card>
+          {eyebrow(`Performance · ${selectedDate}`)}
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, marginBottom: 14 }}>
+            <HeroStat
+              label="Google clicks"
+              value={gscLoading ? '...' : (gscData?.totals.clicks ?? '—')}
+              sub="People who clicked from Google Search"
+            />
+            <HeroStat
+              label="Google impressions"
+              value={gscLoading ? '...' : (gscData?.totals.impressions?.toLocaleString() ?? '—')}
+              sub="Times your site appeared in Google results"
+            />
+            <HeroStat
+              label="CTR"
+              value={gscLoading ? '...' : (gscData ? `${gscData.totals.ctr.toFixed(2)}%` : '—')}
+              sub="Click-through rate"
+            />
+            <HeroStat
+              label="Avg position"
+              value={gscLoading ? '...' : (gscData ? gscData.totals.position.toFixed(1) : '—')}
+              sub="1=top of page 1. 11+=page 2+"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+            <HeroStat
+              label="Pageviews"
+              value={visitsLoading ? '...' : agg.pageviews}
+              sub="Every page load (including internal navs)"
+              deltaInfo={pctDelta(agg.pageviews, aggPrev.pageviews)}
+            />
+            <HeroStat
+              label="Unique sessions"
+              value={visitsLoading ? '...' : agg.sessions}
+              sub="Distinct visitor sessions"
+              deltaInfo={pctDelta(agg.sessions, aggPrev.sessions)}
+            />
+            <HeroStat
+              label="Pages / session"
+              value={visitsLoading ? '...' : avgPagesPerSession.toFixed(1)}
+              sub="Higher = stickier. 1.0 means everyone bounced after one page."
+            />
+          </div>
+          {gscError && <p style={{ marginTop: 12, fontSize: 12, color: '#dc2626' }}>GSC: {gscError}</p>}
+          {visitsError && <p style={{ marginTop: 12, fontSize: 12, color: '#dc2626' }}>Visits: {visitsError}</p>}
+        </Card>
+
+        {/* Where they came from */}
+        <Card>
+          {eyebrow(`Where visitors came from · ${selectedDate}`)}
+          <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+            <strong>{agg.pageviews} pageview{agg.pageviews !== 1 ? 's' : ''}</strong> from <strong>{agg.sessions} session{agg.sessions !== 1 ? 's' : ''}</strong>. Each row is the best guess at where that visit started.
+          </p>
+          {agg.sources.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No visits logged for this date.</p>
+          ) : (
+            agg.sources.map(s => {
+              const style = styleForSource(s.label);
+              const pct = agg.pageviews > 0 ? (s.visits / agg.pageviews * 100) : 0;
+              return (
+                <div key={s.label} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>
+                      <span style={{ display: 'inline-block', background: style.tagBg, color: style.tagFg, fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, marginRight: 8 }}>{style.tag}</span>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#1a1a1a', whiteSpace: 'nowrap' }}>{s.visits} · {pct.toFixed(0)}%</div>
+                  </div>
+                  <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, marginTop: 8 }}>
+                    <div style={{ height: 6, width: `${Math.max(pct, 2)}%`, background: style.bar, borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: '#525252', marginTop: 6 }}>
+                    {s.sessions} unique {s.sessions === 1 ? 'session' : 'sessions'}
+                    {s.label === 'Direct' && <span style={{ fontStyle: 'italic', color: '#888' }}> — typed URLs, bookmarks, Grok citations, and other referrer-stripped tools</span>}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </Card>
+
+        {/* Most-viewed pages */}
+        <Card>
+          {eyebrow(`Most-viewed pages · ${selectedDate}`)}
+          <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Counts every internal nav too — what people look at once they're on the site.
+          </p>
+          {agg.pages.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No pages viewed this date.</p>
+          ) : (
+            agg.pages.slice(0, 8).map(p => {
+              const max = agg.pages[0].views || 1;
+              const pct = Math.max((p.views / max) * 100, 4);
+              return (
+                <div key={p.path} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>
+                      {friendlyPath(p.path)}
+                      <div style={{ fontSize: 11, color: '#888', fontWeight: 500, fontFamily: 'monospace', marginTop: 1 }}>{p.path}</div>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: '#1a1a1a', whiteSpace: 'nowrap' }}>{p.views} view{p.views !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div style={{ height: 5, background: '#e5e7eb', borderRadius: 3, marginTop: 8 }}>
+                    <div style={{ height: 5, width: `${pct}%`, background: '#0284c7', borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: '#525252', marginTop: 6 }}>{p.sessions} unique {p.sessions === 1 ? 'visitor' : 'visitors'}</div>
+                </div>
+              );
+            })
+          )}
+        </Card>
+
+        {/* GSC top queries */}
+        <Card>
+          {eyebrow(`What people searched on Google · ${selectedDate}`)}
+          {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
+            !gscData?.queries?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC query data for this date (or 2-3 day lag still applying).</p> :
+            gscData.queries.slice(0, 10).map(q => (
+              <div key={q.query} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8, borderLeft: '3px solid #C8102E' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>"{q.query}"</div>
+                <div style={{ fontSize: 12, color: '#525252', marginTop: 3 }}>
+                  {q.clicks} click{q.clicks !== 1 ? 's' : ''} · ranked <strong>#{q.position.toFixed(0)}</strong> · seen {q.impressions} times
+                </div>
+              </div>
+            ))
+          }
+        </Card>
+
+        {/* GSC top pages */}
+        <Card>
+          {eyebrow(`Top pages from Google · ${selectedDate}`)}
+          {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
+            !gscData?.pages?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC page data for this date.</p> :
+            gscData.pages.slice(0, 8).map(p => {
+              const path = p.page.replace('https://pokemontrainercenter.com', '') || '/';
+              return (
+                <div key={p.page} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{friendlyPath(path)}</div>
+                  <div style={{ fontSize: 11, color: '#888', fontFamily: 'monospace', marginTop: 1 }}>{path}</div>
+                  <div style={{ fontSize: 12, color: '#525252', marginTop: 5 }}>
+                    {p.clicks} click{p.clicks !== 1 ? 's' : ''} · seen {p.impressions} times
+                  </div>
+                </div>
+              );
+            })
+          }
+        </Card>
+
+        {/* Multi-page sessions (power user) */}
+        {agg.multiPage.length > 0 && (
+          <Card>
+            {eyebrow(`Multi-page sessions · ${selectedDate}`)}
+            <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Visitors who clicked through more than one page. Higher = more engaged session.
+            </p>
+            {agg.multiPage.slice(0, 8).map(s => (
+              <div key={s.sessionId} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                  {s.paths.length} pages · {s.durationSec >= 60 ? `${Math.round(s.durationSec / 60)}m ${s.durationSec % 60}s` : `${s.durationSec}s`} on site
+                </div>
+                <div style={{ fontSize: 12, color: '#525252', marginTop: 4, fontFamily: 'monospace' }}>
+                  {s.paths.map(friendlyPath).join(' → ')}
+                </div>
+              </div>
+            ))}
+          </Card>
+        )}
+
+      </div>
+    </PageWrapper>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -12753,6 +13198,9 @@ function UnsubscribePage({ isMobile }) {
 
 // ─── Main App ─────────────────────────────────────────────
 function App() {
+  // Log every route change to public.page_visits so the daily SEO digest
+  // can break down most-viewed pages + pages-per-session metrics.
+  usePageViewTracker();
   const [navVisible, setNavVisible] = useState(false);
   const [staffUser, setStaffUser] = useState(null);
   const [staffProfile, setStaffProfile] = useState(null);
@@ -13255,6 +13703,7 @@ function App() {
               { label: 'Manage Vendors', to: '/staff/vendors' },
               { label: 'Manage Members', to: '/staff/members' },
               { label: 'Communication', to: '/staff/comms' },
+              { label: 'Analytics', to: '/staff/analytics' },
               { label: 'Business Hours', to: '/#visit-us' },
             ];
 
@@ -13552,6 +14001,7 @@ function App() {
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
       </Routes>
 
       {/* Staff Login Modal */}

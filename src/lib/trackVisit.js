@@ -1,21 +1,61 @@
-// First-party page visit tracking. Fires once per browser session and logs
-// a row to public.page_visits in Supabase, capturing the referrer + a
-// detected AI bot type if applicable.
+// First-party page visit tracking. Logs every route view (not just initial
+// arrival) to public.page_visits in Supabase, so we can answer:
+//   - Where did the visit start? (referrer, AI source, social, direct)
+//   - Which screens did they view most?
+//   - How many pages per session?
 //
 // Privacy stance: no IP, no precise location, no cookies. Only referrer,
-// user-agent, and a random per-session id (sessionStorage). The daily SEO
-// digest reads this table to attribute traffic beyond what GSC sees.
+// user-agent, path, and a random per-session id (sessionStorage — cleared
+// on tab close). The daily SEO digest reads this table.
 //
-// Why a module-level fire-and-forget instead of a hook: this should run
-// once per arrival, not on every React re-render. Importing this file from
-// index.js triggers the call exactly once.
+// Usage:
+//   import { logPageVisit } from './lib/trackVisit';
+//   // The initial visit fires automatically on module import.
+//   // On subsequent route changes (React Router), call:
+//   useEffect(() => { logPageVisit(); }, [location.pathname]);
 
 import { supabase } from '../supabaseClient';
 
-(function trackOnce() {
+// Detect AI source from referrer + UA. Kept in one place so the JS tracker
+// and the Python digest stay in lockstep (digest has the same logic
+// duplicated in scripts/seo-daily-digest.py for the historical-data case).
+function detectAiBot(referrerHost, ua) {
+  const refLow = (referrerHost || '').toLowerCase();
+  const uaLow = (ua || '').toLowerCase();
+  if (refLow.includes('chatgpt.com') || refLow.includes('chat.openai') || refLow.includes('openai.com') ||
+      uaLow.includes('chatgpt') || uaLow.includes('gptbot') || uaLow.includes('oai-searchbot')) return 'chatgpt';
+  if (refLow.includes('claude.ai') || refLow.includes('anthropic.com') ||
+      uaLow.includes('anthropic-ai') || uaLow.includes('claude-web') || uaLow.includes('claudebot')) return 'claude';
+  if (refLow.includes('perplexity.ai') || refLow.includes('perplexity.com') ||
+      uaLow.includes('perplexitybot') || uaLow.includes('perplexity-user')) return 'perplexity';
+  if (refLow.includes('gemini.google') || refLow.includes('bard.google') ||
+      refLow.includes('aistudio.google') || uaLow.includes('google-extended')) return 'gemini';
+  if (refLow.includes('bing.com/chat') || refLow.includes('copilot.microsoft') ||
+      refLow.includes('copilot.cloud.microsoft') || uaLow.includes('copilot')) return 'copilot';
+  if (refLow.includes('grok.com') || refLow.includes('x.ai') || uaLow.includes('grok')) return 'grok';
+  if (refLow.includes('you.com') || uaLow.includes('youbot') || uaLow.includes('ccbot')) return 'other-ai';
+  return null;
+}
+
+function getOrCreateSessionId() {
+  if (typeof window === 'undefined') return null;
+  let sid = sessionStorage.getItem('_pv_sid');
+  if (!sid) {
+    sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem('_pv_sid', sid);
+  }
+  return sid;
+}
+
+/**
+ * Log a single page view. Called automatically on initial module import
+ * (captures the entry referrer) and on every React Router location change
+ * (captures every internal nav so we know which screens get viewed most).
+ *
+ * No-op outside the browser.
+ */
+export function logPageVisit() {
   if (typeof window === 'undefined') return;
-  // Skip if already logged this session
-  if (sessionStorage.getItem('_pv_logged')) return;
 
   try {
     const url = new URL(window.location.href);
@@ -23,37 +63,22 @@ import { supabase } from '../supabaseClient';
     let referrerHost = '';
     try { if (referrer) referrerHost = new URL(referrer).hostname.toLowerCase(); } catch (_) {}
 
-    const ua = (navigator.userAgent || '').toLowerCase();
-    const refLow = referrerHost.toLowerCase();
-    let aiBot = null;
-    if (refLow.includes('chatgpt.com') || refLow.includes('chat.openai') || refLow.includes('openai.com') || ua.includes('chatgpt') || ua.includes('gptbot') || ua.includes('oai-searchbot')) {
-      aiBot = 'chatgpt';
-    } else if (refLow.includes('claude.ai') || refLow.includes('anthropic.com') || ua.includes('anthropic-ai') || ua.includes('claude-web') || ua.includes('claudebot')) {
-      aiBot = 'claude';
-    } else if (refLow.includes('perplexity.ai') || refLow.includes('perplexity.com') || ua.includes('perplexitybot') || ua.includes('perplexity-user')) {
-      aiBot = 'perplexity';
-    } else if (refLow.includes('gemini.google') || refLow.includes('bard.google') || refLow.includes('aistudio.google') || ua.includes('google-extended')) {
-      aiBot = 'gemini';
-    } else if (refLow.includes('bing.com/chat') || refLow.includes('copilot.microsoft') || refLow.includes('copilot.cloud.microsoft') || ua.includes('copilot')) {
-      aiBot = 'copilot';
-    } else if (refLow.includes('grok.com') || refLow.includes('x.ai') || ua.includes('grok')) {
-      aiBot = 'grok';
-    } else if (refLow.includes('you.com') || ua.includes('youbot') || ua.includes('ccbot')) {
-      aiBot = 'other-ai';
-    }
+    // Internal navigations have a referrer pointing back at our own host.
+    // We still want to log them so the most-viewed-pages stat works, but
+    // we null out referrer_host so they don't pollute the "where they came
+    // from" attribution.
+    const ourHost = window.location.hostname.toLowerCase();
+    const isInternal = referrerHost === ourHost;
+    const effectiveReferrerHost = isInternal ? null : (referrerHost || null);
 
-    // Per-session id so we can roughly count unique sessions in the digest
-    let sid = sessionStorage.getItem('_pv_sid');
-    if (!sid) {
-      sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      sessionStorage.setItem('_pv_sid', sid);
-    }
+    const aiBot = detectAiBot(effectiveReferrerHost, navigator.userAgent);
+    const sid = getOrCreateSessionId();
 
     const payload = {
       path: url.pathname,
       full_url: url.href.slice(0, 1000),
-      referrer: referrer ? referrer.slice(0, 1000) : null,
-      referrer_host: referrerHost || null,
+      referrer: !isInternal && referrer ? referrer.slice(0, 1000) : null,
+      referrer_host: effectiveReferrerHost,
       user_agent: (navigator.userAgent || '').slice(0, 500),
       ai_bot: aiBot,
       screen_w: window.screen ? window.screen.width : null,
@@ -61,20 +86,18 @@ import { supabase } from '../supabaseClient';
       session_id: sid,
     };
 
-    // Fire and forget — we don't want analytics to delay rendering or
-    // surface errors to the user. Marking _pv_logged before await so a
-    // failed network call still doesn't double-log on a retry.
-    sessionStorage.setItem('_pv_logged', '1');
-    supabase.from('page_visits').insert(payload).then(({ error }) => {
-      if (error) {
-        // Roll back the flag so a later retry can fire
-        try { sessionStorage.removeItem('_pv_logged'); } catch (_) {}
-        // Don't log to console in production; analytics errors are noise
-      }
-    }).catch(() => {
-      try { sessionStorage.removeItem('_pv_logged'); } catch (_) {}
-    });
+    supabase.from('page_visits').insert(payload).then(() => {}).catch(() => {});
   } catch (_) {
     // Swallow — tracking should never break the app
   }
+}
+
+// Fire once for the initial pageload (captures the source/referrer).
+// Subsequent route changes need to call logPageVisit() from a router hook
+// (see usePageViewTracker.js).
+(function trackInitialLoad() {
+  if (typeof window === 'undefined') return;
+  if (sessionStorage.getItem('_pv_first_logged')) return;
+  sessionStorage.setItem('_pv_first_logged', '1');
+  logPageVisit();
 })();
