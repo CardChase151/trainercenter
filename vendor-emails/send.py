@@ -115,10 +115,10 @@ def send_one(api_key, to, subject, html_body, bcc=None, reply_to=None, dry_run=F
             return data.get('id') or True
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='ignore')[:300]
-        print(f"  ❌ HTTP {e.code} for {to}: {body}")
+        print(f"  ERR HTTP {e.code} for {to}: {body}")
         return False
     except Exception as e:
-        print(f"  ❌ {type(e).__name__} for {to}: {e}")
+        print(f"  ERR {type(e).__name__} for {to}: {e}")
         return False
 
 
@@ -178,7 +178,7 @@ def main():
         recipient = v.get('override_email', v['email'])
         path = os.path.join(DRAFTS_DIR, f"group-{v['group']}", f"{slug(v)}.html")
         if not os.path.isfile(path):
-            print(f"  ❌ MISSING DRAFT: {path}")
+            print(f"  ERR MISSING DRAFT: {path}")
             failed.append((recipient, 'missing draft'))
             continue
         with open(path) as f:
@@ -190,7 +190,7 @@ def main():
             sent_ok += 1
             if not args.dry_run:
                 msg_id = result if isinstance(result, str) else 'ok'
-                print(f"  ✓ [{v['group']}] {recipient:40s} {msg_id}")
+                print(f"  OK [{v['group']}] {recipient:40s} {msg_id}")
         else:
             failed.append((recipient, 'send failed'))
 

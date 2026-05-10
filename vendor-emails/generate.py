@@ -317,7 +317,7 @@ def main():
         for m in manifest:
             f.write(f"| {m['group']} | {m['name']} | {m['email']} | {m['subject']} | `{m['file']}` |\n")
 
-    print(f"✓ Generated {sum(counts.values())} drafts")
+    print(f"OK Generated {sum(counts.values())} drafts")
     print(f"  Group A: {counts['A']}  Group B: {counts['B']}  Group C: {counts['C']}  Group D: {counts['D']}")
 
 

@@ -197,15 +197,15 @@ def find_most_recent_data_day(daily_rows):
 
 def fmt_pct_delta(new, old):
     if old == 0 and new == 0:
-        return '— flat'
+        return 'flat'
     if old == 0:
-        return '▲ new'
+        return 'new'
     pct = (new - old) / old * 100
     if pct > 0:
-        return f'▲ +{pct:.0f}%'
+        return f'Up {pct:.0f}%'
     if pct < 0:
-        return f'▼ {pct:.0f}%'
-    return '— flat'
+        return f'Down {-pct:.0f}%'
+    return 'flat'
 
 
 def color_for_delta(new, old):
@@ -224,7 +224,7 @@ def render_sources_section(visit_sources, date_str):
     no data (e.g. tracking script hasn't deployed yet or no visits that day)."""
     if not visit_sources:
         return f'''<div style="margin:26px 0 0;padding:14px 16px;background:#f4f6f9;border-radius:6px">
-          <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">🌐 Where visitors came from</div>
+          <div style="font-size:11px;font-weight:800;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from</div>
           <p style="margin:0;font-size:13px;color:#666;line-height:1.55">No first-party visit data for {html.escape(date_str)} yet. Either no visits, or the page-visit tracking is still gathering its first day of data. (This section will populate once the tracker is live.)</p>
         </div>'''
 
@@ -282,7 +282,7 @@ def render_sources_section(visit_sources, date_str):
         </tr></table>''')
 
     return f'''<div style="margin:26px 0 0">
-      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">🌐 Where visitors came from</div>
+      <div style="font-size:11px;font-weight:800;color:#C8102E;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px">Where visitors came from</div>
       <div style="font-size:13px;color:#666;margin-bottom:14px;line-height:1.5">
         <strong>{total_visits} total visit{"s" if total_visits != 1 else ""}</strong> from <strong>{total_sessions} unique session{"s" if total_sessions != 1 else ""}</strong> on {html.escape(date_str)}. Each row is the best guess at where that visit started.
       </div>
@@ -324,10 +324,10 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
         compare_dod = f"Same as the day before ({prev_clicks} clicks)."
     elif cur_clicks > prev_clicks:
         diff = cur_clicks - prev_clicks
-        compare_dod = f'<span style="color:#16a34a;font-weight:700">▲ Up {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+        compare_dod = f'<span style="color:#16a34a;font-weight:700">Up {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
     else:
         diff = prev_clicks - cur_clicks
-        compare_dod = f'<span style="color:#dc2626;font-weight:700">▼ Down {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+        compare_dod = f'<span style="color:#dc2626;font-weight:700">Down {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
 
     if avg_clicks > 0:
         if cur_clicks > avg_clicks * 1.1:
@@ -340,7 +340,7 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
         compare_avg = "No clicks at all in the trailing 7 days, so no average to compare to."
 
     if is_new_high and cur_clicks > 0:
-        compare_range = f"<strong>🎉 New {lookback_days}-day high.</strong> Best day in the window."
+        compare_range = f"<strong>New {lookback_days}-day high.</strong> Best day in the window."
     elif is_new_low:
         compare_range = f"Tied or matching the {lookback_days}-day low ({low_clicks} clicks)."
     else:
@@ -462,13 +462,13 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
       {render_sources_section(visit_sources, date_str)}
 
       {section(
-        '🔍 What people searched to find you',
+        'What people searched to find you',
         f"The actual queries someone typed into Google on {date_str} that surfaced your site. Numbers below show how many of those searchers actually visited.",
         queries_html
       )}
 
       {section(
-        '📄 Which pages got the visits',
+        'Which pages got the visits',
         f"Where the {cur_clicks} click{'s' if cur_clicks != 1 else ''} on {date_str} landed.",
         pages_html
       )}
@@ -518,7 +518,7 @@ def send_email(api_key, to_address, subject, html_body, dry_run=False):
             data = json.loads(resp.read())
             print(f'Sent: {data.get("id", "ok")}')
     except urllib.error.HTTPError as e:
-        print(f'❌ HTTP {e.code}: {e.read().decode()[:300]}')
+        print(f'ERR HTTP {e.code}: {e.read().decode()[:300]}')
         sys.exit(1)
 
 
@@ -605,7 +605,7 @@ def main():
 
     cur_clicks = int(latest_day.get('clicks', 0))
     prev_clicks = int(prev_day.get('clicks', 0)) if prev_day else 0
-    delta_label = fmt_pct_delta(cur_clicks, prev_clicks).replace('▲ ', '+').replace('▼ ', '')
+    delta_label = fmt_pct_delta(cur_clicks, prev_clicks)
     date_short = latest_date.strftime('%a %b %-d')
     subject = f'TC HB · {date_short}: {cur_clicks} clicks ({delta_label} DoD)'
 
