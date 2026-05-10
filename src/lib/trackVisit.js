@@ -26,17 +26,19 @@ import { supabase } from '../supabaseClient';
     const ua = (navigator.userAgent || '').toLowerCase();
     const refLow = referrerHost.toLowerCase();
     let aiBot = null;
-    if (refLow.includes('chat.openai') || ua.includes('chatgpt') || ua.includes('gptbot') || ua.includes('oai-searchbot')) {
+    if (refLow.includes('chatgpt.com') || refLow.includes('chat.openai') || refLow.includes('openai.com') || ua.includes('chatgpt') || ua.includes('gptbot') || ua.includes('oai-searchbot')) {
       aiBot = 'chatgpt';
-    } else if (refLow.includes('claude.ai') || ua.includes('anthropic-ai') || ua.includes('claude-web') || ua.includes('claudebot')) {
+    } else if (refLow.includes('claude.ai') || refLow.includes('anthropic.com') || ua.includes('anthropic-ai') || ua.includes('claude-web') || ua.includes('claudebot')) {
       aiBot = 'claude';
-    } else if (refLow.includes('perplexity') || ua.includes('perplexitybot') || ua.includes('perplexity-user')) {
+    } else if (refLow.includes('perplexity.ai') || refLow.includes('perplexity.com') || ua.includes('perplexitybot') || ua.includes('perplexity-user')) {
       aiBot = 'perplexity';
-    } else if (refLow.includes('gemini.google') || refLow.includes('bard.google') || ua.includes('google-extended')) {
+    } else if (refLow.includes('gemini.google') || refLow.includes('bard.google') || refLow.includes('aistudio.google') || ua.includes('google-extended')) {
       aiBot = 'gemini';
-    } else if (refLow.includes('bing.com/chat') || refLow.includes('copilot.microsoft') || ua.includes('copilot')) {
+    } else if (refLow.includes('bing.com/chat') || refLow.includes('copilot.microsoft') || refLow.includes('copilot.cloud.microsoft') || ua.includes('copilot')) {
       aiBot = 'copilot';
-    } else if (ua.includes('youbot') || ua.includes('ccbot') || refLow.includes('you.com')) {
+    } else if (refLow.includes('grok.com') || refLow.includes('x.ai') || ua.includes('grok')) {
+      aiBot = 'grok';
+    } else if (refLow.includes('you.com') || ua.includes('youbot') || ua.includes('ccbot')) {
       aiBot = 'other-ai';
     }
 

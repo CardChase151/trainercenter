@@ -81,15 +81,33 @@ def categorize_referrer(host, ai_bot):
             'perplexity': 'Perplexity',
             'gemini': 'Gemini',
             'copilot': 'Copilot',
+            'grok': 'Grok',
             'other-ai': 'Other AI',
         }.get(ai_bot, ai_bot.title())
     if not host:
         return 'Direct'
     h = host.lower()
+    # AI assistants — catch by host even when ai_bot column is null (backfill safety)
+    if 'chatgpt.com' in h or 'chat.openai' in h or 'openai.com' in h:
+        return 'ChatGPT'
+    if 'claude.ai' in h or 'anthropic.com' in h:
+        return 'Claude'
+    if 'perplexity.ai' in h or 'perplexity.com' in h:
+        return 'Perplexity'
+    if 'gemini.google' in h or 'bard.google' in h or 'aistudio.google' in h:
+        return 'Gemini'
+    if 'copilot.microsoft' in h or 'copilot.cloud.microsoft' in h or 'bing.com/chat' in h:
+        return 'Copilot'
+    if 'grok.com' in h or 'x.ai' in h:
+        return 'Grok'
+    if 'you.com' in h:
+        return 'You.com'
+    # Search engines
     if 'google.' in h:
         return 'Google Search'
     if 'bing.com' in h or 'duckduckgo.com' in h:
         return 'Bing/DuckDuckGo'
+    # Social
     if 'instagram.com' in h or 'l.instagram.com' in h or 'lm.facebook.com' in h:
         return 'Instagram'
     if 'tiktok.com' in h:
