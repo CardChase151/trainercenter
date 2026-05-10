@@ -10958,7 +10958,6 @@ function StaffCommsPage({ isMobile, staff }) {
 function StaffAnalyticsPage({ isMobile }) {
   const { user, isAdmin, isLoading: authLoading } = useAuth();
 
-  // Default to "yesterday" in Pacific time, same window as the daily email
   const todayPT = new Date();
   const yesterdayPT = new Date(todayPT);
   yesterdayPT.setDate(yesterdayPT.getDate() - 1);
@@ -10966,8 +10965,21 @@ function StaffAnalyticsPage({ isMobile }) {
     const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
+  const shiftDays = (iso, days) => {
+    const d = new Date(iso + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    return toISO(d);
+  };
+  const daysBetween = (start, end) => {
+    const s = new Date(start + 'T12:00:00').getTime();
+    const e = new Date(end + 'T12:00:00').getTime();
+    return Math.round((e - s) / 86400000) + 1;
+  };
 
-  const [selectedDate, setSelectedDate] = useState(toISO(yesterdayPT));
+  // Default: last 30 days ending today (so includes everything we have).
+  // endDate is exclusive of the future, startDate is rangeDays-1 days before.
+  const [endDate, setEndDate] = useState(toISO(todayPT));
+  const [startDate, setStartDate] = useState(toISO(shiftDays(toISO(todayPT), -29)));
   const [gscData, setGscData] = useState(null);
   const [gscError, setGscError] = useState(null);
   const [gscLoading, setGscLoading] = useState(false);
@@ -11024,8 +11036,8 @@ function StaffAnalyticsPage({ isMobile }) {
     return { tag: 'Other', tagBg: '#fef3c7', tagFg: '#92400e', bar: '#d97706' };
   };
 
-  // ─── Fetch GSC for the selected date via Edge Function ───
-  const fetchGsc = useCallback(async (date) => {
+  // ─── Fetch GSC for the selected range via Edge Function ───
+  const fetchGsc = useCallback(async (start, end) => {
     setGscLoading(true);
     setGscError(null);
     try {
@@ -11039,7 +11051,7 @@ function StaffAnalyticsPage({ isMobile }) {
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ startDate: date, endDate: date }),
+          body: JSON.stringify({ startDate: start, endDate: end }),
         }
       );
       const json = await resp.json();
@@ -11053,27 +11065,31 @@ function StaffAnalyticsPage({ isMobile }) {
     }
   }, []);
 
-  // ─── Fetch page_visits for the selected date + day before ───
-  const fetchVisits = useCallback(async (date) => {
+  // ─── Fetch page_visits for the selected range + previous equal window ───
+  const fetchVisits = useCallback(async (start, end) => {
     setVisitsLoading(true);
     setVisitsError(null);
     try {
-      const start = new Date(date + 'T00:00:00Z');
-      const end = new Date(date + 'T00:00:00Z');
-      end.setDate(end.getDate() + 1);
-      const prevStart = new Date(date + 'T00:00:00Z');
-      prevStart.setDate(prevStart.getDate() - 1);
-      const prevEnd = new Date(date + 'T00:00:00Z');
+      const startDT = new Date(start + 'T00:00:00Z');
+      const endDT = new Date(end + 'T00:00:00Z');
+      endDT.setDate(endDT.getDate() + 1); // inclusive of end day
+      // Previous equal-length window for DoD comparison
+      const rangeDays = daysBetween(start, end);
+      const prevStart = new Date(startDT);
+      prevStart.setDate(prevStart.getDate() - rangeDays);
+      const prevEnd = new Date(startDT);
 
       const [cur, prev] = await Promise.all([
         supabase.from('page_visits')
           .select('path,referrer_host,ai_bot,session_id,created_at')
-          .gte('created_at', start.toISOString())
-          .lt('created_at', end.toISOString()),
+          .gte('created_at', startDT.toISOString())
+          .lt('created_at', endDT.toISOString())
+          .limit(50000),
         supabase.from('page_visits')
           .select('path,referrer_host,ai_bot,session_id,created_at')
           .gte('created_at', prevStart.toISOString())
-          .lt('created_at', prevEnd.toISOString()),
+          .lt('created_at', prevEnd.toISOString())
+          .limit(50000),
       ]);
       if (cur.error) throw cur.error;
       if (prev.error) throw prev.error;
@@ -11090,9 +11106,9 @@ function StaffAnalyticsPage({ isMobile }) {
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetchGsc(selectedDate);
-    fetchVisits(selectedDate);
-  }, [selectedDate, isAdmin, fetchGsc, fetchVisits]);
+    fetchGsc(startDate, endDate);
+    fetchVisits(startDate, endDate);
+  }, [startDate, endDate, isAdmin, fetchGsc, fetchVisits]);
 
   // ─── Aggregations ───
   const aggregate = (rows) => {
@@ -11188,39 +11204,79 @@ function StaffAnalyticsPage({ isMobile }) {
     </div>
   );
 
-  // Date preset helpers
-  const setPreset = (daysAgo) => {
-    const d = new Date(todayPT);
-    d.setDate(d.getDate() - daysAgo);
-    setSelectedDate(toISO(d));
+  // Date preset helpers — set a range ending today
+  const setRange = (numDays) => {
+    const end = toISO(todayPT);
+    setEndDate(end);
+    setStartDate(shiftDays(end, -(numDays - 1)));
   };
+  const setSingleDay = (iso) => {
+    setStartDate(iso);
+    setEndDate(iso);
+  };
+
+  // Current range identifier (for highlighting active preset)
+  const rangeDays = daysBetween(startDate, endDate);
+  const isLast30 = endDate === toISO(todayPT) && rangeDays === 30;
+  const isLast7 = endDate === toISO(todayPT) && rangeDays === 7;
+  const isToday = startDate === toISO(todayPT) && endDate === toISO(todayPT);
+  const isYesterday = startDate === toISO(yesterdayPT) && endDate === toISO(yesterdayPT);
+
+  const presetBtnStyle = (active) => ({
+    padding: '8px 14px', fontSize: 13, fontWeight: 600,
+    border: active ? 'none' : '1px solid #ddd', borderRadius: 8,
+    background: active ? '#1a1a1a' : '#fff',
+    color: active ? '#fff' : '#1a1a1a', cursor: 'pointer',
+  });
+
+  const rangeLabel = startDate === endDate
+    ? startDate
+    : `${startDate} → ${endDate} · ${rangeDays} days`;
 
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ maxWidth: 900, margin: '0 auto', marginBottom: 64 }}>
         <SectionHeader title="Analytics" subtitle="Daily SEO digest, on demand. Admin only." />
 
-        {/* Date selector bar */}
+        {/* Date range selector bar */}
         <Card>
-          {eyebrow('Date', '#C8102E')}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          {eyebrow('Date range', '#C8102E')}
+
+          {/* Presets */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            <button onClick={() => setRange(30)} style={presetBtnStyle(isLast30)}>Last 30 days</button>
+            <button onClick={() => setRange(7)} style={presetBtnStyle(isLast7)}>Last 7 days</button>
+            <button onClick={() => setSingleDay(toISO(yesterdayPT))} style={presetBtnStyle(isYesterday)}>Yesterday</button>
+            <button onClick={() => setSingleDay(toISO(todayPT))} style={presetBtnStyle(isToday)}>Today (live)</button>
+            <button onClick={() => { fetchGsc(startDate, endDate); fetchVisits(startDate, endDate); }} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 8, background: '#C8102E', color: '#fff', cursor: 'pointer', marginLeft: 'auto' }}>Refresh</button>
+          </div>
+
+          {/* Custom range */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12, color: '#666' }}>
+            <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: 10, color: '#888' }}>Custom:</span>
             <input
               type="date"
-              value={selectedDate}
-              max={toISO(todayPT)}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              style={{ padding: '8px 12px', fontSize: 14, border: '1px solid #ddd', borderRadius: 8 }}
+              value={startDate}
+              max={endDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6 }}
             />
-            <button onClick={() => setPreset(1)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: selectedDate === toISO(yesterdayPT) ? '#1a1a1a' : '#fff', color: selectedDate === toISO(yesterdayPT) ? '#fff' : '#1a1a1a', cursor: 'pointer' }}>Yesterday</button>
-            <button onClick={() => setPreset(0)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: selectedDate === toISO(todayPT) ? '#1a1a1a' : '#fff', color: selectedDate === toISO(todayPT) ? '#fff' : '#1a1a1a', cursor: 'pointer' }}>Today (live)</button>
-            <button onClick={() => setPreset(7)} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, border: '1px solid #ddd', borderRadius: 8, background: '#fff', cursor: 'pointer' }}>7 days ago</button>
-            <button onClick={() => { fetchGsc(selectedDate); fetchVisits(selectedDate); }} style={{ padding: '8px 14px', fontSize: 13, fontWeight: 700, border: 'none', borderRadius: 8, background: '#C8102E', color: '#fff', cursor: 'pointer', marginLeft: 'auto' }}>Refresh</button>
+            <span>to</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={toISO(todayPT)}
+              onChange={(e) => setEndDate(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6 }}
+            />
+            <span style={{ marginLeft: 8 }}>{rangeDays} day{rangeDays !== 1 ? 's' : ''}</span>
           </div>
         </Card>
 
         {/* Hero stats */}
         <Card>
-          {eyebrow(`Performance · ${selectedDate}`)}
+          {eyebrow(`Performance · ${rangeLabel}`)}
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, marginBottom: 14 }}>
             <HeroStat
               label="Google clicks"
@@ -11268,7 +11324,7 @@ function StaffAnalyticsPage({ isMobile }) {
 
         {/* Where they came from */}
         <Card>
-          {eyebrow(`Where visitors came from · ${selectedDate}`)}
+          {eyebrow(`Where visitors came from · ${rangeLabel}`)}
           <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
             <strong>{agg.pageviews} pageview{agg.pageviews !== 1 ? 's' : ''}</strong> from <strong>{agg.sessions} session{agg.sessions !== 1 ? 's' : ''}</strong>. Each row is the best guess at where that visit started.
           </p>
@@ -11302,7 +11358,7 @@ function StaffAnalyticsPage({ isMobile }) {
 
         {/* Most-viewed pages */}
         <Card>
-          {eyebrow(`Most-viewed pages · ${selectedDate}`)}
+          {eyebrow(`Most-viewed pages · ${rangeLabel}`)}
           <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
             Counts every internal nav too — what people look at once they're on the site.
           </p>
@@ -11333,7 +11389,7 @@ function StaffAnalyticsPage({ isMobile }) {
 
         {/* GSC top queries */}
         <Card>
-          {eyebrow(`What people searched on Google · ${selectedDate}`)}
+          {eyebrow(`What people searched on Google · ${rangeLabel}`)}
           {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
             !gscData?.queries?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC query data for this date (or 2-3 day lag still applying).</p> :
             gscData.queries.slice(0, 10).map(q => (
@@ -11349,7 +11405,7 @@ function StaffAnalyticsPage({ isMobile }) {
 
         {/* GSC top pages */}
         <Card>
-          {eyebrow(`Top pages from Google · ${selectedDate}`)}
+          {eyebrow(`Top pages from Google · ${rangeLabel}`)}
           {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
             !gscData?.pages?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC page data for this date.</p> :
             gscData.pages.slice(0, 8).map(p => {
@@ -11370,7 +11426,7 @@ function StaffAnalyticsPage({ isMobile }) {
         {/* Multi-page sessions (power user) */}
         {agg.multiPage.length > 0 && (
           <Card>
-            {eyebrow(`Multi-page sessions · ${selectedDate}`)}
+            {eyebrow(`Multi-page sessions · ${rangeLabel}`)}
             <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
               Visitors who clicked through more than one page. Higher = more engaged session.
             </p>
