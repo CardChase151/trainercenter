@@ -1,0 +1,28 @@
+name: SEO Daily Digest
+
+on:
+  # 15:00 UTC = 8 AM PDT (March-Nov) / 7 AM PST (Nov-March).
+  # Close enough — DST handling for cron is more trouble than it's worth.
+  schedule:
+    - cron: '0 15 * * *'
+  # Manual trigger from the Actions tab for testing or backfill
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install --quiet google-auth
+
+      - name: Send digest
+        env:
+          GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python3 scripts/seo-daily-digest.py
