@@ -6527,7 +6527,40 @@ function VendorApplyPage({ isMobile }) {
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title={isSignupMode ? 'Apply to Vend' : 'Vendor Login'} subtitle={isSignupMode ? 'Create your vendor account' : 'Log back in or create an account'} />
+        <SectionHeader title={isSignupMode ? 'Apply to become a partner' : 'Vendor Login'} subtitle={isSignupMode ? 'One-time signup. Chef will review and approve you.' : 'Log back in or create an account'} />
+
+        {/* Anti-duplicate-account banner. We've had returning vendors create
+            second logins because they forgot which email they used. This
+            banner sits above the auth card to nudge them to the Log In tab
+            before they sign up again. Only shown in signup mode. */}
+        {isSignupMode && (
+          <div style={{
+            backgroundColor: '#fef9e6',
+            borderLeft: '3px solid #d97706',
+            borderRadius: '6px',
+            padding: '14px 18px',
+            marginBottom: '18px',
+            display: 'flex',
+            gap: '12px',
+            alignItems: 'flex-start',
+          }}>
+            <div style={{ fontSize: '20px', lineHeight: 1, paddingTop: '1px' }}>⚠️</div>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                color: '#92400e',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '4px',
+              }}>Already a partner?</div>
+              <div style={{ fontSize: '13px', lineHeight: 1.55, color: '#1a1a1a' }}>
+                Don't create a new account. Click the <strong>Log in</strong> tab below to sign in instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Text Chef at (714) 951-9100.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
@@ -6538,7 +6571,7 @@ function VendorApplyPage({ isMobile }) {
             accent="red"
             defaultMode={initialMode}
             signupCopy="New here? Create your vendor account in seconds. Right after, you'll fill out a one-time application Chef will review."
-            loginCopy="Already a vendor? Log back in to apply for upcoming Vendor Days."
+            loginCopy="Already a partner? Log back in to apply for upcoming Vendor Days."
             onSuccess={() => navigate('/vendors/dashboard')}
           />
         </div>
@@ -6734,19 +6767,89 @@ function VendorDashboardPage({ isMobile }) {
       <PageWrapper isMobile={isMobile}>
         <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
           <SectionHeader title="Vendor Dashboard" subtitle="Last-Friday Vendor Day at Trainer Center HB" />
+
+          {/* How it works — explicit two-step flow so first-timers know what
+              the path is before they click anything. Also doubles as
+              anti-confusion for returning vendors who land here unsure
+              whether they already have an account. */}
+          <div style={{
+            backgroundColor: '#fff',
+            border: '1px solid #e5e5e5',
+            borderRadius: '14px',
+            padding: isMobile ? '20px' : '24px 28px',
+            marginBottom: '20px',
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              color: '#666',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              marginBottom: '14px',
+            }}>
+              How vending works
+            </div>
+            {[
+              { n: 1, title: 'Apply to become a partner', sub: 'One-time signup. Chef reviews and approves you as a Trainer Center HB vendor partner.' },
+              { n: 2, title: 'Apply for each Vendor Day', sub: 'After approval, pick the dates you want from your dashboard. Two clicks per event.' },
+              { n: 3, title: 'Show up and vend', sub: 'Chef confirms each event within a day or two. Then the date is yours.' },
+            ].map(step => (
+              <div key={step.n} style={{
+                display: 'flex',
+                gap: '14px',
+                alignItems: 'flex-start',
+                marginBottom: step.n === 3 ? '0' : '14px',
+              }}>
+                <div style={{
+                  width: '32px', height: '32px', flexShrink: 0,
+                  borderRadius: '16px',
+                  backgroundColor: '#C8102E',
+                  color: '#fff',
+                  fontSize: '15px', fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  lineHeight: '32px',
+                }}>{step.n}</div>
+                <div style={{ flex: 1, paddingTop: '4px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '2px' }}>{step.title}</div>
+                  <div style={{ fontSize: '13px', color: '#525252', lineHeight: 1.5 }}>{step.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Anti-duplicate-account warning. We had vendors create 2-3 logins
+              with different email addresses, which then created duplicate
+              vendor rows that can't be merged cleanly. Loud-but-friendly so
+              returning users always pick Log In, never Sign Up. */}
+          <div style={{
+            backgroundColor: '#fef9e6',
+            borderLeft: '3px solid #d97706',
+            borderRadius: '6px',
+            padding: '12px 16px',
+            marginBottom: '24px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'flex-start',
+          }}>
+            <div style={{ fontSize: '18px', lineHeight: 1, paddingTop: '1px' }}>⚠️</div>
+            <div style={{ fontSize: '13px', lineHeight: 1.5, color: '#1a1a1a' }}>
+              <strong>Already a partner?</strong> Use <strong>Log In</strong> below — don't create a new account. Multiple accounts confuse approvals and we can't merge them later. If you forgot which email you used, reply to any of our emails or text Chef at (714) 951-9100.
+            </div>
+          </div>
+
           <DashboardCardGrid isMobile={isMobile}>
             <DashboardCard
               icon={<LogIn size={22} />}
               title="Log In"
-              subtitle="Already a vendor? Sign in to your dashboard."
+              subtitle="Already a partner? Sign in to your dashboard."
               to="/vendors/apply"
               accent="#C8102E"
               accentBg="#fff0f0"
             />
             <DashboardCard
               icon={<FileEdit size={22} />}
-              title="Apply / Sign Up"
-              subtitle="New here? Start your vendor application."
+              title="Apply to become a partner"
+              subtitle="New here? Start your one-time vendor application."
               to="/vendors/apply?mode=signup"
               accent="#1a1a1a"
               accentBg="#f4f4f5"
