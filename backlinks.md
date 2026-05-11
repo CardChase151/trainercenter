@@ -11,6 +11,30 @@ anything else.
 
 ---
 
+## 0. Play! Pokemon League registration (IN PROGRESS as of 2026-05-11)
+
+Free, single highest-authority backlink available in the Pokemon
+ecosystem. Once registered, Trainer Center appears on
+pokemon.com/us/play-pokemon/pokemon-events/play-in-a-league directly,
+which competitor Paper Hero's Games currently uses to take rank #1 on
+"pokemon league play near me huntington beach" searches.
+
+**Action:** register at pokemon.com as an official Play! Pokemon League
+host. Submit business details, host requirements include running league
+play with sanctioned formats. Status: in progress with Chef.
+
+**Impact:** instant pokemon.com URL pointing to Trainer Center, eligibility
+to host sanctioned tournaments with championship points, and inclusion in
+the official Play! Pokemon event locator that ranks above Yelp on every
+local-play query.
+
+**Outreach to add later (related):** request inclusion in
+theorangecountycityguide.com's Pokemon Card Collectors Guide article -
+it ranks page 1 for "pokemon store in orange county" but does not list
+Trainer Center yet.
+
+---
+
 ## 1. Google Business Profile - do this today if not done
 
 This is the single biggest miss on almost every local shop. It is free,

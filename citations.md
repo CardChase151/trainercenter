@@ -45,3 +45,7 @@ Trainercenter.pokemon@gmail.com
 - [ ] Harbour Landing shopping center directory
 - [ ] HB Chamber of Commerce
 - [ ] Visit Huntington Beach directory
+- [ ] california.pokemoncard.info (state aggregator, 2,076 CA stores listed)
+- [ ] JustInBasil "Where to Play" (https://www.justinbasil.com/play/where) - TCG community reference
+- [ ] KeepUp Cards directory (https://www.keepupcards.com/directory) - TCG-niche
+- [ ] The Orange County City Guide (request inclusion in their Pokemon Card Collectors Guide article at theorangecountycityguide.com)

@@ -26,6 +26,128 @@ try {
   console.log('[Prerender] Could not load blogData.js:', e.message);
 }
 
+// Schema builders. Each returns a fully-formed JSON-LD object that gets
+// serialized and injected into the page's <head> in addition to the static
+// LocalBusiness schema already baked into the template.
+
+function makeBreadcrumbSchema(crumbs) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": crumbs.map((c, i) => ({
+      "@type": "ListItem",
+      "position": i + 1,
+      "name": c.name,
+      "item": c.url
+    }))
+  };
+}
+
+function makeArticleSchema(blog, url) {
+  const firstP = blog.content.find(c => c.type === 'p');
+  const desc = firstP ? firstP.text.replace(/<[^>]+>/g, '').slice(0, 250) : blog.title;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": blog.title,
+    "description": desc,
+    "image": "https://pokemontrainercenter.com/og-image.png",
+    "author": {
+      "@type": "Organization",
+      "name": "Trainer Center HB",
+      "url": "https://pokemontrainercenter.com"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Trainer Center HB",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://pokemontrainercenter.com/logo-square.png"
+      }
+    },
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": url
+    }
+  };
+}
+
+function makeServiceSchema({ name, description, url }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "name": name,
+    "description": description,
+    "url": url,
+    "provider": {
+      "@type": "LocalBusiness",
+      "name": "Trainer Center HB",
+      "url": "https://pokemontrainercenter.com",
+      "telephone": "+1-714-951-9100",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "4911 Warner Ave #210",
+        "addressLocality": "Huntington Beach",
+        "addressRegion": "CA",
+        "postalCode": "92649",
+        "addressCountry": "US"
+      }
+    },
+    "areaServed": [
+      { "@type": "City", "name": "Huntington Beach" },
+      { "@type": "AdministrativeArea", "name": "Orange County" },
+      { "@type": "State", "name": "California" },
+      { "@type": "Country", "name": "United States" }
+    ]
+  };
+}
+
+function makeEventSchema({ name, description, startDate, endDate, repeatFrequency, byDay }) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "Event",
+    "name": name,
+    "description": description,
+    "startDate": startDate,
+    "endDate": endDate,
+    "eventStatus": "https://schema.org/EventScheduled",
+    "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+    "location": {
+      "@type": "Place",
+      "name": "Trainer Center HB",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "4911 Warner Ave #210",
+        "addressLocality": "Huntington Beach",
+        "addressRegion": "CA",
+        "postalCode": "92649",
+        "addressCountry": "US"
+      }
+    },
+    "organizer": {
+      "@type": "Organization",
+      "name": "Trainer Center HB",
+      "url": "https://pokemontrainercenter.com"
+    },
+    "isAccessibleForFree": true,
+    "offers": {
+      "@type": "Offer",
+      "url": "https://pokemontrainercenter.com/calendar",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
+    }
+  };
+  if (repeatFrequency && byDay) {
+    schema.eventSchedule = {
+      "@type": "Schedule",
+      "repeatFrequency": repeatFrequency,
+      "byDay": byDay
+    };
+  }
+  return schema;
+}
+
 const ROUTES = [
   {
     slug: '',
@@ -82,7 +204,45 @@ const ROUTES = [
     keywords: "Pokemon vendor, vendor day Pokemon, sell Pokemon cards Orange County, Pokemon swap meet California, vendor application Pokemon shop, Pokemon table vendor Huntington Beach",
     h1: "Vendor Day at Trainer Center HB",
     body: "Vendor Day at Trainer Center HB in Huntington Beach happens the last Friday of every month. Pokemon vendors set up tables and bring their singles, sealed product, slabs, vintage cards, and Japanese imports to trade and sell with collectors and walk-in customers. Apply once and return every month with a quick re-apply. After each event, attending vendors share photos and short clips from their tables, featured directly on this page. Approved vendors check in on event day and the community sees who is bringing what. Located at 4911 Warner Ave #210, Huntington Beach, CA 92649. Call (714) 951-9100 to ask about Vendor Day, or apply to vend through this page."
+  },
+  {
+    slug: 'vendor-day',
+    title: "Vendor Day | Last Friday Monthly Pokemon Vendor Event | Trainer Center HB",
+    description: "Pokemon Vendor Day at Trainer Center HB in Huntington Beach. Last Friday of every month, Noon to 10 PM. Free table setup for approved vendors. Singles, sealed, slabs, vintage, Japanese imports.",
+    keywords: "Pokemon vendor day, vendor event Pokemon Huntington Beach, monthly Pokemon vendor, Pokemon swap meet Orange County, free vendor table Pokemon",
+    h1: "Vendor Day at Trainer Center HB - Last Friday of Every Month",
+    body: "Pokemon Vendor Day happens at Trainer Center HB on the last Friday of every month, Noon to 10 PM. Approved vendors set up tables for free and sell directly to walk-in collectors. Trainer Center HB provides the space, the foot traffic, and the community. Vendors bring their inventory. Apply once and return monthly with a quick re-apply. 4911 Warner Ave #210, Huntington Beach, CA 92649. (714) 951-9100."
+  },
+  {
+    slug: 'vendor-day/about',
+    title: "About Vendor Day | How It Works | Trainer Center HB",
+    description: "Full details on how Vendor Day works at Trainer Center HB. Application, check-in, table layout, what to bring, payment processing, and how vendors get featured.",
+    keywords: "Pokemon vendor day rules, how vendor day works, vendor application Pokemon, vendor event Huntington Beach",
+    h1: "About Vendor Day at Trainer Center HB",
+    body: "Everything you need to know about vending at Trainer Center HB's monthly Vendor Day. Application process, table assignment, check-in procedure, what to bring, and how Trainer Center features each vendor's lineup before and after the event. Free for approved vendors. Last Friday of every month, Noon to 10 PM. 4911 Warner Ave #210, Huntington Beach, CA 92649."
+  },
+  {
+    slug: 'vendors/apply',
+    title: "Apply to Vend at Trainer Center HB | Pokemon Vendor Application",
+    description: "Apply to vend Pokemon cards, sealed product, and collectibles at Trainer Center HB's monthly Vendor Day. Online application. Free for approved vendors. Huntington Beach, CA.",
+    keywords: "apply Pokemon vendor, vendor application, Pokemon vendor signup, sell Pokemon Huntington Beach, vendor table Orange County",
+    h1: "Apply to Vend at Trainer Center HB",
+    body: "Submit a vendor application to set up at Trainer Center HB's monthly Vendor Day. Application takes a few minutes. You provide your business details, Instagram handle, what you sell, and a few sample photos. Approved vendors receive a confirmation and check-in instructions. Free for approved vendors. Last Friday of every month."
   }
+];
+
+// Admin routes. These get prerendered with noindex/nofollow so when Googlebot
+// hits them (e.g. via SPA fallback), they don't get indexed as homepage
+// duplicates. Real users behind auth use the React app as normal.
+const ADMIN_ROUTES = [
+  { slug: 'unsubscribe', title: "Unsubscribe | Trainer Center HB" },
+  { slug: 'reminders', title: "Reminders | Trainer Center HB" },
+  { slug: 'vendors/dashboard', title: "Vendor Dashboard | Trainer Center HB" },
+  { slug: 'vendors/edit', title: "Edit Vendor Profile | Trainer Center HB" },
+  { slug: 'vendors/events', title: "Vendor Events | Trainer Center HB" },
+  { slug: 'vendors/upload', title: "Vendor Upload | Trainer Center HB" },
+  { slug: 'vendors/review', title: "Vendor Review | Trainer Center HB" },
+  { slug: 'staff/analytics', title: "Staff Analytics | Trainer Center HB" }
 ];
 
 // Add blog post routes dynamically
@@ -109,6 +269,91 @@ for (const blog of publishedBlogs) {
   });
 }
 
+// Attach per-page JSON-LD schemas to every public route, including the blog
+// posts that were just pushed. Must run AFTER the blog loop or the dynamic
+// blog routes get skipped.
+const homeCrumb = { name: 'Home', url: 'https://pokemontrainercenter.com' };
+
+ROUTES.forEach(route => {
+  if (route.slug === '') {
+    // Homepage already has LocalBusiness schema in template. No extras.
+    return;
+  }
+  const url = `https://pokemontrainercenter.com/${route.slug}`;
+  const isBlog = route.slug.startsWith('blog/');
+
+  // Always add a BreadcrumbList for non-home pages
+  const crumbs = [homeCrumb];
+  if (isBlog) {
+    crumbs.push({ name: 'Blog', url: 'https://pokemontrainercenter.com/blog' });
+    crumbs.push({ name: route.h1, url });
+  } else {
+    crumbs.push({ name: route.h1, url });
+  }
+  route.schemas = [makeBreadcrumbSchema(crumbs)];
+
+  // Page-type-specific schemas
+  if (route.slug === 'consultation') {
+    route.schemas.push(makeServiceSchema({
+      name: "Private Pokemon Card Consultation",
+      description: "Free one-on-one Pokemon card consultation with Chef. Appraisals, collecting strategy, investing advice, TCG coaching. Thursdays by appointment.",
+      url
+    }));
+  } else if (route.slug === 'grading') {
+    route.schemas.push(makeServiceSchema({
+      name: "PSA Pokemon Card Grading Submission",
+      description: "End-to-end PSA grading service for Pokemon cards. We evaluate, submit, track, and return your graded cards.",
+      url
+    }));
+  } else if (route.slug === 'buy-sell') {
+    route.schemas.push(makeServiceSchema({
+      name: "Buy and Sell Pokemon Cards",
+      description: "Buy entire Pokemon collections outright and offer consignment for graded cards and high-end singles. Same-visit cash or Zelle payouts.",
+      url
+    }));
+  } else if (route.slug === 'vendors/apply') {
+    route.schemas.push(makeServiceSchema({
+      name: "Pokemon Vendor Opportunity",
+      description: "Free monthly vendor table at Trainer Center HB's Vendor Day. Apply once, return every month.",
+      url
+    }));
+  } else if (route.slug === 'calendar') {
+    // Anchor a couple of canonical recurring events. The homepage schema also
+    // lists Trade Night + Vendor Day, but having them here too is fine.
+    route.schemas.push(makeEventSchema({
+      name: "Trade Night",
+      description: "Weekly Pokemon card trading event. Bring your binders and trade with collectors. Free and open.",
+      startDate: "2026-05-15T18:00:00-07:00",
+      endDate: "2026-05-15T22:00:00-07:00",
+      repeatFrequency: "P1W",
+      byDay: "Friday"
+    }));
+    route.schemas.push(makeEventSchema({
+      name: "Vendor Day",
+      description: "Monthly Pokemon Vendor Day. Approved vendors set up tables for free. Last Friday of every month.",
+      startDate: "2026-05-29T12:00:00-07:00",
+      endDate: "2026-05-29T22:00:00-07:00",
+      repeatFrequency: "P1M",
+      byDay: "Friday"
+    }));
+  } else if (route.slug === 'vendor-day' || route.slug === 'vendor-day/about') {
+    route.schemas.push(makeEventSchema({
+      name: "Vendor Day",
+      description: "Monthly Pokemon Vendor Day at Trainer Center HB. Approved vendors set up free tables. Last Friday of every month, Noon to 10 PM.",
+      startDate: "2026-05-29T12:00:00-07:00",
+      endDate: "2026-05-29T22:00:00-07:00",
+      repeatFrequency: "P1M",
+      byDay: "Friday"
+    }));
+  } else if (isBlog) {
+    const slug = route.slug.replace('blog/', '');
+    const blog = BLOG_DATA.find(b => b.slug === slug);
+    if (blog) {
+      route.schemas.push(makeArticleSchema(blog, url));
+    }
+  }
+});
+
 // Build a site-wide nav block of every route. Injected into <noscript> on
 // every prerendered page so crawlers can walk from any page to any other.
 // Without this, a low-authority new site's homepage looks like an empty
@@ -119,6 +364,32 @@ function buildSiteNav() {
     return `<a href="${url}">${r.h1}</a>`;
   });
   return `<nav aria-label="Site map">${links.join(' · ')}</nav>`;
+}
+
+// Serialize an array of JSON-LD schema objects into a string of <script>
+// blocks that can be injected just before </head>.
+function renderSchemas(schemas) {
+  if (!schemas || !schemas.length) return '';
+  return schemas
+    .map(s => `    <script type="application/ld+json">\n${JSON.stringify(s, null, 2)}\n    </script>`)
+    .join('\n');
+}
+
+// Write the prerendered HTML to the correct path on disk. Handles nested
+// routes like blog/<slug> by creating subdirectories as needed.
+function writeRouteHtml(slug, html) {
+  if (slug === '') {
+    fs.writeFileSync(path.join(BUILD_DIR, 'index.html'), html);
+    return;
+  }
+  const slugParts = slug.split('/');
+  if (slugParts.length > 1) {
+    const dir = path.join(BUILD_DIR, ...slugParts.slice(0, -1));
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${slugParts[slugParts.length - 1]}.html`), html);
+  } else {
+    fs.writeFileSync(path.join(BUILD_DIR, `${slug}.html`), html);
+  }
 }
 
 function prerender() {
@@ -182,27 +453,62 @@ function prerender() {
       `<noscript>\n      <h1>${route.h1}</h1>\n      <p>${route.body}</p>\n      ${siteNav}\n    </noscript>`
     );
 
-    // Write file
-    if (route.slug === '') {
-      // Homepage - overwrite index.html
-      fs.writeFileSync(path.join(BUILD_DIR, 'index.html'), html);
-    } else {
-      // Inner pages - write as slug.html
-      const slugParts = route.slug.split('/');
-      if (slugParts.length > 1) {
-        // Nested route like blog/slug
-        const dir = path.join(BUILD_DIR, slugParts[0]);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, `${slugParts[1]}.html`), html);
-      } else {
-        fs.writeFileSync(path.join(BUILD_DIR, `${route.slug}.html`), html);
-      }
+    // Inject per-page JSON-LD schema blocks just before </head>. The static
+    // LocalBusiness schema already in the template stays untouched on every
+    // page. These new blocks (Article, Service, Event, BreadcrumbList) layer
+    // on top so each route has the schemas Google rewards for that route type.
+    const schemaBlocks = renderSchemas(route.schemas);
+    if (schemaBlocks) {
+      html = html.replace('</head>', `${schemaBlocks}\n  </head>`);
     }
+
+    writeRouteHtml(route.slug, html);
     count++;
     console.log(`[Prerender] ${url}`);
   }
 
-  console.log(`\n[Prerender] Generated ${count} pages.`);
+  // Admin routes: prerender minimal HTML with noindex/nofollow so Googlebot
+  // does not index the SPA-fallback view of these auth-walled pages as a
+  // duplicate of the homepage. Real users behind auth never see these files;
+  // they hit the React app and load whatever auth-gated screen is appropriate.
+  for (const route of ADMIN_ROUTES) {
+    let html = template;
+    const url = `${BASE_URL}/${route.slug}`;
+
+    html = html.replace(/<title>[^<]*<\/title>/, `<title>${route.title}</title>`);
+    html = html.replace(
+      /<meta name="description" content="[^"]*"/,
+      `<meta name="description" content="Staff area for Trainer Center HB. Requires sign-in."`
+    );
+    html = html.replace(
+      /<meta name="keywords" content="[^"]*"/,
+      `<meta name="keywords" content=""`
+    );
+    html = html.replace(
+      /<meta name="robots" content="[^"]*"/,
+      `<meta name="robots" content="noindex, nofollow"`
+    );
+    html = html.replace(
+      /<link rel="canonical" href="[^"]*"/,
+      `<link rel="canonical" href="${url}"`
+    );
+    html = html.replace(
+      /<meta property="og:url" content="[^"]*"/,
+      `<meta property="og:url" content="${url}"`
+    );
+    // Replace noscript with a minimal staff-only message - do NOT include
+    // sitenav here because we do not want crawlers indexing the admin URL list.
+    html = html.replace(
+      /<noscript>[\s\S]*?<\/noscript>/,
+      `<noscript>\n      <p>This page requires sign-in.</p>\n    </noscript>`
+    );
+
+    writeRouteHtml(route.slug, html);
+    count++;
+    console.log(`[Prerender] ${url} (noindex)`);
+  }
+
+  console.log(`\n[Prerender] Generated ${count} pages (${ROUTES.length} public, ${ADMIN_ROUTES.length} admin/noindex).`);
 }
 
 prerender();
