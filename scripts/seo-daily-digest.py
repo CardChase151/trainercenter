@@ -636,7 +636,7 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
       )}
 
       <!-- Footer link -->
-      <p style="margin:30px 0 0;text-align:center"><a href="https://search.google.com/search-console" style="font-size:13px;color:#C8102E;font-weight:700;text-decoration:none">Open Google Search Console →</a></p>
+      <p style="margin:30px 0 0;text-align:center"><a href="https://pokemontrainercenter.com/staff/analytics" style="font-size:13px;color:#C8102E;font-weight:700;text-decoration:none">Open dashboard →</a></p>
 
     </td></tr>
 
