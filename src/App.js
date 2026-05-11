@@ -3,7 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -360,8 +360,10 @@ function StaffLogin({ onClose, onLogin }) {
     padding: '24px',
   };
   const cardStyle = {
-    backgroundColor: '#fff', borderRadius: '16px', padding: '32px',
-    width: '100%', maxWidth: '380px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    backgroundColor: '#fff', borderRadius: '16px', padding: '28px',
+    // Wider on desktop so the 2-column tile grid fits comfortably
+    width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    maxHeight: '90vh', overflowY: 'auto',
   };
   const pickerBtn = (color) => ({
     width: '100%', padding: '14px 18px',
@@ -376,6 +378,43 @@ function StaffLogin({ onClose, onLogin }) {
     transition: 'background-color 0.15s, border-color 0.15s',
   });
 
+  // Bigger icon-tile button for the staff "mini dashboard" picker.
+  // Each tile shows an icon, label, and a one-line description so staff can
+  // pick the right area at a glance without reading every label.
+  const staffTileStyle = (accent) => ({
+    display: 'flex', alignItems: 'flex-start', gap: '14px',
+    width: '100%', padding: '18px',
+    border: `1px solid ${accent}26`,
+    borderRadius: '12px',
+    backgroundColor: '#fff',
+    color: '#1a1a1a',
+    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+    transition: 'background-color 0.15s, border-color 0.15s, transform 0.15s',
+  });
+  const staffTileHover = (accent) => (e, on) => {
+    e.currentTarget.style.backgroundColor = on ? `${accent}0d` : '#fff';
+    e.currentTarget.style.borderColor = on ? accent : `${accent}26`;
+    e.currentTarget.style.transform = on ? 'translateY(-1px)' : 'translateY(0)';
+  };
+  const staffTileIconWrap = (accent) => ({
+    width: 40, height: 40, flexShrink: 0,
+    borderRadius: 10, backgroundColor: `${accent}14`,
+    color: accent,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  });
+
+  // All staff dashboard areas — same order as the staff-badge dropdown menu
+  // up in the header, so the two surfaces stay in sync. Each tile renders
+  // an icon + label + one-line description.
+  const STAFF_TILES = [
+    { key: 'calendar', label: 'Calendar', desc: 'Edit events and Vendor Days', icon: <CalendarIcon size={20} />, to: '/calendar', accent: '#C8102E' },
+    { key: 'vendors',  label: 'Vendors',  desc: 'Approve, manage, review applications', icon: <Briefcase size={20} />, to: '/staff/vendors', accent: '#C8102E' },
+    { key: 'members',  label: 'Members',  desc: 'Customer list and vote history', icon: <Users size={20} />, to: '/staff/members', accent: '#C8102E' },
+    { key: 'comms',    label: 'Communication', desc: 'Compose a vendor or customer blast', icon: <Mail size={20} />, to: '/staff/comms', accent: '#C8102E' },
+    { key: 'analytics', label: 'Analytics', desc: 'Daily SEO + traffic dashboard', icon: <BarChart3 size={20} />, to: '/staff/analytics', accent: '#C8102E' },
+    { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
+  ];
+
   // ─── Phase 2: where to next? ────────────────────────────
   if (phase === 'picker') {
     // Staff picker takes priority — admins almost always want admin tools,
@@ -384,33 +423,31 @@ function StaffLogin({ onClose, onLogin }) {
       return (
         <div style={overlayStyle} onClick={onClose}>
           <div style={cardStyle} onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
-            <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 20px 0' }}>What would you like to manage?</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button onClick={() => goTo('/calendar')} style={pickerBtn('#C8102E')}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
-              >
-                Calendar <ArrowRight size={16} />
-              </button>
-              <button onClick={() => goTo('/staff/vendors')} style={pickerBtn('#C8102E')}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
-              >
-                Vendors <ArrowRight size={16} />
-              </button>
-              <button onClick={() => goTo('/staff/members')} style={pickerBtn('#C8102E')}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
-              >
-                Member List <ArrowRight size={16} />
-              </button>
-              <button onClick={() => goTo('/#visit-us')} style={pickerBtn('#C8102E')}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff5f6'; e.currentTarget.style.borderColor = '#C8102E'; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#C8102E33'; }}
-              >
-                Business Hours <ArrowRight size={16} />
-              </button>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
+            <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 22px 0' }}>What would you like to manage?</p>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '10px',
+            }}>
+              {STAFF_TILES.map(tile => (
+                <button
+                  key={tile.key}
+                  onClick={() => goTo(tile.to)}
+                  style={staffTileStyle(tile.accent)}
+                  onMouseEnter={e => staffTileHover(tile.accent)(e, true)}
+                  onMouseLeave={e => staffTileHover(tile.accent)(e, false)}
+                >
+                  <div style={staffTileIconWrap(tile.accent)}>{tile.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1a1a1a' }}>{tile.label}</div>
+                      <ArrowRight size={16} style={{ color: tile.accent, flexShrink: 0 }} />
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: 3, lineHeight: 1.35 }}>{tile.desc}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         </div>
