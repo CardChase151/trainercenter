@@ -11274,32 +11274,19 @@ function StaffAnalyticsPage({ isMobile }) {
           </div>
         </Card>
 
-        {/* Hero stats */}
+        {/* ───── Hero: total traffic (all sources, leads) ───── */}
         <Card>
-          {eyebrow(`Performance · ${rangeLabel}`)}
-          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, marginBottom: 14 }}>
-            <HeroStat
-              label="Google clicks"
-              value={gscLoading ? '...' : (gscData?.totals.clicks ?? '—')}
-              sub="People who clicked from Google Search"
-            />
-            <HeroStat
-              label="Google impressions"
-              value={gscLoading ? '...' : (gscData?.totals.impressions?.toLocaleString() ?? '—')}
-              sub="Times your site appeared in Google results"
-            />
-            <HeroStat
-              label="CTR"
-              value={gscLoading ? '...' : (gscData ? `${gscData.totals.ctr.toFixed(2)}%` : '—')}
-              sub="Click-through rate"
-            />
-            <HeroStat
-              label="Avg position"
-              value={gscLoading ? '...' : (gscData ? gscData.totals.position.toFixed(1) : '—')}
-              sub="1=top of page 1. 11+=page 2+"
-            />
-          </div>
+          {eyebrow(`Total traffic · ${rangeLabel}`)}
+          <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+            All-source traffic to your site. Includes Google, Instagram, AI assistants, direct, everything. Comparison is vs previous equal-length window.
+          </p>
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+            <HeroStat
+              label="Total visitors"
+              value={visitsLoading ? '...' : agg.sessions}
+              sub="Unique sessions. Each one is a distinct visit."
+              deltaInfo={pctDelta(agg.sessions, aggPrev.sessions)}
+            />
             <HeroStat
               label="Pageviews"
               value={visitsLoading ? '...' : agg.pageviews}
@@ -11307,22 +11294,15 @@ function StaffAnalyticsPage({ isMobile }) {
               deltaInfo={pctDelta(agg.pageviews, aggPrev.pageviews)}
             />
             <HeroStat
-              label="Unique sessions"
-              value={visitsLoading ? '...' : agg.sessions}
-              sub="Distinct visitor sessions"
-              deltaInfo={pctDelta(agg.sessions, aggPrev.sessions)}
-            />
-            <HeroStat
               label="Pages / session"
               value={visitsLoading ? '...' : avgPagesPerSession.toFixed(1)}
               sub="Higher = stickier. 1.0 means everyone bounced after one page."
             />
           </div>
-          {gscError && <p style={{ marginTop: 12, fontSize: 12, color: '#dc2626' }}>GSC: {gscError}</p>}
           {visitsError && <p style={{ marginTop: 12, fontSize: 12, color: '#dc2626' }}>Visits: {visitsError}</p>}
         </Card>
 
-        {/* Where they came from */}
+        {/* ───── Where they came from (sources breakdown — moved up) ───── */}
         <Card>
           {eyebrow(`Where visitors came from · ${rangeLabel}`)}
           <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
@@ -11356,7 +11336,7 @@ function StaffAnalyticsPage({ isMobile }) {
           )}
         </Card>
 
-        {/* Most-viewed pages */}
+        {/* ───── Most-viewed pages ───── */}
         <Card>
           {eyebrow(`Most-viewed pages · ${rangeLabel}`)}
           <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
@@ -11387,13 +11367,44 @@ function StaffAnalyticsPage({ isMobile }) {
           )}
         </Card>
 
+        {/* ───── Google Search deep-dive (demoted — bottom of dash) ───── */}
+        <Card>
+          {eyebrow(`Google Search performance · ${rangeLabel}`, '#1d4ed8')}
+          <p style={{ fontSize: 13, color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Just the Google Search portion of your traffic. Different from the "Google Search" row above — these are GSC numbers (what Google says happened), with a 2-3 day data lag.
+          </p>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+            <HeroStat
+              label="Google clicks"
+              value={gscLoading ? '...' : (gscData?.totals.clicks ?? '—')}
+              sub="People who clicked from a Google result"
+            />
+            <HeroStat
+              label="Impressions"
+              value={gscLoading ? '...' : (gscData?.totals.impressions?.toLocaleString() ?? '—')}
+              sub="Times your site appeared in results"
+            />
+            <HeroStat
+              label="CTR"
+              value={gscLoading ? '...' : (gscData ? `${gscData.totals.ctr.toFixed(2)}%` : '—')}
+              sub="Clicks ÷ impressions"
+            />
+            <HeroStat
+              label="Avg position"
+              value={gscLoading ? '...' : (gscData ? gscData.totals.position.toFixed(1) : '—')}
+              sub="1=top of page 1. 11+=page 2+"
+            />
+          </div>
+          {gscError && <p style={{ marginTop: 12, fontSize: 12, color: '#dc2626' }}>GSC: {gscError}</p>}
+        </Card>
+
         {/* GSC top queries */}
         <Card>
-          {eyebrow(`What people searched on Google · ${rangeLabel}`)}
+          {eyebrow(`What people searched on Google · ${rangeLabel}`, '#1d4ed8')}
           {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
-            !gscData?.queries?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC query data for this date (or 2-3 day lag still applying).</p> :
+            !gscData?.queries?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC query data for this range (2-3 day lag may still apply).</p> :
             gscData.queries.slice(0, 10).map(q => (
-              <div key={q.query} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8, borderLeft: '3px solid #C8102E' }}>
+              <div key={q.query} style={{ padding: '10px 12px', background: '#fafafa', borderRadius: 6, marginBottom: 8, borderLeft: '3px solid #1d4ed8' }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>"{q.query}"</div>
                 <div style={{ fontSize: 12, color: '#525252', marginTop: 3 }}>
                   {q.clicks} click{q.clicks !== 1 ? 's' : ''} · ranked <strong>#{q.position.toFixed(0)}</strong> · seen {q.impressions} times
@@ -11405,9 +11416,9 @@ function StaffAnalyticsPage({ isMobile }) {
 
         {/* GSC top pages */}
         <Card>
-          {eyebrow(`Top pages from Google · ${rangeLabel}`)}
+          {eyebrow(`Top pages from Google · ${rangeLabel}`, '#1d4ed8')}
           {gscLoading ? <p style={{ fontSize: 13, color: '#888' }}>Loading...</p> :
-            !gscData?.pages?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC page data for this date.</p> :
+            !gscData?.pages?.length ? <p style={{ fontSize: 13, color: '#888', fontStyle: 'italic', margin: 0 }}>No GSC page data for this range.</p> :
             gscData.pages.slice(0, 8).map(p => {
               const path = p.page.replace('https://pokemontrainercenter.com', '') || '/';
               return (
