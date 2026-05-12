@@ -170,7 +170,7 @@ const BLOG_DATA = [
   {
     slug: 'is-tcg-hard',
     title: 'Is Playing the Pokemon TCG Hard?',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'A lot of people collect Pokemon cards but never actually play the game. They see tournament players with custom decks and strategy guides and assume it is too complicated. It is not. The Pokemon TCG is one of the most approachable trading card games out there.' },
       { type: 'h2', text: 'The Basics Are Simple' },

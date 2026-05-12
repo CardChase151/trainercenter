@@ -1,5 +1,5 @@
 {
-  "next": 7,
+  "next": 8,
   "total": 12,
   "blogs": [
     {
@@ -42,7 +42,7 @@
       "num": 7,
       "file": "07-is-tcg-hard.md",
       "title": "Is Playing the Pokemon TCG Hard?",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 8,
