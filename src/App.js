@@ -9967,7 +9967,15 @@ function VendorDetailModal({ vendor, profilesById, onClose }) {
 
   if (!vendor) return null;
   const v = vendor;
-  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  // DATE columns (event_date) come back as 'YYYY-MM-DD' with no timezone.
+  // new Date('2026-05-15') parses as UTC midnight, which rolls back a day
+  // in any Western timezone. Append local noon so the displayed day matches
+  // the actual event date.
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    const safe = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso;
+    return new Date(safe).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
   const approver = v.approved_by ? (profilesById || {})[v.approved_by] : null;
 
   // Split applications into upcoming vs past. Cancelled events count as
