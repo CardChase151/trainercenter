@@ -9836,7 +9836,70 @@ function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
 // One layout used across "Newly applying", "All vendors", etc. Click a card
 // → opens VendorDetailModal with everything the vendor submitted.
 
-function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile }) {
+// ─── EmailProgressDots ────────────────────────────────────
+// Tiny visual bar showing which drip emails this vendor has received for a
+// given event. Seven stages (T-21, T-14, T-7, T-3, T-2, T-1, T-0) lit up
+// red as they fire. Both Track A (signup) and Track B (lineup) collapse
+// into the same dot — if either fired for a stage, it counts as sent.
+// Track label below tells the operator which track the vendor is on now
+// (signup = not-yet-applied, lineup = applied).
+const DRIP_STAGES = [
+  { key: 't21', label: 'T-21' },
+  { key: 't14', label: 'T-14' },
+  { key: 't7',  label: 'T-7'  },
+  { key: 't3',  label: 'T-3'  },
+  { key: 't2',  label: 'T-2'  },
+  { key: 't1',  label: 'T-1'  },
+  { key: 't0',  label: 'T-0'  },
+];
+function EmailProgressDots({ emails = [], eventId, eventLabel }) {
+  // Filter to the event we care about. If no eventId, use everything.
+  const rows = eventId ? emails.filter(e => e.event_id === eventId) : emails;
+  const hits = new Set(); // stage keys that have at least one log row
+  const tracks = new Set(); // 'signup' or 'lineup' seen for this event
+  for (const r of rows) {
+    const [track, stage] = (r.step_key || '').split('.');
+    if (stage) hits.add(stage);
+    if (track) tracks.add(track);
+  }
+  const filledCount = hits.size;
+  const currentTrack = tracks.has('lineup')
+    ? 'Track B · Lineup'
+    : tracks.has('signup')
+      ? 'Track A · Signup'
+      : null;
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{
+        fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: '#666', marginBottom: 4,
+      }}>
+        Drip {eventLabel ? `· ${eventLabel}` : ''} · {filledCount} of {DRIP_STAGES.length}
+        {currentTrack && <span style={{ marginLeft: 6, color: filledCount > 0 ? '#C8102E' : '#9ca3af' }}>{currentTrack}</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+        {DRIP_STAGES.map(s => {
+          const on = hits.has(s.key);
+          return (
+            <div key={s.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: '50%',
+                backgroundColor: on ? '#C8102E' : '#e5e7eb',
+                border: on ? '1px solid #991b1b' : '1px solid #d1d5db',
+              }} />
+              <span style={{ fontSize: '0.55rem', color: on ? '#C8102E' : '#9ca3af', fontWeight: 700 }}>
+                {s.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel }) {
   const v = vendor;
   return (
     <div
@@ -9919,6 +9982,9 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
           <div style={{ marginTop: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
             {decisionLine}
           </div>
+        )}
+        {emails && emails.length > 0 && (
+          <EmailProgressDots emails={emails} eventId={eventId} eventLabel={eventLabel} />
         )}
       </div>
       {actions && (
@@ -11693,6 +11759,7 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [memberVisits, setMemberVisits] = useState([]); // raw rows joined with member + vendor
   const [voteCounts, setVoteCounts] = useState({}); // { event_id: [{category, vendor_id, vendor_name, vote_count}] }
   const [profilesById, setProfilesById] = useState({}); // staff lookup for approver-name display
+  const [emailLog, setEmailLog] = useState({}); // { vendor_id: [{event_id, step_key, sent_at}, ...] }
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   // Vendor detail modal — clicking any vendor card opens this with full info.
@@ -11730,16 +11797,27 @@ function StaffVendorsPage({ isMobile, staff }) {
       // Staff profiles, used to display approver names alongside the
       // approved_by / decided_by uuids on vendors and applications.
       supabase.from('profiles').select('id, name, email'),
-    ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes, profRes]) => {
+      // Drip-email send log — every fired vendor_event_drip step lands here.
+      // Indexed by vendor_id so cards can show the per-event progress dots.
+      supabase.from('vendor_email_log').select('vendor_id, event_id, step_key, sent_at'),
+    ]).then(async ([pendRes, vendRes, evRes, attRes, visitsRes, profRes, emailRes]) => {
       if (pendRes.error) console.error('[StaffVendors] pending', pendRes.error);
       if (vendRes.error) console.error('[StaffVendors] vendors', vendRes.error);
       if (evRes.error)   console.error('[StaffVendors] events', evRes.error);
       if (attRes.error)  console.error('[StaffVendors] attendance', attRes.error);
       if (visitsRes.error) console.error('[StaffVendors] visits', visitsRes.error);
       if (profRes.error) console.error('[StaffVendors] profiles', profRes.error);
+      if (emailRes.error) console.error('[StaffVendors] email_log', emailRes.error);
       setPending(pendRes.data || []);
       setAllVendors(vendRes.data || []);
       setEvents(evRes.data || []);
+      // Group email log by vendor_id so cards can grab their slice with one lookup.
+      const elog = {};
+      (emailRes.data || []).forEach(row => {
+        if (!elog[row.vendor_id]) elog[row.vendor_id] = [];
+        elog[row.vendor_id].push(row);
+      });
+      setEmailLog(elog);
       const profMap = {};
       (profRes.data || []).forEach(p => { profMap[p.id] = p; });
       setProfilesById(profMap);
@@ -11905,11 +11983,11 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -12245,7 +12323,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
-function EventRosterList({ events, attendance, allVendors, profilesById, onDecide, onOpenDetail, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
@@ -12422,7 +12500,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, onDecid
                     {apps.length === 0 ? (
                       <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic', paddingTop: '8px' }}>No applications yet.</div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '6px' }}>
                         {apps.slice().sort((a, b) => (((a.vendor||{}).name||'').localeCompare(((b.vendor||{}).name||''), undefined, { sensitivity: 'base' }))).map(a => {
                           const checkedIn = evAttend[a.vendor_id];
                           const v = a.vendor || {};
@@ -12436,80 +12514,58 @@ function EventRosterList({ events, attendance, allVendors, profilesById, onDecid
                               : null;
                             apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
                           }
+                          // Status badge (mirrors what AllVendorsList uses, scoped to applications)
+                          const appBadge = <ApplicationStatusBadge status={a.status} />;
+                          // Decision line: approval credit, or pending tag, or "Approved · checked in"
+                          let decLine = null;
+                          if (a.status === 'approved') {
+                            const checkedInLabel = checkedIn
+                              ? ` · ${checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}`
+                              : ' · Not checked in';
+                            decLine = (
+                              <span style={{ color: '#16a34a' }}>
+                                {apprLabel || 'Approved'}{checkedInLabel}
+                              </span>
+                            );
+                          } else if (a.status === 'pending') {
+                            decLine = <span style={{ color: '#c2410c' }}>Pending decision</span>;
+                          }
+                          // Per-application actions: approve button when pending + not past.
+                          // Inline time request and vendor note shown via the card's body
+                          // and an extra-info area below.
+                          const actions = (a.status === 'pending' && !isPast)
+                            ? (
+                              <button onClick={() => onDecide(a.id, 'approved', null)} style={{
+                                fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+                                border: 'none', padding: '6px 14px', borderRadius: '6px',
+                                fontWeight: '700', cursor: 'pointer'
+                              }}>Approve</button>
+                            )
+                            : null;
+                          // The application's time request + vendor note are application-scoped
+                          // (not vendor-scoped), so we synthesize a wrapper vendor object that
+                          // carries those onto the card without mutating the source.
+                          const cardVendor = {
+                            ...v,
+                            requested_start_time: a.requested_start_time || v.requested_start_time,
+                            requested_end_time: a.requested_end_time || v.requested_end_time,
+                            // Use the vendor's own bio if present, otherwise fall back to the
+                            // per-application note so staff can see it inline.
+                            bio: v.bio || a.vendor_note || null,
+                          };
                           return (
-                            <div
+                            <VendorRichCard
                               key={a.id}
+                              vendor={cardVendor}
+                              isMobile={isMobile}
+                              emails={emailLog[a.vendor_id] || []}
+                              eventId={ev.id}
+                              eventLabel={null /* event is already implied by the parent expandable section */}
                               onClick={() => onOpenDetail && onOpenDetail(v)}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '8px 12px', backgroundColor: '#fafafa', borderRadius: '8px',
-                                fontSize: '0.85rem', flexWrap: 'wrap', gap: '8px',
-                                cursor: onOpenDetail ? 'pointer' : 'default',
-                                transition: 'background 0.15s',
-                              }}
-                              onMouseEnter={e => { if (onOpenDetail) e.currentTarget.style.background = '#f4f4f5'; }}
-                              onMouseLeave={e => { if (onOpenDetail) e.currentTarget.style.background = '#fafafa'; }}
-                            >
-                              <div>
-                                <strong>{v.name}</strong>
-                                {v.ig_handle && <span style={{ color: '#888' }}> · @{v.ig_handle}</span>}
-                                {(a.requested_start_time || a.requested_end_time) && (
-                                  <span style={{
-                                    marginLeft: '8px',
-                                    display: 'inline-flex', alignItems: 'center', gap: '3px',
-                                    fontSize: '0.7rem', fontWeight: '700',
-                                    color: '#15803d', backgroundColor: '#f0fdf4',
-                                    padding: '2px 8px', borderRadius: '999px',
-                                  }}>
-                                    <Clock size={10} />
-                                    {formatTime12h(a.requested_start_time) || '?'}–{formatTime12h(a.requested_end_time) || '?'}
-                                  </span>
-                                )}
-                                {a.vendor_note && (
-                                  <div style={{
-                                    fontSize: '0.78rem', color: '#444', marginTop: '4px',
-                                    fontStyle: 'italic', maxWidth: '480px',
-                                  }}>
-                                    "{a.vendor_note}"
-                                  </div>
-                                )}
-                                {apprLabel && (
-                                  <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
-                                    {apprLabel}
-                                  </div>
-                                )}
-                              </div>
-                              <div
-                                onClick={e => e.stopPropagation()}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                              >
-                                <ApplicationStatusBadge status={a.status} />
-                                {a.status === 'approved' && (
-                                  checkedIn ? (
-                                    <span style={{
-                                      fontSize: '0.7rem', backgroundColor: '#f0fdf4', color: '#15803d',
-                                      padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
-                                    }}>
-                                      {checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}
-                                    </span>
-                                  ) : (
-                                    <span style={{
-                                      fontSize: '0.7rem', backgroundColor: '#f3f4f6', color: '#6b7280',
-                                      padding: '2px 8px', borderRadius: '20px', fontWeight: '700'
-                                    }}>
-                                      Not checked in
-                                    </span>
-                                  )
-                                )}
-                                {a.status === 'pending' && !isPast && (
-                                  <button onClick={() => onDecide(a.id, 'approved', null)} style={{
-                                    fontSize: '0.75rem', backgroundColor: '#16a34a', color: '#fff',
-                                    border: 'none', padding: '4px 10px', borderRadius: '6px',
-                                    fontWeight: '700', cursor: 'pointer'
-                                  }}>Approve</button>
-                                )}
-                              </div>
-                            </div>
+                              statusBadge={appBadge}
+                              decisionLine={decLine}
+                              actions={actions}
+                            />
                           );
                         })}
                       </div>
@@ -13076,9 +13132,21 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
   );
 }
 
-function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, isMobile }) {
+function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], onStatusChange, onOpenDetail, isMobile }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
+
+  // Pick the soonest upcoming non-cancelled Vendor Day event. Email drip
+  // progress on each card is shown for that event so staff sees "where is
+  // this vendor at in the current campaign?" at a glance.
+  const todayStr = todayISO();
+  const nextEvent = events
+    .filter(ev => ev.event_date >= todayStr && !ev.cancelled)
+    .slice()
+    .sort((a, b) => a.event_date.localeCompare(b.event_date))[0] || null;
+  const nextEventLabel = nextEvent
+    ? `${nextEvent.title || 'Vendor Day'} · ${new Date(nextEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    : null;
 
   const approverLabel = (v) => {
     if (v.status !== 'approved' || !v.approved_by) return null;
@@ -13187,6 +13255,9 @@ function AllVendorsList({ vendors, profilesById, onStatusChange, onOpenDetail, i
             key={v.id}
             vendor={v}
             isMobile={isMobile}
+            emails={emailLog[v.id] || []}
+            eventId={nextEvent?.id}
+            eventLabel={nextEventLabel}
             onClick={() => onOpenDetail && onOpenDetail(v)}
             statusBadge={badgeFor(v.status)}
             decisionLine={decisionFor(v)}

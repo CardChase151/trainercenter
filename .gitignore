@@ -33,6 +33,14 @@ yarn-error.log*
 /qr
 /seo-review
 
+# Promo / reel exports — source lives in ~/Apps/ig/tc-animations/
+/promos
+
+# Local-only marketing strategy / goal docs
+marketing_goals.md
+staff_daily.md
+staff_daily.pdf
+
 # Supabase CLI build artifacts
 /supabase/.temp
 
