@@ -13414,9 +13414,9 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
   { label: 'Home', to: '/' },
   {
     // Guests becomes "Member" once they log in as a member — same dropdown,
-    // just acknowledges who they are. Cyan label when logged in.
+    // just acknowledges who they are. Orange label when logged in.
     label: isMember ? 'Member' : 'Guests',
-    parentColor: isMember ? '#0891b2' : undefined,
+    parentColor: isMember ? '#ea580c' : undefined,
     children: [
       { label: 'Calendar', to: '/calendar' },
       { label: 'Visit Us', to: '/#visit-us' },
@@ -13455,7 +13455,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
     // Staff is invisible to the general public — only the Log in option
     // shows. Once logged in as staff, the full management surface unfolds.
     label: 'Staff',
-    parentColor: isStaff ? '#C8102E' : undefined,  // red when logged in as staff
+    parentColor: isStaff ? '#1d4ed8' : undefined,  // blue when logged in as staff
     children: isStaff
       ? [
           { label: 'Edit Calendar', to: '/calendar' },
@@ -13811,7 +13811,11 @@ function App() {
   const pathOnly = (to) => (to || '').split('?')[0].split('#')[0];
   const isParentActive = (children) =>
     children.some(c => {
-      if (!c.to) return false;  // skip action items (Log in / Log out) — no route to match
+      if (!c.to) return false;          // skip action items (Log in / Log out)
+      if (c.to.includes('#')) return false;  // skip hash anchors — they live on the home page,
+                                              // not a separate route. Otherwise every dropdown
+                                              // containing "Visit Us" or "Business Hours" would
+                                              // light up whenever the user is on /.
       const p = pathOnly(c.to);
       return location.pathname === p || location.pathname.startsWith(p + '/');
     });
