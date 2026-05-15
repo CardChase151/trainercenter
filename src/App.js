@@ -6271,127 +6271,14 @@ function photoUrl(path) {
 // Standard email + password signup or login. Uses Supabase auth with email
 // confirmation disabled in project settings, so signUp returns a session
 // immediately. Toggle between Create account / Log in modes.
-function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMode = 'login' }) {
-  const [mode, setMode] = useState(defaultMode); // 'signup' | 'login'
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPw, setShowPw] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email.trim() || !password) return;
-    setSubmitting(true);
-    setError('');
-    const cleanEmail = email.trim().toLowerCase();
-    let result;
-    if (mode === 'signup') {
-      result = await supabase.auth.signUp({ email: cleanEmail, password });
-    } else {
-      result = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-    }
-    setSubmitting(false);
-    if (result.error) {
-      setError(result.error.message);
-      return;
-    }
-    if (!result.data.session) {
-      // signUp without a session usually means the email already exists.
-      setError('Email already has an account. Try logging in instead.');
-      setMode('login');
-      return;
-    }
-    onSuccess({ isNew: mode === 'signup', user: result.data.user });
-  };
-
-  const accentColor = accent === 'green' ? '#16a34a' : '#C8102E';
-  const inputCss = {
-    width: '100%', padding: '12px 14px', fontSize: '1rem',
-    border: '1px solid #ddd', borderRadius: '10px',
-    marginTop: '6px', marginBottom: '14px', boxSizing: 'border-box'
-  };
-  const labelCss = { fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        <button type="button" onClick={() => { setMode('signup'); setError(''); }} style={{
-          flex: 1, padding: '10px', borderRadius: '8px',
-          backgroundColor: mode === 'signup' ? accentColor : '#fff',
-          color: mode === 'signup' ? '#fff' : '#666',
-          border: mode === 'signup' ? 'none' : '1px solid #ddd',
-          fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer'
-        }}>Create account</button>
-        <button type="button" onClick={() => { setMode('login'); setError(''); }} style={{
-          flex: 1, padding: '10px', borderRadius: '8px',
-          backgroundColor: mode === 'login' ? accentColor : '#fff',
-          color: mode === 'login' ? '#fff' : '#666',
-          border: mode === 'login' ? 'none' : '1px solid #ddd',
-          fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer'
-        }}>Log in</button>
-      </div>
-
-      <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 18px 0' }}>
-        {mode === 'signup' ? signupCopy : loginCopy}
-      </p>
-
-      <label style={labelCss}>Email</label>
-      <input type="email" required placeholder="you@example.com"
-        value={email} onChange={e => setEmail(e.target.value)} style={inputCss} />
-
-      <label style={labelCss}>Password</label>
-      <div style={{ position: 'relative', marginBottom: '18px' }}>
-        <input type={showPw ? 'text' : 'password'} required
-          placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'}
-          minLength={6}
-          value={password} onChange={e => setPassword(e.target.value)}
-          style={{ ...inputCss, marginBottom: 0, paddingRight: '70px' }}
-        />
-        <button type="button" onClick={() => setShowPw(s => !s)} style={{
-          position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)',
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#888', fontSize: '0.8rem', fontWeight: '600', padding: '4px 10px'
-        }}>{showPw ? 'Hide' : 'Show'}</button>
-      </div>
-
-      {error && (
-        <div style={{
-          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-          borderRadius: '8px', padding: '10px 12px', marginBottom: '14px',
-          fontSize: '0.85rem', color: '#dc2626',
-          display: 'flex', alignItems: 'center', gap: '8px'
-        }}>
-          <AlertCircle size={16} />
-          <span style={{ flex: 1 }}>{error}</span>
-        </div>
-      )}
-
-      <button type="submit" disabled={submitting} style={{
-        width: '100%', padding: '14px',
-        backgroundColor: submitting ? '#999' : accentColor, color: '#fff',
-        border: 'none', borderRadius: '10px',
-        fontSize: '1rem', fontWeight: '700',
-        cursor: submitting ? 'wait' : 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-      }}>
-        {submitting
-          ? <><Loader2 size={18} className="spin" /> {mode === 'signup' ? 'Creating account...' : 'Logging in...'}</>
-          : <>{mode === 'signup' ? 'Create account' : 'Log in'} <ArrowRight size={18} /></>
-        }
-      </button>
-    </form>
-  );
-}
-
 // ─── Reminder Signup Modal ──────────────────────────────
 // Two-step signup that doubles as TC member registration:
 //   1. Pick which event categories to be reminded about (checkbox grid
 //      driven by CATEGORIES so the picker stays in sync if categories
 //      change — "consultation" is excluded since it's a 1:1 booking, not
 //      a blast-worthy event).
-//   2. Email + password account (reuses PasswordAuthCard).
+//   2. Email + password account — opened via the unified AuthModal
+//      (intent='member') after the user clicks Save on the category step.
 // On signup success, calls the subscribe_to_reminders RPC which creates the
 // members row and upserts the marketing_contacts row with the picked
 // subscriptions object. The localStorage flag that hides the wiggle banner
@@ -6399,9 +6286,9 @@ function PasswordAuthCard({ accent, signupCopy, loginCopy, onSuccess, defaultMod
 const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
 
 function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
-  const { user, reminderSubs, refreshReminders } = useAuth();
+  const { user, reminderSubs, refreshReminders, openAuthModal } = useAuth();
   const isLoggedIn = !!user;
-  const [step, setStep] = useState('categories'); // 'categories' | 'auth' | 'saving' | 'success' | 'error'
+  const [step, setStep] = useState('categories'); // 'categories' | 'saving' | 'success' | 'error'
   // Pre-fill from the user's saved subs when re-engaging, otherwise default
   // all categories on so first-time users don't have to tick every one.
   const [selectedCats, setSelectedCats] = useState(() => {
@@ -6476,8 +6363,20 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
   };
   const handleContinueFromCategories = () => {
     if (selectedCats.size === 0) return;
-    if (isLoggedIn) persistSubscriptions();
-    else setStep('auth');
+    if (isLoggedIn) {
+      persistSubscriptions();
+      return;
+    }
+    // Logged out: open the unified AuthModal layered above this modal.
+    // After successful signup/login, handleAuthSuccess either pre-fills
+    // the picker from existing subs (returning user) or saves what they
+    // just picked (new account). ReminderSignupModal stays open behind
+    // so closing AuthModal returns the user to the categories step.
+    openAuthModal({
+      defaultMode: 'signup',
+      intent: 'member',
+      onSuccess: handleAuthSuccess,
+    });
   };
 
   const overlayStyle = {
@@ -6625,33 +6524,6 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
                   Don't show this bell anymore
                 </button>
               )}
-            </>
-          )}
-
-          {step === 'auth' && (
-            <>
-              <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6', margin: '0 0 16px 0' }}>
-                Make a free TC account with just an email and password. We'll save your reminder picks and let you update them any time.
-              </p>
-              <PasswordAuthCard
-                accent="red"
-                defaultMode="signup"
-                signupCopy="New here? Pick an email and password — we'll create your account and save your reminder picks."
-                loginCopy="Already have an account? Log in and we'll save these picks to it."
-                onSuccess={handleAuthSuccess}
-              />
-              <button
-                type="button"
-                onClick={() => setStep('categories')}
-                style={{
-                  marginTop: '8px',
-                  background: 'none', border: 'none', color: '#666',
-                  fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
-                  padding: '6px 0',
-                }}
-              >
-                ← Back to categories
-              </button>
             </>
           )}
 
@@ -14307,22 +14179,7 @@ function App() {
             <button
               type="button"
               className="tc-wiggle"
-              onClick={() => {
-                // Bell flow: logged-in users go straight to reminder prefs.
-                // Logged-out users get the unified AuthModal first
-                // (intent='member'), and we open the prefs modal once the
-                // new session is in place. Keeps "create account" in one
-                // place across the app.
-                if (staffUser) {
-                  setShowReminderModal(true);
-                } else {
-                  setAuthConfig({
-                    defaultMode: 'signup',
-                    intent: 'member',
-                    onSuccess: () => setShowReminderModal(true),
-                  });
-                }
-              }}
+              onClick={() => setShowReminderModal(true)}
               title="Sign up for reminders"
               aria-label="Sign up for reminders"
               style={{
