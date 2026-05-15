@@ -13410,67 +13410,76 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
 // Vendor = green, Staff = red). Inside each bucket, the last item is
 // always Log in (logged out) or Log out (logged in) — per-role auth
 // surfaced where users expect it, no separate lock badge.
-const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, onLogin, onLogout }) => [
-  { label: 'Home', to: '/' },
-  {
-    // Guests becomes "Member" once they log in as a member — same dropdown,
-    // just acknowledges who they are. Orange label when logged in.
-    label: isMember ? 'Member' : 'Guests',
-    parentColor: isMember ? '#ea580c' : undefined,
-    children: [
-      { label: 'Calendar', to: '/calendar' },
-      { label: 'Visit Us', to: '/#visit-us' },
-      { label: 'Buy / Sell', to: '/buy-sell' },
-      { label: 'Consultation', to: '/consultation' },
-      { label: 'Grading', to: '/grading' },
-      { label: 'Blog', to: '/blog' },
-      // Logged-in users with active reminders see "My Reminders" in red so
-      // they can spot the preferences shortcut at a glance.
-      hasReminders
-        ? { label: 'My Reminders', to: '/reminders', accent: '#C8102E' }
-        : { label: 'Reminders', to: '/reminders' },
-      // Check in — only relevant once you're a member (i.e. you can check
-      // in to the trade nights). Points at the existing /guest/review flow
-      // which is the member check-in + voting state machine.
-      ...(isMember ? [{ label: 'Check in', to: '/guest/review' }] : []),
-      isLoggedIn
-        ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
-        : { label: 'Log in', action: onLogin, accent: '#C8102E' },
-    ],
-  },
-  {
-    label: 'Vendors',
-    parentColor: isVendor ? '#16a34a' : undefined,  // green when logged in as vendor
-    children: [
-      { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
-      { label: 'Apply', to: '/vendors/apply?mode=signup' },
-      { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
-      { label: 'Line ups', to: '/vendor-day' },
-      isLoggedIn
-        ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
-        : { label: 'Log in', action: onLogin, accent: '#C8102E' },
-    ],
-  },
-  {
-    // Staff is invisible to the general public — only the Log in option
-    // shows. Once logged in as staff, the full management surface unfolds.
-    label: 'Staff',
-    parentColor: isStaff ? '#1d4ed8' : undefined,  // blue when logged in as staff
-    children: isStaff
-      ? [
-          { label: 'Edit Calendar', to: '/calendar' },
-          { label: 'Manage Vendors', to: '/staff/vendors' },
-          { label: 'Manage Members', to: '/staff/members' },
-          { label: 'Communication', to: '/staff/comms' },
-          { label: 'Analytics', to: '/staff/analytics' },
-          { label: 'Business Hours', to: '/#visit-us' },
-          { label: 'Log out', action: onLogout, accent: '#C8102E' },
-        ]
-      : [
-          { label: 'Log in', action: onLogin, accent: '#C8102E' },
-        ],
-  },
-];
+const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, onLogin, onLogout }) => {
+  // Reminders / My Reminders lives inside the dropdown that matches the
+  // user's role: Staff > Vendor > Member > (logged-out → Guests). No red
+  // accent — it just reads in the normal child color until you actually
+  // navigate to /reminders, at which point the active-state red kicks in.
+  const reminderItem = hasReminders
+    ? { label: 'My Reminders', to: '/reminders' }
+    : { label: 'Reminders', to: '/reminders' };
+  const remindersIn = isStaff ? 'staff' : isVendor ? 'vendor' : 'guest';
+
+  return [
+    { label: 'Home', to: '/' },
+    {
+      // Guests becomes "Member" once they log in as a member — same dropdown,
+      // just acknowledges who they are. Orange label when logged in.
+      label: isMember ? 'Member' : 'Guests',
+      parentColor: isMember ? '#ea580c' : undefined,
+      children: [
+        { label: 'Calendar', to: '/calendar' },
+        { label: 'Visit Us', to: '/#visit-us' },
+        { label: 'Buy / Sell', to: '/buy-sell' },
+        { label: 'Consultation', to: '/consultation' },
+        { label: 'Grading', to: '/grading' },
+        { label: 'Blog', to: '/blog' },
+        ...(remindersIn === 'guest' ? [reminderItem] : []),
+        // Check in — only relevant once you're a member (i.e. you can check
+        // in to the trade nights). Points at the existing /guest/review flow
+        // which is the member check-in + voting state machine.
+        ...(isMember ? [{ label: 'Check in', to: '/guest/review' }] : []),
+        isLoggedIn
+          ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
+          : { label: 'Log in', action: onLogin, accent: '#C8102E' },
+      ],
+    },
+    {
+      label: 'Vendors',
+      parentColor: isVendor ? '#16a34a' : undefined,  // green when logged in as vendor
+      children: [
+        { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
+        { label: 'Apply', to: '/vendors/apply?mode=signup' },
+        { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
+        { label: 'Line ups', to: '/vendor-day' },
+        ...(remindersIn === 'vendor' ? [reminderItem] : []),
+        isLoggedIn
+          ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
+          : { label: 'Log in', action: onLogin, accent: '#C8102E' },
+      ],
+    },
+    {
+      // Staff is invisible to the general public — only the Log in option
+      // shows. Once logged in as staff, the full management surface unfolds.
+      label: 'Staff',
+      parentColor: isStaff ? '#1d4ed8' : undefined,  // blue when logged in as staff
+      children: isStaff
+        ? [
+            { label: 'Edit Calendar', to: '/calendar' },
+            { label: 'Manage Vendors', to: '/staff/vendors' },
+            { label: 'Manage Members', to: '/staff/members' },
+            { label: 'Communication', to: '/staff/comms' },
+            { label: 'Analytics', to: '/staff/analytics' },
+            { label: 'Business Hours', to: '/#visit-us' },
+            ...(remindersIn === 'staff' ? [reminderItem] : []),
+            { label: 'Log out', action: onLogout, accent: '#C8102E' },
+          ]
+        : [
+            { label: 'Log in', action: onLogin, accent: '#C8102E' },
+          ],
+    },
+  ];
+};
 
 // ─── Unsubscribe page ─────────────────────────────────────
 // Public, token-based. Loaded from links in marketing emails:
