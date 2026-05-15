@@ -6734,20 +6734,50 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
 // where the onboarding form fires for first-time vendors.
 // Defaults to login mode (returning vendors are the majority). Pass
 // ?mode=signup to open in signup mode (used by the Apply / Sign Up card).
+// /vendors/apply is a gate. Logged-in vendors / staff bounce straight to
+// the dashboard. Logged-out visitors get the unified AuthModal opened
+// automatically with intent='vendor' (and signup mode if ?mode=signup),
+// so signup or login both happen inside the same component as every
+// other "Log in" surface — no more inline PasswordAuthCard duplication.
 function VendorApplyPage({ isMobile }) {
   const navigate = useNavigateInternal();
+  const auth = useAuth();
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
   const isSignupMode = initialMode === 'signup';
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (auth.isLoading) return;
+    // Already logged in → go straight to the dashboard. The dashboard
+    // routes the user to the right next step (onboarding form for new
+    // vendors, full dashboard for approved ones).
+    if (auth.session) {
+      navigate('/vendors/dashboard');
+      return;
+    }
+    // Logged out — pop the AuthModal once. The ref guard keeps StrictMode's
+    // double effect from opening it twice.
+    if (openedRef.current) return;
+    openedRef.current = true;
+    auth.openAuthModal({
+      defaultMode: initialMode,
+      intent: 'vendor',
+      onSuccess: () => navigate('/vendors/dashboard'),
+    });
+  }, [auth, auth.isLoading, auth.session, initialMode, navigate]);
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title={isSignupMode ? 'Apply to become a partner' : 'Vendor Login'} subtitle={isSignupMode ? 'One-time signup. Chef will review and approve you.' : 'Log back in or create an account'} />
+        <SectionHeader
+          title={isSignupMode ? 'Apply to partner with Trainer Center' : 'Vendor Login'}
+          subtitle={isSignupMode ? "Quick signup — Chef will review and approve you." : 'Log back in or create an account'}
+        />
 
-        {/* Anti-duplicate-account banner. We've had returning vendors create
-            second logins because they forgot which email they used. This
-            banner sits above the auth card to nudge them to the Log In tab
-            before they sign up again. Only shown in signup mode. */}
+        {/* Anti-duplicate-account banner. Returning vendors who forget which
+            email they used will sometimes try to sign up again instead of
+            logging in. Nudge them to switch tabs inside the modal. */}
         {isSignupMode && (
           <div style={{
             backgroundColor: '#fef9e6',
@@ -6770,26 +6800,38 @@ function VendorApplyPage({ isMobile }) {
                 marginBottom: '4px',
               }}>Already a partner?</div>
               <div style={{ fontSize: '13px', lineHeight: 1.55, color: '#1a1a1a' }}>
-                Don't create a new account. Click the <strong>Log in</strong> tab below to sign in instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Text Chef at (714) 951-9100.
+                Don't create a new account. Tap <strong>Log in</strong> at the top of the popup instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Text Chef at (714) 951-9100.
               </div>
             </div>
           </div>
         )}
 
-        <div style={{
-          backgroundColor: '#ffffff',
-          borderRadius: '16px',
-          border: '1px solid #eee',
-          padding: isMobile ? '24px 20px' : '36px',
-        }}>
-          <PasswordAuthCard
-            accent="red"
-            defaultMode={initialMode}
-            signupCopy="New here? Create your vendor account in seconds. Right after, you'll fill out a one-time application Chef will review."
-            loginCopy="Already a partner? Log back in to apply for upcoming Vendor Days."
-            onSuccess={() => navigate('/vendors/dashboard')}
-          />
-        </div>
+        {/* Fallback CTA if the user closed the modal without signing in.
+            One tap re-opens it with the same config. */}
+        {!auth.session && !auth.isLoading && (
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
+            padding: isMobile ? '24px 20px' : '36px', textAlign: 'center',
+          }}>
+            <p style={{ fontSize: '0.95rem', color: '#444', margin: '0 0 18px 0', lineHeight: 1.6 }}>
+              Continue the vendor signup — we'll get you set up and Chef will review.
+            </p>
+            <button
+              onClick={() => auth.openAuthModal({
+                defaultMode: initialMode,
+                intent: 'vendor',
+                onSuccess: () => navigate('/vendors/dashboard'),
+              })}
+              style={{
+                backgroundColor: '#C8102E', color: '#fff', border: 'none',
+                padding: '14px 28px', borderRadius: 10,
+                fontSize: '0.95rem', fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              {isSignupMode ? 'Continue signup' : 'Log in'}
+            </button>
+          </div>
+        )}
       </div>
     </PageWrapper>
   );
@@ -14186,6 +14228,10 @@ function App() {
     refreshReminders,
     signOut: handleLogout,
     refresh: refreshAuthRoles,
+    // Lets any descendant trigger the AuthModal with the right shape.
+    // Pages call e.g. openAuthModal({ defaultMode: 'signup', intent: 'vendor',
+    // onSuccess: (result) => navigate('/vendors/dashboard') })
+    openAuthModal: setAuthConfig,
   };
 
   return (
