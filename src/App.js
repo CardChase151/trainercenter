@@ -8991,24 +8991,53 @@ function VendorReviewPage({ isMobile }) {
   );
 }
 
-// Stage 1: password signup gate for guests (members in DB).
-// "Guest" is the public-facing term for someone signing up to attend a
-// Vendor Day and review the vendors. The DB still uses `members`.
+// Stage 1: guest auth gate. Pops the unified AuthModal with intent='member'
+// so signup/login happens in the same component every other surface uses.
+// "Guest" is the public-facing term for someone reviewing vendors at a
+// Vendor Day. The DB still calls them `members`.
 function ReviewSignupGate({ isMobile }) {
+  const auth = useAuth();
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (auth.isLoading || auth.session) return;
+    if (openedRef.current) return;
+    openedRef.current = true;
+    auth.openAuthModal({
+      defaultMode: 'signup',
+      intent: 'member',
+      onSuccess: () => { /* parent VendorReviewPage detects new session and advances */ },
+    });
+  }, [auth, auth.isLoading, auth.session]);
+
   return (
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
-        <SectionHeader title="Sign in as a Guest" subtitle="Create a quick account so you can review vendors at today's Vendor Day" />
+        <SectionHeader
+          title="Sign in as a Guest"
+          subtitle="Create a quick account so you can review vendors at today's Vendor Day"
+        />
+        {/* Fallback CTA if the user dismissed the modal. One tap reopens. */}
         <div style={{
           backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #eee',
-          padding: isMobile ? '24px 20px' : '32px',
+          padding: isMobile ? '24px 20px' : '32px', textAlign: 'center',
         }}>
-          <PasswordAuthCard
-            accent="green"
-            signupCopy="New here? Make a quick guest account so we can record your votes. Voting opens at the shop during today's Vendor Day."
-            loginCopy="Coming back to vote? Log in with the email and password you used before."
-            onSuccess={() => { /* parent VendorReviewPage detects new session and advances */ }}
-          />
+          <p style={{ fontSize: '0.95rem', color: '#444', margin: '0 0 18px 0', lineHeight: 1.6 }}>
+            Quick signup so we can record your votes. Voting opens at the shop during today's Vendor Day.
+          </p>
+          <button
+            onClick={() => auth.openAuthModal({
+              defaultMode: 'signup',
+              intent: 'member',
+            })}
+            style={{
+              backgroundColor: '#16a34a', color: '#fff', border: 'none',
+              padding: '14px 28px', borderRadius: 10,
+              fontSize: '0.95rem', fontWeight: 800, cursor: 'pointer',
+            }}
+          >
+            Continue
+          </button>
         </div>
       </div>
     </PageWrapper>
@@ -14278,7 +14307,22 @@ function App() {
             <button
               type="button"
               className="tc-wiggle"
-              onClick={() => setShowReminderModal(true)}
+              onClick={() => {
+                // Bell flow: logged-in users go straight to reminder prefs.
+                // Logged-out users get the unified AuthModal first
+                // (intent='member'), and we open the prefs modal once the
+                // new session is in place. Keeps "create account" in one
+                // place across the app.
+                if (staffUser) {
+                  setShowReminderModal(true);
+                } else {
+                  setAuthConfig({
+                    defaultMode: 'signup',
+                    intent: 'member',
+                    onSuccess: () => setShowReminderModal(true),
+                  });
+                }
+              }}
               title="Sign up for reminders"
               aria-label="Sign up for reminders"
               style={{
