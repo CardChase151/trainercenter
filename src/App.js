@@ -14125,7 +14125,12 @@ function App() {
                         const isAction = typeof child.action === 'function';
                         const restingColor = child.accent || '#1a1a1a';
                         const childWeight = child.accent ? '800' : '600';
-                        const childActive = !isAction && location.pathname === pathOnly(child.to || '');
+                        // Hash anchors (e.g. /#visit-us) shouldn't claim
+                        // "active" on /. Same rule as isParentActive.
+                        const childActive = !isAction
+                          && !!child.to
+                          && !child.to.includes('#')
+                          && location.pathname === pathOnly(child.to);
                         const childStyle = {
                           color: childActive ? '#C8102E' : restingColor,
                           textDecoration: 'none',
@@ -14283,7 +14288,12 @@ function App() {
                         const isAction = typeof child.action === 'function';
                         const restingColor = child.accent || '#555';
                         const childWeight = child.accent ? '800' : '600';
-                        const childActive = !isAction && location.pathname === pathOnly(child.to || '');
+                        // Hash anchors (e.g. /#visit-us) shouldn't claim
+                        // "active" on /. Same rule as isParentActive.
+                        const childActive = !isAction
+                          && !!child.to
+                          && !child.to.includes('#')
+                          && location.pathname === pathOnly(child.to);
                         const baseStyle = {
                           display: 'block',
                           color: childActive ? '#C8102E' : restingColor,
