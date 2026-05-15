@@ -9934,10 +9934,71 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
 }
 
 function VendorDetailModal({ vendor, profilesById, onClose }) {
+  // Pull every vendor_application this vendor has on file so staff can see
+  // attendance history + upcoming commitments inline. Hooks must run before
+  // the early-return below to keep React happy.
+  const [apps, setApps] = useState([]);
+  const [appsLoading, setAppsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!vendor?.id) {
+      setApps([]);
+      setAppsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAppsLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from('vendor_applications')
+        .select('id, status, applied_at, decided_at, requested_start_time, requested_end_time, event:events(id, title, event_date, cancelled)')
+        .eq('vendor_id', vendor.id);
+      if (cancelled) return;
+      if (error) {
+        console.warn('[VendorDetailModal] applications fetch failed', error);
+        setApps([]);
+      } else {
+        setApps(data || []);
+      }
+      setAppsLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [vendor?.id]);
+
   if (!vendor) return null;
   const v = vendor;
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const approver = v.approved_by ? (profilesById || {})[v.approved_by] : null;
+
+  // Split applications into upcoming vs past. Cancelled events count as
+  // neither (they're noise). "Past attended" = approved + event already passed.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const liveApps = apps.filter(a => a.event && !a.event.cancelled);
+  const upcoming = liveApps
+    .filter(a => a.event.event_date >= todayISO)
+    .sort((a, b) => (a.event.event_date || '').localeCompare(b.event.event_date || ''));
+  const past = liveApps
+    .filter(a => a.event.event_date < todayISO)
+    .sort((a, b) => (b.event.event_date || '').localeCompare(a.event.event_date || ''));
+  const pastAttended = past.filter(a => a.status === 'approved');
+
+  const appStatusBadge = (status) => {
+    const map = {
+      approved: { bg: '#dcfce7', fg: '#15803d', label: 'Approved' },
+      pending:  { bg: '#fef3c7', fg: '#92400e', label: 'Pending' },
+      rejected: { bg: '#fee2e2', fg: '#991b1b', label: 'Rejected' },
+      withdrawn:{ bg: '#f4f4f5', fg: '#3f3f46', label: 'Withdrawn' },
+    };
+    const m = map[status] || { bg: '#f4f4f5', fg: '#3f3f46', label: status || 'Unknown' };
+    return (
+      <span style={{
+        fontSize: '0.65rem', fontWeight: 700,
+        color: m.fg, backgroundColor: m.bg,
+        padding: '2px 8px', borderRadius: '999px',
+        textTransform: 'uppercase', letterSpacing: '0.4px',
+      }}>{m.label}</span>
+    );
+  };
 
   const statusColor = {
     approved: { bg: '#f0fdf4', fg: '#15803d', border: '#bbf7d0' },
@@ -10078,6 +10139,71 @@ function VendorDetailModal({ vendor, profilesById, onClose }) {
             </div>
           </DetailSection>
         )}
+
+        <DetailSection label="Event history">
+          {appsLoading ? (
+            <div style={{ color: '#888' }}>Loading…</div>
+          ) : (
+            <>
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: '14px',
+                marginBottom: (upcoming.length || past.length) ? '12px' : '0',
+                fontSize: '0.85rem'
+              }}>
+                <div>
+                  <span style={{ color: '#888' }}>Past attended: </span>
+                  <strong>{pastAttended.length}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#888' }}>Upcoming: </span>
+                  <strong>{upcoming.length}</strong>
+                </div>
+              </div>
+
+              {upcoming.length > 0 && (
+                <div style={{ marginBottom: past.length ? '12px' : '0' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Upcoming</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {upcoming.map(a => (
+                      <div key={a.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+                        padding: '8px 10px', backgroundColor: '#fafafa', borderRadius: '8px',
+                        fontSize: '0.85rem',
+                      }}>
+                        <span style={{ fontWeight: 600 }}>{a.event.title || 'Vendor Day'}</span>
+                        <span style={{ color: '#666' }}>· {fmtDate(a.event.event_date)}</span>
+                        {appStatusBadge(a.status)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {past.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.72rem', color: '#888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Past</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {past.map(a => (
+                      <div key={a.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+                        padding: '8px 10px', backgroundColor: '#fafafa', borderRadius: '8px',
+                        fontSize: '0.85rem',
+                      }}>
+                        <span style={{ fontWeight: 600 }}>{a.event.title || 'Vendor Day'}</span>
+                        <span style={{ color: '#666' }}>· {fmtDate(a.event.event_date)}</span>
+                        {appStatusBadge(a.status)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {upcoming.length === 0 && past.length === 0 && (
+                <div style={{ color: '#888', fontSize: '0.85rem' }}>No event history yet.</div>
+              )}
+            </>
+          )}
+        </DetailSection>
       </div>
     </div>
   );
