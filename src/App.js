@@ -13542,13 +13542,13 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
 
   const items = [
     { label: 'Home', to: '/' },
+    { label: 'Calendar', to: '/calendar' },
     {
       // Guests becomes "Member" once they log in as a member — same dropdown,
       // just acknowledges who they are. Orange label when logged in.
       label: isMember ? 'Member' : 'Guests',
       parentColor: isMember ? '#ea580c' : undefined,
       children: [
-        { label: 'Calendar', to: '/calendar' },
         { label: 'Visit Us', to: '/#visit-us' },
         { label: 'Buy / Sell', to: '/buy-sell' },
         { label: 'Consultation', to: '/consultation' },
