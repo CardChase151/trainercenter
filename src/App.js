@@ -14207,7 +14207,7 @@ function App() {
             </button>
           )}
           {/* Desktop nav links */}
-          {!isMobile && NAV_ITEMS.map(item => {
+          {!isMobile && NAV_ITEMS.map((item, idx) => {
             // Dropdown parent — click toggles, child click navigates or
             // fires an action (e.g. log in / log out).
             if (item.children) {
@@ -14217,6 +14217,10 @@ function App() {
               // accent if one is set (Member = cyan, Vendor = green,
               // Staff = red); falls back to neutral.
               const restingParent = item.parentColor || '#555';
+              // Last nav item's dropdown anchors right (left:auto, right:0)
+              // so its menu never spills off the right edge of the viewport.
+              // Inner items keep their centered placement.
+              const isLast = idx === NAV_ITEMS.length - 1;
               return (
                 <div key={item.label} style={{ position: 'relative' }}>
                   <button
@@ -14251,8 +14255,11 @@ function App() {
                     <div style={{
                       position: 'absolute',
                       top: 'calc(100% + 14px)',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
+                      // Anchor right for the last item so the menu doesn't
+                      // overflow the viewport edge; center for inner items.
+                      ...(isLast
+                        ? { right: 0 }
+                        : { left: '50%', transform: 'translateX(-50%)' }),
                       backgroundColor: '#ffffff',
                       border: '1px solid #eee',
                       borderRadius: '10px',
