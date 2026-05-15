@@ -553,7 +553,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
               '#16a34a',
               <Briefcase size={20} />,
               'Apply to partner with Trainer Center',
-              'For sellers, collectors, and creators who want a table at our events.',
+              'For Vendors, sellers, and collectors who want a table.',
               () => pickIntent('vendor')
             )}
             {forkOpt(
