@@ -13420,7 +13420,19 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
     : { label: 'Reminders', to: '/reminders' };
   const remindersIn = isStaff ? 'staff' : isVendor ? 'vendor' : 'guest';
 
-  return [
+  // Per-bucket auth tail:
+  //   logged out          → every bucket shows "Log in"
+  //   logged in as role X → only bucket X shows "Log out"; others show
+  //                          nothing (no point offering log in to an
+  //                          already-signed-in user)
+  const myBucket = isStaff ? 'staff' : isVendor ? 'vendor' : isLoggedIn ? 'guest' : null;
+  const authTail = (bucket) => {
+    if (!isLoggedIn) return [{ label: 'Log in', action: onLogin, accent: '#C8102E' }];
+    if (bucket === myBucket) return [{ label: 'Log out', action: onLogout, accent: '#C8102E' }];
+    return [];
+  };
+
+  const items = [
     { label: 'Home', to: '/' },
     {
       // Guests becomes "Member" once they log in as a member — same dropdown,
@@ -13439,9 +13451,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
         // in to the trade nights). Points at the existing /guest/review flow
         // which is the member check-in + voting state machine.
         ...(isMember ? [{ label: 'Check in', to: '/guest/review' }] : []),
-        isLoggedIn
-          ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
-          : { label: 'Log in', action: onLogin, accent: '#C8102E' },
+        ...authTail('guest'),
       ],
     },
     {
@@ -13453,14 +13463,14 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
         { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
         { label: 'Line ups', to: '/vendor-day' },
         ...(remindersIn === 'vendor' ? [reminderItem] : []),
-        isLoggedIn
-          ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
-          : { label: 'Log in', action: onLogin, accent: '#C8102E' },
+        ...authTail('vendor'),
       ],
     },
     {
       // Staff is invisible to the general public — only the Log in option
       // shows. Once logged in as staff, the full management surface unfolds.
+      // When logged in as a non-staff role, Staff has no items to show at
+      // all and gets filtered out below.
       label: 'Staff',
       parentColor: isStaff ? '#1d4ed8' : undefined,  // blue when logged in as staff
       children: isStaff
@@ -13472,13 +13482,14 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Analytics', to: '/staff/analytics' },
             { label: 'Business Hours', to: '/#visit-us' },
             ...(remindersIn === 'staff' ? [reminderItem] : []),
-            { label: 'Log out', action: onLogout, accent: '#C8102E' },
+            ...authTail('staff'),
           ]
-        : [
-            { label: 'Log in', action: onLogin, accent: '#C8102E' },
-          ],
+        : authTail('staff'),
     },
   ];
+  // Hide any bucket whose children collapsed to empty (e.g. Staff for a
+  // logged-in non-staff user has no items to offer).
+  return items.filter(item => !item.children || item.children.length > 0);
 };
 
 // ─── Unsubscribe page ─────────────────────────────────────
