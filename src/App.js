@@ -6286,7 +6286,7 @@ function photoUrl(path) {
 const REMINDER_CATEGORY_KEYS = Object.keys(CATEGORIES).filter(k => k !== 'consultation');
 
 function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
-  const { user, reminderSubs, refreshReminders, openAuthModal } = useAuth();
+  const { user, reminderSubs, refreshReminders, openAuthModal, isAuthModalOpen } = useAuth();
   const isLoggedIn = !!user;
   const [step, setStep] = useState('categories'); // 'categories' | 'saving' | 'success' | 'error'
   // Pre-fill from the user's saved subs when re-engaging, otherwise default
@@ -6397,6 +6397,12 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
     maxHeight: '90vh',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   };
+
+  // While AuthModal is layered above us, render nothing. Component stays
+  // mounted so selectedCats + returningExisting + step survive — when the
+  // user closes/finishes AuthModal, this modal pops back to the categories
+  // step with their picks intact.
+  if (isAuthModalOpen) return null;
 
   return (
     <div style={overlayStyle} onClick={onClose}>
@@ -14133,6 +14139,10 @@ function App() {
     // Pages call e.g. openAuthModal({ defaultMode: 'signup', intent: 'vendor',
     // onSuccess: (result) => navigate('/vendors/dashboard') })
     openAuthModal: setAuthConfig,
+    // True whenever the AuthModal is on screen. Layered surfaces (like
+    // ReminderSignupModal) check this and hide themselves so we don't get
+    // two stacked overlays fighting for the user's attention.
+    isAuthModalOpen: !!authConfig,
   };
 
   return (
