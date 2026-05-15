@@ -9859,7 +9859,7 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      {/* Circular logo on the left. Empty grey circle for legacy vendors
+      {/* Circular logo on the left. "N/A" placeholder for legacy vendors
           who applied before logos became required. */}
       <div style={{
         width: '52px', height: '52px', flexShrink: 0,
@@ -9875,7 +9875,12 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             onError={e => { e.currentTarget.style.display = 'none'; }}
           />
-        ) : null}
+        ) : (
+          <span style={{
+            fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af',
+            letterSpacing: '0.5px',
+          }}>N/A</span>
+        )}
       </div>
 
       <div style={{ flex: '1 1 240px', minWidth: 0 }}>
@@ -11979,7 +11984,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
-          {/* Always render a circular slot. Empty grey for legacy vendors. */}
+          {/* Always render a circular slot. "N/A" placeholder for legacy vendors. */}
           <div style={{
             width: '48px', height: '48px', flexShrink: 0,
             borderRadius: '50%', overflow: 'hidden',
@@ -11987,13 +11992,18 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
             border: '1px solid #e4e4e7',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {v.avatar_url && (
+            {v.avatar_url ? (
               <img
                 src={v.avatar_url}
                 alt=""
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 onError={e => { e.currentTarget.style.display = 'none'; }}
               />
+            ) : (
+              <span style={{
+                fontSize: '0.65rem', fontWeight: 700, color: '#9ca3af',
+                letterSpacing: '0.5px',
+              }}>N/A</span>
             )}
           </div>
           <div style={{ minWidth: 0 }}>
