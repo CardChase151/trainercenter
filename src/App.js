@@ -9858,7 +9858,7 @@ function NextEventBadge({ nextEvent }) {
         backgroundColor: '#f4f4f5', color: '#71717a',
         fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.02em',
       }}>
-        <Calendar size={10} /> No upcoming events
+        <CalendarIcon size={10} /> No upcoming events
       </span>
     );
   }
@@ -9875,7 +9875,7 @@ function NextEventBadge({ nextEvent }) {
       backgroundColor: palette.bg, color: palette.fg,
       fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.02em',
     }}>
-      <Calendar size={10} />
+      <CalendarIcon size={10} />
       {positionLabel} · {event.title || 'Vendor Day'} · {dateLabel}
     </span>
   );
