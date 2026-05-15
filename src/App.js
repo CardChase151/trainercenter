@@ -7650,15 +7650,36 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     return data;
   };
 
+  // Shared button base style for the primary action buttons so they read
+  // as clearly clickable, with consistent padding, weight, and icon size.
+  const primaryBtnStyle = (bg) => ({
+    backgroundColor: bg, color: '#fff',
+    padding: '12px 22px', borderRadius: '10px',
+    fontSize: '0.95rem', fontWeight: '800',
+    border: 'none', cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', gap: '8px',
+    letterSpacing: '0.01em',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+    minWidth: '160px', justifyContent: 'center',
+  });
+  // Status pills for non-actionable states. Color-coded but visually
+  // distinct from the buttons (smaller, no shadow, pill shape).
+  const statusPill = (bg, fg, icon, label) => (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      backgroundColor: bg, color: fg,
+      padding: '6px 12px', borderRadius: '999px',
+      fontSize: '0.82rem', fontWeight: '700',
+    }}>
+      {icon}{label}
+    </span>
+  );
+
   // Determine the action area content for this event card based on status,
   // attendance, and whether the event is today / past / future.
   let actionEl = null;
   if (event.cancelled) {
-    actionEl = (
-      <span style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: '700' }}>
-        Event cancelled
-      </span>
-    );
+    actionEl = statusPill('#fef2f2', '#dc2626', <AlertCircle size={14} />, 'Event cancelled');
   } else if (!application) {
     if (vendorStatus !== 'approved') {
       // Profile gate — until the vendor's profile is approved, hide the
@@ -7672,71 +7693,57 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       );
     } else {
       actionEl = (
-        <button onClick={() => setShowApply(true)} style={{
-          backgroundColor: '#C8102E', color: '#fff',
-          padding: '10px 18px', borderRadius: '8px',
-          fontSize: '0.9rem', fontWeight: '700',
-          border: 'none', cursor: 'pointer'
-        }}>
-          Apply for this date
+        <button onClick={() => setShowApply(true)} style={primaryBtnStyle('#C8102E')}>
+          <Plus size={16} /> Apply for this date
         </button>
       );
     }
   } else if (application.status === 'pending') {
-    actionEl = <span style={{ fontSize: '0.85rem', color: '#c2410c', fontWeight: '700' }}>Pending Chef's approval</span>;
+    actionEl = statusPill('#fef3c7', '#92400e', <Clock size={14} />, "Pending Chef's approval");
   } else if (application.status === 'declined') {
-    actionEl = <span style={{ fontSize: '0.85rem', color: '#991b1b', fontWeight: '700' }}>Not approved this time</span>;
+    actionEl = statusPill('#fee2e2', '#991b1b', <AlertCircle size={14} />, 'Not approved this time');
   } else if (application.status === 'cancelled') {
-    actionEl = <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: '700' }}>Cancelled</span>;
+    actionEl = statusPill('#f3f4f6', '#6b7280', <X size={14} />, 'Cancelled');
   } else if (application.status === 'approved') {
     if (isToday && !attendance) {
       // Event day with no check-in yet
       actionEl = (
-        <button onClick={() => setShowCheckIn(true)} style={{
-          backgroundColor: '#16a34a', color: '#fff',
-          padding: '10px 18px', borderRadius: '8px',
-          fontSize: '0.9rem', fontWeight: '700',
-          border: 'none', cursor: 'pointer'
-        }}>
-          Check in
+        <button onClick={() => setShowCheckIn(true)} style={primaryBtnStyle('#16a34a')}>
+          <MapPin size={16} /> Check in
         </button>
       );
     } else if (attendance) {
       // Already checked in (today or past)
       actionEl = (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-          <span style={{
-            fontSize: '0.78rem', backgroundColor: '#f0fdf4', color: '#15803d',
-            padding: '4px 10px', borderRadius: '20px', fontWeight: '700',
-            display: 'inline-flex', alignItems: 'center', gap: '4px'
-          }}>
-            <CheckCircle2 size={12} /> {attendance.geo_verified ? 'Checked in (verified)' : 'Checked in'}
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+          {statusPill(
+            '#f0fdf4', '#15803d',
+            <CheckCircle2 size={14} />,
+            attendance.geo_verified ? 'Checked in (verified)' : 'Checked in'
+          )}
           <Link to={`/vendors/upload/${event.id}`} style={{
             backgroundColor: '#1a1a1a', color: '#fff',
-            padding: '8px 14px', borderRadius: '8px',
-            fontSize: '0.8rem', fontWeight: '700',
-            textDecoration: 'none'
+            padding: '10px 18px', borderRadius: '8px',
+            fontSize: '0.85rem', fontWeight: '800',
+            textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
           }}>
-            Upload content
+            <UploadIcon size={14} /> Upload content
           </Link>
         </div>
       );
     } else if (isPast) {
       // Approved but didn't check in
-      actionEl = (
-        <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic' }}>
-          Did not check in
-        </span>
-      );
+      actionEl = statusPill('#f3f4f6', '#6b7280', <AlertCircle size={14} />, 'Did not check in');
     } else {
       // Future approved — surface the start time so the vendor knows when
       // to show up. Falls back to a generic message if no start_time set.
       const startStr = formatTime12h(event.start_time);
-      actionEl = (
-        <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: '700' }}>
-          {startStr ? `Approved — starts ${startStr}` : 'Approved — see you there'}
-        </span>
+      actionEl = statusPill(
+        '#f0fdf4', '#15803d',
+        <CheckCircle2 size={14} />,
+        startStr ? `Approved — starts ${startStr}` : 'Approved — see you there'
       );
     }
   }
@@ -7745,17 +7752,17 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     <>
       <div style={{
         backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
-        padding: isMobile ? '16px' : '20px 24px',
+        padding: isMobile ? '18px' : '22px 28px',
         display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center',
-        gap: '16px', flexDirection: isMobile ? 'column' : 'row'
+        gap: isMobile ? '20px' : '32px', flexDirection: isMobile ? 'column' : 'row'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
           <div style={{
-            width: '40px', height: '40px', borderRadius: '10px',
+            width: '44px', height: '44px', borderRadius: '10px',
             backgroundColor: '#f0fdf4', display: 'flex',
             alignItems: 'center', justifyContent: 'center', flexShrink: 0
           }}>
-            <CalendarIcon size={20} color="#16a34a" />
+            <CalendarIcon size={22} color="#16a34a" />
           </div>
           <div>
             <div style={{
@@ -7796,7 +7803,13 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
             </div>
           </div>
         </div>
-        <div>
+        <div style={{
+          display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+          flexShrink: 0,
+          // Mobile: action sits below event info, left-aligned for thumb reach.
+          // Desktop: action sits to the right with a subtle separator gap.
+          width: isMobile ? '100%' : 'auto',
+        }}>
           {actionEl}
         </div>
       </div>
