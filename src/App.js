@@ -13405,22 +13405,21 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
 // accordion sections (mobile). The parent label itself never navigates —
 // it only toggles its child menu. Staff users land on the staff vendor
 // console; everyone else lands on the regular vendor dashboard.
-const buildNavItems = ({ isStaff, hasReminders }) => [
+// Top-level nav is Home + three role buckets. Each bucket's parent label
+// recolors when the user is logged in for that role (Member = cyan,
+// Vendor = green, Staff = red). Inside each bucket, the last item is
+// always Log in (logged out) or Log out (logged in) — per-role auth
+// surfaced where users expect it, no separate lock badge.
+const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, onLogin, onLogout }) => [
   { label: 'Home', to: '/' },
-  { label: 'Calendar', to: '/calendar' },
-  { label: 'Visit Us', to: '/#visit-us' },
   {
-    label: 'Vendors',
+    // Guests becomes "Member" once they log in as a member — same dropdown,
+    // just acknowledges who they are. Cyan label when logged in.
+    label: isMember ? 'Member' : 'Guests',
+    parentColor: isMember ? '#0891b2' : undefined,
     children: [
-      { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
-      { label: 'Apply', to: '/vendors/apply?mode=signup' },
-      { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
-      { label: 'Line ups', to: '/vendor-day' },
-    ],
-  },
-  {
-    label: 'Services',
-    children: [
+      { label: 'Calendar', to: '/calendar' },
+      { label: 'Visit Us', to: '/#visit-us' },
       { label: 'Buy / Sell', to: '/buy-sell' },
       { label: 'Consultation', to: '/consultation' },
       { label: 'Grading', to: '/grading' },
@@ -13430,7 +13429,46 @@ const buildNavItems = ({ isStaff, hasReminders }) => [
       hasReminders
         ? { label: 'My Reminders', to: '/reminders', accent: '#C8102E' }
         : { label: 'Reminders', to: '/reminders' },
+      // Check in — only relevant once you're a member (i.e. you can check
+      // in to the trade nights). Points at the existing /guest/review flow
+      // which is the member check-in + voting state machine.
+      ...(isMember ? [{ label: 'Check in', to: '/guest/review' }] : []),
+      isLoggedIn
+        ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
+        : { label: 'Log in', action: onLogin, accent: '#C8102E' },
     ],
+  },
+  {
+    label: 'Vendors',
+    parentColor: isVendor ? '#16a34a' : undefined,  // green when logged in as vendor
+    children: [
+      { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
+      { label: 'Apply', to: '/vendors/apply?mode=signup' },
+      { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
+      { label: 'Line ups', to: '/vendor-day' },
+      isLoggedIn
+        ? { label: 'Log out', action: onLogout, accent: '#C8102E' }
+        : { label: 'Log in', action: onLogin, accent: '#C8102E' },
+    ],
+  },
+  {
+    // Staff is invisible to the general public — only the Log in option
+    // shows. Once logged in as staff, the full management surface unfolds.
+    label: 'Staff',
+    parentColor: isStaff ? '#C8102E' : undefined,  // red when logged in as staff
+    children: isStaff
+      ? [
+          { label: 'Edit Calendar', to: '/calendar' },
+          { label: 'Manage Vendors', to: '/staff/vendors' },
+          { label: 'Manage Members', to: '/staff/members' },
+          { label: 'Communication', to: '/staff/comms' },
+          { label: 'Analytics', to: '/staff/analytics' },
+          { label: 'Business Hours', to: '/#visit-us' },
+          { label: 'Log out', action: onLogout, accent: '#C8102E' },
+        ]
+      : [
+          { label: 'Log in', action: onLogin, accent: '#C8102E' },
+        ],
   },
 ];
 
@@ -13777,8 +13815,23 @@ function App() {
       return location.pathname === p || location.pathname.startsWith(p + '/');
     });
 
-  // Auth-aware nav (Dashboard child differs for staff vs vendor).
-  const NAV_ITEMS = buildNavItems({ isStaff: !!staff, hasReminders });
+  // Auth-aware nav. Each role bucket recolors when the user is logged in
+  // for that role, and a Log in / Log out item is the last entry inside
+  // each dropdown — replaces the old lock-icon badge.
+  const isLoggedIn = !!staffUser;
+  const isMember = isLoggedIn && !isAdmin && !isVendor; // anyone logged in who isn't staff/vendor
+  // handleLogout is declared further down in this component — wrap it in an
+  // arrow so the reference is resolved lazily when the user actually clicks
+  // (otherwise we hit the const's temporal dead zone here at render time).
+  const NAV_ITEMS = buildNavItems({
+    isStaff: isAdmin,
+    isVendor,
+    isMember,
+    isLoggedIn,
+    hasReminders,
+    onLogin: () => setShowLogin(true),
+    onLogout: () => handleLogout(),
+  });
 
   // Site settings + special hours (editable Visit Us section + holiday overrides)
   const [siteSettings, setSiteSettings] = useState(null);
@@ -14008,10 +14061,15 @@ function App() {
           )}
           {/* Desktop nav links */}
           {!isMobile && NAV_ITEMS.map(item => {
-            // Dropdown parent — click toggles, child click navigates.
+            // Dropdown parent — click toggles, child click navigates or
+            // fires an action (e.g. log in / log out).
             if (item.children) {
               const isOpen = openDropdown === item.label;
               const parentActive = isParentActive(item.children);
+              // Parent color: active-state red wins; otherwise the role
+              // accent if one is set (Member = cyan, Vendor = green,
+              // Staff = red); falls back to neutral.
+              const restingParent = item.parentColor || '#555';
               return (
                 <div key={item.label} style={{ position: 'relative' }}>
                   <button
@@ -14020,9 +14078,9 @@ function App() {
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      color: parentActive || isOpen ? '#C8102E' : '#555',
+                      color: parentActive || isOpen ? '#C8102E' : restingParent,
                       fontSize: '0.85rem',
-                      fontWeight: '600',
+                      fontWeight: item.parentColor ? '800' : '600',
                       padding: 0,
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -14031,7 +14089,7 @@ function App() {
                       transition: 'color 0.2s',
                     }}
                     onMouseEnter={e => e.currentTarget.style.color = '#C8102E'}
-                    onMouseLeave={e => { if (!parentActive && !isOpen) e.currentTarget.style.color = '#555'; }}
+                    onMouseLeave={e => { if (!parentActive && !isOpen) e.currentTarget.style.color = restingParent; }}
                   >
                     {item.label}
                     <ChevronDown
@@ -14059,84 +14117,67 @@ function App() {
                       zIndex: 1001,
                     }}>
                       {item.children.map(child => {
-                        const childActive = location.pathname === pathOnly(child.to);
+                        const isAction = typeof child.action === 'function';
                         const restingColor = child.accent || '#1a1a1a';
                         const childWeight = child.accent ? '800' : '600';
+                        const childActive = !isAction && location.pathname === pathOnly(child.to || '');
+                        const childStyle = {
+                          color: childActive ? '#C8102E' : restingColor,
+                          textDecoration: 'none',
+                          fontSize: '0.85rem',
+                          fontWeight: childWeight,
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap',
+                          transition: 'background-color 0.15s, color 0.15s',
+                          display: 'block',
+                        };
+                        const handleHoverEnter = e => {
+                          e.currentTarget.style.backgroundColor = '#fff0f0';
+                          e.currentTarget.style.color = '#C8102E';
+                        };
+                        const handleHoverLeave = e => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          if (!childActive) e.currentTarget.style.color = restingColor;
+                        };
+                        if (isAction) {
+                          return (
+                            <button
+                              key={child.label}
+                              onClick={() => { setOpenDropdown(null); child.action(); }}
+                              style={{
+                                ...childStyle,
+                                background: 'none', border: 'none',
+                                width: '100%', textAlign: 'left',
+                                cursor: 'pointer', fontFamily: 'inherit',
+                              }}
+                              onMouseEnter={handleHoverEnter}
+                              onMouseLeave={handleHoverLeave}
+                            >
+                              {child.label}
+                            </button>
+                          );
+                        }
                         return (
                           <Link
                             key={child.label}
                             to={child.to}
                             onClick={() => setOpenDropdown(null)}
-                            style={{
-                              color: childActive ? '#C8102E' : restingColor,
-                              textDecoration: 'none',
-                              fontSize: '0.85rem',
-                              fontWeight: childWeight,
-                              padding: '10px 14px',
-                              borderRadius: '6px',
-                              whiteSpace: 'nowrap',
-                              transition: 'background-color 0.15s, color 0.15s',
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; if (!childActive) e.currentTarget.style.color = restingColor; }}
+                            style={childStyle}
+                            onMouseEnter={handleHoverEnter}
+                            onMouseLeave={handleHoverLeave}
                           >
                             {child.label}
                           </Link>
                         );
                       })}
-                      {item.label === 'Vendors' && (
-                        <div style={{ borderTop: '1px solid #eee', marginTop: '6px', paddingTop: '6px' }}>
-                          {staffUser ? (
-                            <>
-                              <div style={{
-                                fontSize: '0.7rem', fontWeight: '700',
-                                color: '#888', padding: '6px 14px',
-                                textTransform: 'uppercase', letterSpacing: '0.06em',
-                              }}>
-                                Logged in
-                              </div>
-                              <button
-                                onClick={() => { handleLogout(); setOpenDropdown(null); }}
-                                style={{
-                                  background: 'none', border: 'none',
-                                  width: '100%', textAlign: 'left',
-                                  cursor: 'pointer', fontFamily: 'inherit',
-                                  color: '#C8102E', fontSize: '0.85rem', fontWeight: '700',
-                                  padding: '10px 14px', borderRadius: '6px',
-                                  transition: 'background-color 0.15s',
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fff0f0'}
-                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                Log out
-                              </button>
-                            </>
-                          ) : (
-                            <Link
-                              to="/vendors/apply"
-                              onClick={() => setOpenDropdown(null)}
-                              style={{
-                                display: 'block',
-                                color: '#1a1a1a', textDecoration: 'none',
-                                fontSize: '0.85rem', fontWeight: '700',
-                                padding: '10px 14px', borderRadius: '6px',
-                                transition: 'background-color 0.15s, color 0.15s',
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
-                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#1a1a1a'; }}
-                            >
-                              Log in
-                            </Link>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
               );
             }
-            // Visit Us is a hash anchor — no active state coloring.
-            const isActive = item.label !== 'Visit Us' && location.pathname === item.to;
+            // Top-level non-dropdown items (Home).
+            const isActive = location.pathname === item.to;
             return (
               <Link
                 key={item.label}
@@ -14155,144 +14196,6 @@ function App() {
               </Link>
             );
           })}
-          {/* Auth badge — Lock when signed out, role label when signed in.
-              Priority: Staff (admin) > Vendor > Member. Members are users
-              who signed up via reminders; they get a cyan badge so the
-              icon doesn't read as logged-out when they actually are. */}
-          {(() => {
-            const showStaffBadge = !!staffUser && isAdmin;
-            const showVendorBadge = !!staffUser && !isAdmin && !!vendor;
-            const showMemberBadge = !!staffUser && !isAdmin && !vendor && !!member;
-            const badgeColor = showStaffBadge ? '#C8102E'
-              : showVendorBadge ? '#16a34a'
-              : showMemberBadge ? '#0891b2'
-              : '#1a1a1a';
-            const badgeLabel = showStaffBadge ? 'Staff'
-              : showVendorBadge ? 'Vendor'
-              : showMemberBadge ? 'Member'
-              : null;
-
-            // Staff path: badge toggles the admin dropdown rather than
-            // logging out. Vendor/Member: keep the simple click-to-log-out
-            // behavior. Logged out: open the auth modal.
-            const handleBadgeClick = () => {
-              if (showStaffBadge) {
-                setStaffMenuOpen(o => !o);
-              } else if (staffUser) {
-                handleLogout();
-              } else {
-                setShowLogin(true);
-              }
-            };
-
-            const staffMenuItems = [
-              { label: 'Edit Calendar', to: '/calendar' },
-              { label: 'Manage Vendors', to: '/staff/vendors' },
-              { label: 'Manage Members', to: '/staff/members' },
-              { label: 'Communication', to: '/staff/comms' },
-              { label: 'Analytics', to: '/staff/analytics' },
-              { label: 'Business Hours', to: '/#visit-us' },
-            ];
-
-            return (
-              <div ref={staffMenuRef} style={{ position: 'relative', display: 'inline-flex' }}>
-                <button
-                  onClick={handleBadgeClick}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: badgeLabel ? '0.85rem' : '1rem',
-                    fontWeight: badgeLabel ? '800' : 'inherit',
-                    color: badgeColor,
-                    padding: '4px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: showStaffBadge ? '4px' : 0,
-                    fontFamily: 'inherit',
-                    transition: 'color 0.2s',
-                  }}
-                  title={
-                    showStaffBadge ? 'Staff menu'
-                    : showVendorBadge ? 'Signed in as Vendor (click to log out)'
-                    : showMemberBadge ? 'Signed in as Member (click to log out)'
-                    : 'Staff & Vendor Login'
-                  }
-                >
-                  {badgeLabel || <Lock size={20} />}
-                  {showStaffBadge && (
-                    <ChevronDown
-                      size={14}
-                      style={{
-                        transform: staffMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s',
-                      }}
-                    />
-                  )}
-                </button>
-                {showStaffBadge && staffMenuOpen && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 14px)',
-                    right: 0,
-                    backgroundColor: '#fff',
-                    border: '1px solid #eee',
-                    borderRadius: '10px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                    padding: '6px',
-                    minWidth: '210px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    zIndex: 1001,
-                  }}>
-                    {staffMenuItems.map(it => (
-                      <Link
-                        key={it.label}
-                        to={it.to}
-                        onClick={() => setStaffMenuOpen(false)}
-                        style={{
-                          color: '#1a1a1a',
-                          textDecoration: 'none',
-                          fontSize: '0.85rem',
-                          fontWeight: '700',
-                          padding: '10px 14px',
-                          borderRadius: '6px',
-                          whiteSpace: 'nowrap',
-                          transition: 'background-color 0.15s, color 0.15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#fff0f0'; e.currentTarget.style.color = '#C8102E'; }}
-                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#1a1a1a'; }}
-                      >
-                        {it.label}
-                      </Link>
-                    ))}
-                    <div style={{ borderTop: '1px solid #eee', marginTop: '6px', paddingTop: '6px' }}>
-                      <button
-                        onClick={() => { handleLogout(); setStaffMenuOpen(false); }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          width: '100%',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          color: '#C8102E',
-                          fontSize: '0.85rem',
-                          fontWeight: '800',
-                          padding: '10px 14px',
-                          borderRadius: '6px',
-                          fontFamily: 'inherit',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fff0f0'}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        Log out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
           {/* Hamburger menu button - mobile only */}
           {isMobile && (
             <button
@@ -14335,6 +14238,7 @@ function App() {
             if (item.children) {
               const isOpen = openDropdown === item.label;
               const parentActive = isParentActive(item.children);
+              const restingParent = item.parentColor || '#555';
               return (
                 <div key={item.label}>
                   <button
@@ -14344,9 +14248,9 @@ function App() {
                       border: 'none',
                       width: '100%',
                       cursor: 'pointer',
-                      color: parentActive || isOpen ? '#C8102E' : '#555',
+                      color: parentActive || isOpen ? '#C8102E' : restingParent,
                       fontSize: '0.95rem',
-                      fontWeight: '600',
+                      fontWeight: item.parentColor ? '800' : '600',
                       padding: '14px 24px',
                       borderBottom: '1px solid #f0f0f0',
                       display: 'flex',
@@ -14371,74 +14275,53 @@ function App() {
                       borderBottom: '1px solid #f0f0f0',
                     }}>
                       {item.children.map(child => {
-                        const childActive = location.pathname === pathOnly(child.to);
+                        const isAction = typeof child.action === 'function';
                         const restingColor = child.accent || '#555';
                         const childWeight = child.accent ? '800' : '600';
+                        const childActive = !isAction && location.pathname === pathOnly(child.to || '');
+                        const baseStyle = {
+                          display: 'block',
+                          color: childActive ? '#C8102E' : restingColor,
+                          textDecoration: 'none',
+                          fontSize: '0.9rem',
+                          fontWeight: childWeight,
+                          padding: '12px 24px 12px 40px',
+                          borderTop: '1px solid #efefef',
+                        };
+                        if (isAction) {
+                          return (
+                            <button
+                              key={child.label}
+                              onClick={() => { setMenuOpen(false); setOpenDropdown(null); child.action(); }}
+                              style={{
+                                ...baseStyle,
+                                background: 'none', border: 'none',
+                                width: '100%', textAlign: 'left',
+                                cursor: 'pointer', fontFamily: 'inherit',
+                              }}
+                            >
+                              {child.label}
+                            </button>
+                          );
+                        }
                         return (
                           <Link
                             key={child.label}
                             to={child.to}
                             onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
-                            style={{
-                              display: 'block',
-                              color: childActive ? '#C8102E' : restingColor,
-                              textDecoration: 'none',
-                              fontSize: '0.9rem',
-                              fontWeight: childWeight,
-                              padding: '12px 24px 12px 40px',
-                              borderTop: '1px solid #efefef',
-                            }}
+                            style={baseStyle}
                           >
                             {child.label}
                           </Link>
                         );
                       })}
-                      {item.label === 'Vendors' && (
-                        staffUser ? (
-                          <>
-                            <div style={{
-                              fontSize: '0.7rem', fontWeight: '700',
-                              color: '#888', padding: '12px 24px 4px 40px',
-                              textTransform: 'uppercase', letterSpacing: '0.06em',
-                              borderTop: '1px solid #efefef',
-                            }}>
-                              Logged in
-                            </div>
-                            <button
-                              onClick={() => { handleLogout(); setMenuOpen(false); setOpenDropdown(null); }}
-                              style={{
-                                background: 'none', border: 'none',
-                                width: '100%', textAlign: 'left',
-                                cursor: 'pointer', fontFamily: 'inherit',
-                                color: '#C8102E', fontSize: '0.9rem', fontWeight: '700',
-                                padding: '4px 24px 14px 40px',
-                              }}
-                            >
-                              Log out
-                            </button>
-                          </>
-                        ) : (
-                          <Link
-                            to="/vendors/apply"
-                            onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
-                            style={{
-                              display: 'block',
-                              color: '#1a1a1a', textDecoration: 'none',
-                              fontSize: '0.9rem', fontWeight: '700',
-                              padding: '12px 24px 12px 40px',
-                              borderTop: '1px solid #efefef',
-                            }}
-                          >
-                            Log in
-                          </Link>
-                        )
-                      )}
                     </div>
                   )}
                 </div>
               );
             }
-            const isActive = item.label !== 'Visit Us' && location.pathname === item.to;
+            // Top-level non-dropdown items (Home).
+            const isActive = location.pathname === item.to;
             return (
               <Link
                 key={item.label}
