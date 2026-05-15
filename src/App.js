@@ -7841,6 +7841,8 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
     referred_by_name: existingVendor?.referred_by_name || '',
     referred_by_contact: existingVendor?.referred_by_contact || '',
     referred_by_handle: existingVendor?.referred_by_handle || '',
+    experience_level: existingVendor?.experience_level || '',
+    applicant_questions: existingVendor?.applicant_questions || '',
   });
   const [logoFile, setLogoFile] = useState(null);
   const [removeExistingLogo, setRemoveExistingLogo] = useState(false);
@@ -7853,6 +7855,12 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
     e.preventDefault();
     if (!form.first_name.trim() || !form.last_name.trim()) {
       setError('First and last name both required.');
+      return;
+    }
+    // Logo is REQUIRED on signup so Chef can ID the partner at a glance.
+    // On edit, an existing logo on the vendor row counts.
+    if (!isEdit && !logoFile) {
+      setError('A logo is required to apply. You can use the image from your Instagram or other social media as your logo.');
       return;
     }
     setSubmitting(true);
@@ -7870,6 +7878,8 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
       fb_handle: cleanHandle(form.fb_handle),
       specialty: form.specialty.trim() || null,
       bio: form.bio.trim() || null,
+      experience_level: form.experience_level || null,
+      applicant_questions: form.applicant_questions.trim() || null,
     };
 
     let savedVendor = null;
@@ -7989,9 +7999,9 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           <label style={labelCss}>Last name *</label>
           <input required value={form.last_name} onChange={setField('last_name')} style={inputCss} />
 
-          <label style={labelCss}>Vendor logo (optional)</label>
+          <label style={labelCss}>Vendor logo {isEdit ? '(optional)' : '*'}</label>
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '8px' }}>
-            Square or round image works best. Shows next to your name on the public Vendors page.
+            Square or round image works best. Shows next to your name on the public Vendors page.{!isEdit && ' You can use the image from your Instagram or other social media.'}
           </div>
           <LogoPicker
             file={logoFile}
@@ -8033,6 +8043,16 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           {!isEdit && (
             <>
               <div style={{ height: '8px' }} />
+              <label style={labelCss}>Vendor experience</label>
+              <select value={form.experience_level} onChange={setField('experience_level')} style={{ ...inputCss, cursor: 'pointer' }}>
+                <option value="">Pick one</option>
+                <option value="first_show">This is my first show</option>
+                <option value="1_to_5">1–5 shows</option>
+                <option value="5_to_10">5–10 shows</option>
+                <option value="10_to_50">10–50 shows</option>
+                <option value="50_plus">50+ shows</option>
+              </select>
+
               <label style={labelCss}>How did you hear about Vendor Day?</label>
               <select value={form.heard_from} onChange={setField('heard_from')} style={{ ...inputCss, cursor: 'pointer' }}>
                 <option value="">Pick one</option>
@@ -8060,6 +8080,16 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
                   <input value={form.referred_by_handle} onChange={setField('referred_by_handle')} placeholder="@theirhandle" style={{ ...inputCss, marginBottom: 0 }} />
                 </div>
               )}
+
+              <div style={{ height: '8px' }} />
+              <label style={labelCss}>Do you have any questions?</label>
+              <textarea
+                value={form.applicant_questions}
+                onChange={setField('applicant_questions')}
+                rows={3}
+                placeholder="Anything you'd like Chef to address during your review (optional)"
+                style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }}
+              />
             </>
           )}
 
@@ -9829,7 +9859,26 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+      {/* Circular logo on the left. Empty grey circle for legacy vendors
+          who applied before logos became required. */}
+      <div style={{
+        width: '52px', height: '52px', flexShrink: 0,
+        borderRadius: '50%', overflow: 'hidden',
+        backgroundColor: v.avatar_url ? '#fff' : '#f4f4f5',
+        border: '1px solid #e4e4e7',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {v.avatar_url ? (
+          <img
+            src={v.avatar_url}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={e => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : null}
+      </div>
+
+      <div style={{ flex: '1 1 240px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
           {statusBadge}
@@ -11930,16 +11979,23 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
-          {v.avatar_url && (
-            <img
-              src={v.avatar_url}
-              alt=""
-              style={{
-                width: '48px', height: '48px', borderRadius: '50%',
-                objectFit: 'cover', border: '1px solid #eee', flexShrink: 0
-              }}
-            />
-          )}
+          {/* Always render a circular slot. Empty grey for legacy vendors. */}
+          <div style={{
+            width: '48px', height: '48px', flexShrink: 0,
+            borderRadius: '50%', overflow: 'hidden',
+            backgroundColor: v.avatar_url ? '#fff' : '#f4f4f5',
+            border: '1px solid #e4e4e7',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {v.avatar_url && (
+              <img
+                src={v.avatar_url}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
+          </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>
               {v.name || '(no name)'}

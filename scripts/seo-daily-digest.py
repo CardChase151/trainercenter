@@ -280,7 +280,8 @@ def render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, v
     if not sess_stats or sess_stats.get('pageviews', 0) == 0:
         return ''
 
-    visits_date_str = visits_date.strftime('%A, %B %-d') if visits_date else 'yesterday'
+    visits_date_str = fmt_date_short(visits_date) if visits_date else 'yesterday'
+    prev_visits_date_str = fmt_date_short(visits_date - datetime.timedelta(days=1)) if visits_date else 'the day before'
     pageviews = sess_stats['pageviews']
     sessions = sess_stats['sessions']
     avg_pps = sess_stats['avg_pages_per_session']
@@ -290,13 +291,13 @@ def render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, v
     if prev_pv == 0:
         dod_pv = ''
     elif pageviews == prev_pv:
-        dod_pv = f'Same as the day before ({prev_pv} pageviews).'
+        dod_pv = f'Same as {prev_visits_date_str} ({prev_pv} pageviews).'
     elif pageviews > prev_pv:
         pct = (pageviews - prev_pv) / prev_pv * 100
-        dod_pv = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from the day before ({prev_pv} pageviews).'
+        dod_pv = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from {prev_visits_date_str} ({prev_pv} pageviews).'
     else:
         pct = (prev_pv - pageviews) / prev_pv * 100
-        dod_pv = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from the day before ({prev_pv} pageviews).'
+        dod_pv = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from {prev_visits_date_str} ({prev_pv} pageviews).'
 
     # Most-viewed pages block
     page_rows_html = ''
@@ -361,7 +362,8 @@ def render_sources_section(visit_sources, visit_sources_prev=None, visits_date=N
     Uses its own date (visits_date — calendar yesterday in PT) because the
     Supabase tracker logs in realtime, unlike GSC which has a 2-3 day lag.
     """
-    visits_date_str = visits_date.strftime('%A, %B %-d') if visits_date else 'yesterday'
+    visits_date_str = fmt_date_short(visits_date) if visits_date else 'yesterday'
+    prev_visits_date_str = fmt_date_short(visits_date - datetime.timedelta(days=1)) if visits_date else 'the day before'
 
     if not visit_sources:
         return f'''<div style="margin:26px 0 0;padding:14px 16px;background:#f4f6f9;border-radius:6px">
@@ -376,15 +378,15 @@ def render_sources_section(visit_sources, visit_sources_prev=None, visits_date=N
     if visit_sources_prev:
         prev_total_visits = sum(v for _, v, _ in visit_sources_prev)
         if prev_total_visits == 0:
-            dod_str = f"{total_visits} visits — no comparable data the day before."
+            dod_str = f"{total_visits} visits — no comparable data {prev_visits_date_str}."
         elif total_visits == prev_total_visits:
-            dod_str = f"Same as the day before ({prev_total_visits} visits)."
+            dod_str = f"Same as {prev_visits_date_str} ({prev_total_visits} visits)."
         elif total_visits > prev_total_visits:
             pct = (total_visits - prev_total_visits) / prev_total_visits * 100
-            dod_str = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from the day before ({prev_total_visits} visits).'
+            dod_str = f'<span style="color:#16a34a;font-weight:700">Up {pct:.0f}%</span> from {prev_visits_date_str} ({prev_total_visits} visits).'
         else:
             pct = (prev_total_visits - total_visits) / prev_total_visits * 100
-            dod_str = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from the day before ({prev_total_visits} visits).'
+            dod_str = f'<span style="color:#dc2626;font-weight:700">Down {pct:.0f}%</span> from {prev_visits_date_str} ({prev_total_visits} visits).'
     else:
         dod_str = ''
 
@@ -449,9 +451,25 @@ def render_sources_section(visit_sources, visit_sources_prev=None, visits_date=N
 
 
 
-def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources=None, visit_sources_prev=None, visits_date=None, top_pages_supabase=None, sess_stats=None, sess_stats_prev=None):
+def fmt_date_short(d):
+    """Compact day-of-week + mm/dd/yy: 'Mon 5/11/26'."""
+    return d.strftime('%a %-m/%-d/%y')
+
+
+def fmt_date_long(d):
+    """Full day-of-week + month + day + year: 'Monday, May 11, 2026'."""
+    return d.strftime('%A, %B %-d, %Y')
+
+
+def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day, top_queries, top_pages, lookback_days, visit_sources=None, visit_sources_prev=None, visits_date=None, top_pages_supabase=None, sess_stats=None, sess_stats_prev=None, send_date=None):
     date_obj = datetime.date.fromisoformat(latest_day['keys'][0])
-    date_str = date_obj.strftime('%A, %B %-d')
+    date_str = fmt_date_long(date_obj)
+    date_short = fmt_date_short(date_obj)
+    prev_date_obj = date_obj - datetime.timedelta(days=1)
+    prev_date_short = fmt_date_short(prev_date_obj)
+    visits_date_short = fmt_date_short(visits_date) if visits_date else ''
+    visits_prev_date_short = fmt_date_short(visits_date - datetime.timedelta(days=1)) if visits_date else ''
+    send_date_str = fmt_date_long(send_date) if send_date else fmt_date_long(datetime.date.today())
     cur_clicks = int(latest_day.get('clicks', 0))
     cur_imp = int(latest_day.get('impressions', 0))
     cur_ctr = latest_day.get('ctr', 0) * 100
@@ -479,13 +497,13 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
 
     # Comparison sentence
     if prev_clicks == cur_clicks:
-        compare_dod = f"Same as the day before ({prev_clicks} clicks)."
+        compare_dod = f"Same as {prev_date_short} ({prev_clicks} clicks)."
     elif cur_clicks > prev_clicks:
         diff = cur_clicks - prev_clicks
-        compare_dod = f'<span style="color:#16a34a;font-weight:700">Up {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+        compare_dod = f'<span style="color:#16a34a;font-weight:700">Up {diff} click{"s" if diff != 1 else ""}</span> from {prev_date_short} ({prev_clicks}).'
     else:
         diff = prev_clicks - cur_clicks
-        compare_dod = f'<span style="color:#dc2626;font-weight:700">Down {diff} click{"s" if diff != 1 else ""}</span> from the day before ({prev_clicks}).'
+        compare_dod = f'<span style="color:#dc2626;font-weight:700">Down {diff} click{"s" if diff != 1 else ""}</span> from {prev_date_short} ({prev_clicks}).'
 
     if avg_clicks > 0:
         if cur_clicks > avg_clicks * 1.1:
@@ -528,7 +546,7 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
         f'{cur_imp:,}',
         'Times your site appeared in Google search results, even if no one clicked.',
         sublines=[
-            f"Day before: {prev_imp:,} · 7-day avg: {avg_imp:,.0f}/day"
+            f"{prev_date_short}: {prev_imp:,} · 7-day avg: {avg_imp:,.0f}/day"
         ],
     )
     ctr_block = metric_block(
@@ -603,10 +621,32 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
 
     <tr><td style="background:#C8102E;padding:20px 24px;text-align:center">
       <h1 style="margin:0;color:#fff;font-size:18px;font-weight:800">Daily SEO Digest</h1>
-      <p style="margin:3px 0 0;color:#f5b3b9;font-size:12px">Trainer Center HB · {date_str}</p>
+      <p style="margin:3px 0 0;color:#f5b3b9;font-size:12px">Trainer Center HB · Sent {send_date_str}</p>
     </td></tr>
 
     <tr><td style="padding:22px 24px">
+
+      <!-- Data windows legend — this email mixes two data sources with different lag windows -->
+      <div style="padding:14px 16px;background:#f4f6f9;border-radius:6px;margin:0 0 18px">
+        <div style="font-size:10px;font-weight:800;color:#525252;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px">Reporting windows</div>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="font-size:13px;color:#1a1a1a;line-height:1.5;padding:0 0 4px">
+              <span style="display:inline-block;background:#fee2e2;color:#991b1b;font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-right:8px;vertical-align:middle">GSC</span>
+              <strong>{date_short}</strong> · Google Search Console (most recent complete day — GSC lags 2-3 days)
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:13px;color:#1a1a1a;line-height:1.5;padding:4px 0 0">
+              <span style="display:inline-block;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px;margin-right:8px;vertical-align:middle">Live</span>
+              <strong>{visits_date_short or 'n/a'}</strong> · First-party page-visit tracker (yesterday, realtime)
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- GSC section header -->
+      <div style="font-size:12px;font-weight:800;color:#991b1b;letter-spacing:0.08em;text-transform:uppercase;margin:0 0 10px;padding:6px 10px;background:#fee2e2;border-radius:4px;display:inline-block">GSC · {date_short}</div>
 
       <!-- TL;DR plain-English summary -->
       <div style="padding:16px 18px;background:#fff7e6;border-left:3px solid #d97706;border-radius:6px;margin:0 0 22px">
@@ -619,21 +659,24 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
       {ctr_block}
       {pos_block}
 
-      {render_sources_section(visit_sources, visit_sources_prev, visits_date)}
-
-      {render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, visits_date)}
-
       {section(
-        'What people searched to find you',
+        f'What people searched to find you · {date_short}',
         f"The actual queries someone typed into Google on {date_str} that surfaced your site. Numbers below show how many of those searchers actually visited.",
         queries_html
       )}
 
       {section(
-        'Which pages got the visits',
+        f'Which pages got the visits · {date_short}',
         f"Where the {cur_clicks} click{'s' if cur_clicks != 1 else ''} on {date_str} landed.",
         pages_html
       )}
+
+      <!-- Live tracker section header -->
+      <div style="margin:32px 0 10px"><div style="font-size:12px;font-weight:800;color:#1d4ed8;letter-spacing:0.08em;text-transform:uppercase;padding:6px 10px;background:#dbeafe;border-radius:4px;display:inline-block">Live · {visits_date_short or 'n/a'}</div></div>
+
+      {render_sources_section(visit_sources, visit_sources_prev, visits_date)}
+
+      {render_engagement_section(sess_stats, sess_stats_prev, top_pages_supabase, visits_date)}
 
       <!-- Footer link -->
       <p style="margin:30px 0 0;text-align:center"><a href="https://pokemontrainercenter.com/staff/analytics" style="font-size:13px;color:#C8102E;font-weight:700;text-decoration:none">Open dashboard →</a></p>
@@ -641,7 +684,7 @@ def render_email(latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
     </td></tr>
 
     <tr><td style="background:#fafafa;padding:14px 24px;text-align:center;border-top:1px solid #eee">
-      <p style="font-size:11px;color:#999;margin:0;line-height:1.55">Auto-sent at 8 AM Pacific via GitHub Actions. Google Search Console data has a standard 2-3 day lag, so "{date_str}" is the most recent day with complete data.</p>
+      <p style="font-size:11px;color:#999;margin:0;line-height:1.55">Auto-sent at 8 AM Pacific via GitHub Actions. Google Search Console data has a standard 2-3 day lag, so <strong>{date_short}</strong> ({date_str}) is the most recent day with complete GSC data. Live-tracker sections report on <strong>{visits_date_short or 'n/a'}</strong>.</p>
     </td></tr>
 
   </table>
@@ -783,14 +826,14 @@ def main():
     cur_clicks = int(latest_day.get('clicks', 0))
     prev_clicks = int(prev_day.get('clicks', 0)) if prev_day else 0
     delta_label = fmt_pct_delta(cur_clicks, prev_clicks)
-    date_short = latest_date.strftime('%a %b %-d')
-    subject = f'TC HB · {date_short}: {cur_clicks} clicks ({delta_label} DoD)'
+    subject = f'TC HB · GSC {fmt_date_short(latest_date)}: {cur_clicks} clicks ({delta_label} vs {fmt_date_short(latest_date - datetime.timedelta(days=1))})'
 
     body = render_email(
         latest_day, prev_day, week_avg, max_clicks_day, min_clicks_day,
         top_queries, top_pages, lookback_days,
         visit_sources, visit_sources_prev, yesterday_pt,
         top_pages_supabase, sess_stats, sess_stats_prev,
+        send_date=today,
     )
 
     send_email(resend_key, args.to, subject, body, dry_run=args.dry_run)
