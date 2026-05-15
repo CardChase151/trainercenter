@@ -9836,6 +9836,51 @@ function VideoSlot({ file, progress, uploading, onSelect, onClear }) {
 // One layout used across "Newly applying", "All vendors", etc. Click a card
 // → opens VendorDetailModal with everything the vendor submitted.
 
+// ─── NextEventBadge ───────────────────────────────────────
+// Pill showing a vendor's next upcoming approved event, color-coded by
+// where that event sits in the chronological list of all upcoming events.
+// position 0 = next event (hot red), higher positions cool toward blue/gray.
+// nextEvent = null  →  renders "No upcoming events" in neutral gray.
+const NEXT_EVENT_PALETTE = [
+  { bg: '#fee2e2', fg: '#991b1b' }, // 0 — next event, urgent
+  { bg: '#ffedd5', fg: '#9a3412' }, // 1
+  { bg: '#fef3c7', fg: '#92400e' }, // 2
+  { bg: '#dcfce7', fg: '#15803d' }, // 3
+  { bg: '#dbeafe', fg: '#1d4ed8' }, // 4
+  { bg: '#ede9fe', fg: '#5b21b6' }, // 5+
+];
+function NextEventBadge({ nextEvent }) {
+  if (!nextEvent) {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '4px 10px', borderRadius: '999px',
+        backgroundColor: '#f4f4f5', color: '#71717a',
+        fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.02em',
+      }}>
+        <Calendar size={10} /> No upcoming events
+      </span>
+    );
+  }
+  const { event, position } = nextEvent;
+  const palette = NEXT_EVENT_PALETTE[Math.min(position, NEXT_EVENT_PALETTE.length - 1)];
+  const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric',
+  });
+  const positionLabel = position === 0 ? 'Next' : `#${position + 1}`;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '4px 10px', borderRadius: '999px',
+      backgroundColor: palette.bg, color: palette.fg,
+      fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.02em',
+    }}>
+      <Calendar size={10} />
+      {positionLabel} · {event.title || 'Vendor Day'} · {dateLabel}
+    </span>
+  );
+}
+
 // ─── EmailProgressDots ────────────────────────────────────
 // Tiny visual bar showing which drip emails this vendor has received for a
 // given event. Seven stages (T-21, T-14, T-7, T-3, T-2, T-1, T-0) lit up
@@ -9899,15 +9944,18 @@ function EmailProgressDots({ emails = [], eventId, eventLabel }) {
   );
 }
 
-function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel }) {
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent }) {
   const v = vendor;
+  // Desktop: split the body in half (identity left, campaign right). Mobile
+  // collapses to a single column so nothing gets squeezed.
+  const bodyGridCols = isMobile ? '1fr' : '1fr 1fr';
   return (
     <div
       onClick={onClick}
       style={{
         backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '10px',
-        padding: '14px 16px', display: 'flex', justifyContent: 'space-between',
-        alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem',
+        padding: '14px 16px', display: 'flex', flexDirection: 'column',
+        gap: '10px', fontSize: '0.85rem',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
       }}
@@ -9922,79 +9970,102 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
         e.currentTarget.style.boxShadow = 'none';
       }}
     >
-      {/* Circular logo on the left. "N/A" placeholder for legacy vendors
-          who applied before logos became required. */}
+      {/* ── Header row: logo + name/status + actions ─────────────── */}
       <div style={{
-        width: '52px', height: '52px', flexShrink: 0,
-        borderRadius: '50%', overflow: 'hidden',
-        backgroundColor: v.avatar_url ? '#fff' : '#f4f4f5',
-        border: '1px solid #e4e4e7',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex', alignItems: 'flex-start',
+        gap: '12px', flexWrap: 'wrap',
       }}>
-        {v.avatar_url ? (
-          <img
-            src={v.avatar_url}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            onError={e => { e.currentTarget.style.display = 'none'; }}
-          />
-        ) : (
-          <span style={{
-            fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af',
-            letterSpacing: '0.5px',
-          }}>N/A</span>
+        {/* Circular logo. "N/A" placeholder for legacy vendors. */}
+        <div style={{
+          width: '52px', height: '52px', flexShrink: 0,
+          borderRadius: '50%', overflow: 'hidden',
+          backgroundColor: v.avatar_url ? '#fff' : '#f4f4f5',
+          border: '1px solid #e4e4e7',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {v.avatar_url ? (
+            <img
+              src={v.avatar_url}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <span style={{
+              fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af',
+              letterSpacing: '0.5px',
+            }}>N/A</span>
+          )}
+        </div>
+
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
+            {statusBadge}
+          </div>
+        </div>
+
+        {actions && (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+          >
+            {actions}
+          </div>
         )}
       </div>
 
-      <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
-          {statusBadge}
+      {/* ── Body grid: identity LEFT · campaign RIGHT (desktop) ─── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: bodyGridCols,
+        gap: isMobile ? '10px' : '20px',
+        paddingLeft: isMobile ? 0 : '64px',  // align under name on desktop (skip past the avatar)
+      }}>
+        {/* LEFT — identity / contact / socials */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: '#555' }}>
+            {v.email}
+            {v.phone && <span style={{ color: '#888' }}> · {v.phone}</span>}
+          </div>
+          {v.specialty && (
+            <div style={{ marginTop: '4px', color: '#555' }}>
+              <span style={{ color: '#888' }}>Specialty: </span>{v.specialty}
+            </div>
+          )}
+          {v.bio && (
+            <div style={{ marginTop: '6px', color: '#555', whiteSpace: 'pre-wrap' }}>
+              {v.bio}
+            </div>
+          )}
+          {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
+            <div style={{ marginTop: '6px', color: '#888', fontSize: '0.8rem' }}>
+              {v.ig_handle && <span>IG: {v.ig_handle}</span>}
+              {v.tiktok_handle && <span>{v.ig_handle ? ' · ' : ''}TikTok: {v.tiktok_handle}</span>}
+              {v.fb_handle && <span>{(v.ig_handle || v.tiktok_handle) ? ' · ' : ''}FB: {v.fb_handle}</span>}
+            </div>
+          )}
+          {(v.heard_from || v.referred_by_name) && (
+            <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
+              {v.heard_from && <span>Heard from: {String(v.heard_from).replace(/_/g, ' ')}</span>}
+              {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
+            </div>
+          )}
         </div>
-        <div style={{ marginTop: '4px', color: '#555' }}>
-          {v.email}
-          {v.phone && <span style={{ color: '#888' }}> · {v.phone}</span>}
+
+        {/* RIGHT — next-event badge, decision line, drip dots */}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {nextEvent !== undefined && <NextEventBadge nextEvent={nextEvent} />}
+          {decisionLine && (
+            <div style={{ fontSize: '0.78rem', fontWeight: '700' }}>
+              {decisionLine}
+            </div>
+          )}
+          {emails && emails.length > 0 && (
+            <EmailProgressDots emails={emails} eventId={eventId} eventLabel={eventLabel} />
+          )}
         </div>
-        {v.specialty && (
-          <div style={{ marginTop: '4px', color: '#555' }}>
-            <span style={{ color: '#888' }}>Specialty: </span>{v.specialty}
-          </div>
-        )}
-        {v.bio && (
-          <div style={{ marginTop: '4px', color: '#555', whiteSpace: 'pre-wrap' }}>
-            {v.bio}
-          </div>
-        )}
-        {(v.ig_handle || v.tiktok_handle || v.fb_handle) && (
-          <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
-            {v.ig_handle && <span>IG: {v.ig_handle}</span>}
-            {v.tiktok_handle && <span>{v.ig_handle ? ' · ' : ''}TikTok: {v.tiktok_handle}</span>}
-            {v.fb_handle && <span>{(v.ig_handle || v.tiktok_handle) ? ' · ' : ''}FB: {v.fb_handle}</span>}
-          </div>
-        )}
-        {(v.heard_from || v.referred_by_name) && (
-          <div style={{ marginTop: '4px', color: '#888', fontSize: '0.8rem' }}>
-            {v.heard_from && <span>Heard from: {String(v.heard_from).replace(/_/g, ' ')}</span>}
-            {v.referred_by_name && <span>{v.heard_from ? ' · ' : ''}Referred by: {v.referred_by_name}</span>}
-          </div>
-        )}
-        {decisionLine && (
-          <div style={{ marginTop: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
-            {decisionLine}
-          </div>
-        )}
-        {emails && emails.length > 0 && (
-          <EmailProgressDots emails={emails} eventId={eventId} eventLabel={eventLabel} />
-        )}
       </div>
-      {actions && (
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
-        >
-          {actions}
-        </div>
-      )}
     </div>
   );
 }
@@ -11915,6 +11986,32 @@ function StaffVendorsPage({ isMobile, staff }) {
     );
   }
 
+  // For each vendor, figure out their NEXT upcoming approved event and the
+  // position of that event in the chronological list of all upcoming non-
+  // cancelled events. Used to color-code the per-card "next event" badge:
+  //   position 0 = soonest event overall (hottest red)
+  //   higher positions cool toward purple/gray.
+  // Cards render NextEventBadge with `null` when the vendor isn't approved
+  // for any upcoming event.
+  const _todayStr = todayISO();
+  const upcomingEvents = (events || [])
+    .filter(ev => ev.event_date >= _todayStr && !ev.cancelled)
+    .slice()
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const vendorNextEvent = {};
+  upcomingEvents.forEach((ev, idx) => {
+    (ev.vendor_applications || []).forEach(app => {
+      if (app.status === 'approved' && !vendorNextEvent[app.vendor_id]) {
+        vendorNextEvent[app.vendor_id] = { event: ev, position: idx };
+      }
+    });
+  });
+  // For vendors with no upcoming-event row, render the "No upcoming events"
+  // pill by passing null. We mark them in the map so AllVendorsList knows.
+  (allVendors || []).forEach(v => {
+    if (!(v.id in vendorNextEvent)) vendorNextEvent[v.id] = null;
+  });
+
   const tabBtnStyle = (active) => ({
     padding: '10px 16px', border: 'none',
     backgroundColor: active ? '#C8102E' : '#fff',
@@ -11983,11 +12080,11 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} vendorNextEvent={vendorNextEvent} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -12323,7 +12420,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
-function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
@@ -12561,6 +12658,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                               emails={emailLog[a.vendor_id] || []}
                               eventId={ev.id}
                               eventLabel={null /* event is already implied by the parent expandable section */}
+                              nextEvent={vendorNextEvent[a.vendor_id] || null}
                               onClick={() => onOpenDetail && onOpenDetail(v)}
                               statusBadge={appBadge}
                               decisionLine={decLine}
@@ -13132,7 +13230,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
   );
 }
 
-function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], onStatusChange, onOpenDetail, isMobile }) {
+function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, isMobile }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
 
@@ -13258,6 +13356,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], onS
             emails={emailLog[v.id] || []}
             eventId={nextEvent?.id}
             eventLabel={nextEventLabel}
+            nextEvent={vendorNextEvent[v.id] || null}
             onClick={() => onOpenDetail && onOpenDetail(v)}
             statusBadge={badgeFor(v.status)}
             decisionLine={decisionFor(v)}
