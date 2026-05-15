@@ -13808,9 +13808,10 @@ function App() {
   // Helper: a parent dropdown is "active" when any of its children match.
   // Strip query/hash from `to` so /vendors/apply?mode=signup still matches
   // the live /vendors/apply pathname.
-  const pathOnly = (to) => to.split('?')[0].split('#')[0];
+  const pathOnly = (to) => (to || '').split('?')[0].split('#')[0];
   const isParentActive = (children) =>
     children.some(c => {
+      if (!c.to) return false;  // skip action items (Log in / Log out) — no route to match
       const p = pathOnly(c.to);
       return location.pathname === p || location.pathname.startsWith(p + '/');
     });
