@@ -308,44 +308,119 @@ function SectionHeader({ title, subtitle }) {
 // Single sign-in surface for both staff and vendors. After auth succeeds,
 // the modal flips to a "where to next?" picker keyed off the user's roles
 // so a fresh login lands them on the surface they actually came to manage.
-function StaffLogin({ onClose, onLogin }) {
+// ─── AuthModal ────────────────────────────────────────────
+// The single, reusable auth surface. Powers every "Log in" button in the
+// nav, every per-page "create account to continue" gate, and any future
+// entry point (vendor apply CTA, notification bell, QR vote flow, etc).
+//
+// Props:
+//   defaultMode  'login' | 'signup'   — start in this mode
+//   intent       'vendor' | 'member'  — when provided, signup skips the
+//                                        "what are you signing up for?"
+//                                        fork and adapts copy
+//   allowSignup  boolean              — false hides the signup toggle
+//                                        (staff login is admin-only)
+//   onSuccess    ({ user, isNew, role, intent }) => void
+//                                      Caller decides where to send the
+//                                      user after auth (e.g. apply flow,
+//                                      reminder prefs, redirect).
+//   onClose      () => void
+//
+// Internal state machine:
+//   phase = 'fork'         — signup chose no intent yet, ask which one
+//          'form'          — render the email/password form
+//          'staff-picker'  — staff just logged in, show the tile grid
+function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowSignup = true, onClose, onSuccess }) {
   const navigate = useNavigate();
+  const [mode, setMode] = useState(defaultMode);              // 'login' | 'signup'
+  const [intent, setIntent] = useState(initialIntent);        // 'vendor' | 'member' | null
+  const [phase, setPhase] = useState(() =>
+    defaultMode === 'signup' && !initialIntent && allowSignup ? 'fork' : 'form'
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [phase, setPhase] = useState('login'); // 'login' | 'picker'
-  const [roles, setRoles] = useState({ isStaff: false, isVendor: false });
+  const [error, setError] = useState('');
 
-  const handleLogin = async (e) => {
+  const switchMode = (next) => {
+    setMode(next);
+    setError('');
+    // Toggling into signup with no intent yet → show the fork. Toggling
+    // back to login → bypass the fork entirely.
+    if (next === 'signup' && !intent && allowSignup) {
+      setPhase('fork');
+    } else {
+      setPhase('form');
+    }
+  };
+
+  const pickIntent = (chosen) => {
+    setIntent(chosen);
+    setPhase('form');
+  };
+
+  // Per-intent copy for the signup form — sets context without making the
+  // user read a separate page.
+  const intentCopy = intent === 'vendor'
+    ? {
+        signupTitle: 'Create your vendor account',
+        signupSub:   "First step in applying to partner with Trainer Center HB. Quick — email and password.",
+      }
+    : intent === 'member'
+    ? {
+        signupTitle: 'Create your account',
+        signupSub:   "Set up notifications and lock in your favorites at events. Takes 10 seconds.",
+      }
+    : {
+        signupTitle: 'Create your account',
+        signupSub:   "Trainer Center HB",
+      };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!email.trim() || !password) return;
     setLoading(true);
     setError('');
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message);
+    const cleanEmail = email.trim().toLowerCase();
+    const result = mode === 'signup'
+      ? await supabase.auth.signUp({ email: cleanEmail, password })
+      : await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+    if (result.error) {
+      setError(result.error.message);
       setLoading(false);
       return;
     }
-    // Resolve role membership in parallel. A user must have at least one
-    // (staff profile.is_admin OR vendors row) to stay signed in.
-    const userId = data?.user?.id;
+    if (!result.data.session) {
+      // signUp returns no session when the email is already registered.
+      setError('That email already has an account. Try logging in instead.');
+      setMode('login');
+      setPhase('form');
+      setLoading(false);
+      return;
+    }
+    const user = result.data.user;
+
+    // Role detection — same as before, just shared between login + signup.
     const [profileRes, vendorRes] = await Promise.all([
-      supabase.from('profiles').select('is_admin').eq('id', userId).maybeSingle(),
-      supabase.from('vendors').select('id').eq('user_id', userId).maybeSingle(),
+      supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle(),
+      supabase.from('vendors').select('id').eq('user_id', user.id).maybeSingle(),
     ]);
-    const isStaff = !!profileRes.data?.is_admin;
+    const isStaff  = !!profileRes.data?.is_admin;
     const isVendor = !!vendorRes.data?.id;
-    if (!isStaff && !isVendor) {
-      await supabase.auth.signOut();
-      setError("That email isn't on the staff or vendor list.");
-      setLoading(false);
+    const role = isStaff ? 'staff' : isVendor ? 'vendor' : 'member';
+
+    setLoading(false);
+    // Staff post-login: show the tile picker BEFORE closing so they can
+    // jump straight to whatever they came to do.
+    if (mode === 'login' && isStaff) {
+      setPhase('staff-picker');
+      // Let App refresh its auth state so the nav / role-based UI updates
+      // even while the picker is still showing.
+      onSuccess && onSuccess({ user, isNew: false, role, intent, deferClose: true });
       return;
     }
-    setRoles({ isStaff, isVendor });
-    onLogin(); // refresh App auth state so the lock badge updates immediately
-    setPhase('picker');
-    setLoading(false);
+    onSuccess && onSuccess({ user, isNew: mode === 'signup', role, intent });
   };
 
   const goTo = (path) => {
@@ -415,99 +490,183 @@ function StaffLogin({ onClose, onLogin }) {
     { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
   ];
 
-  // ─── Phase 2: where to next? ────────────────────────────
-  if (phase === 'picker') {
-    // Staff picker takes priority — admins almost always want admin tools,
-    // even when they also happen to have a vendor row.
-    if (roles.isStaff) {
-      return (
-        <div style={overlayStyle} onClick={onClose}>
-          <div style={cardStyle} onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
-            <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 22px 0' }}>What would you like to manage?</p>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '10px',
-            }}>
-              {STAFF_TILES.map(tile => (
-                <button
-                  key={tile.key}
-                  onClick={() => goTo(tile.to)}
-                  style={staffTileStyle(tile.accent)}
-                  onMouseEnter={e => staffTileHover(tile.accent)(e, true)}
-                  onMouseLeave={e => staffTileHover(tile.accent)(e, false)}
-                >
-                  <div style={staffTileIconWrap(tile.accent)}>{tile.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1a1a1a' }}>{tile.label}</div>
-                      <ArrowRight size={16} style={{ color: tile.accent, flexShrink: 0 }} />
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#666', marginTop: 3, lineHeight: 1.35 }}>{tile.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-    // Vendor picker
+  // ─── Phase: staff post-login picker ─────────────────────
+  if (phase === 'staff-picker') {
     return (
       <div style={overlayStyle} onClick={onClose}>
         <div style={cardStyle} onClick={e => e.stopPropagation()}>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 20px 0' }}>Where would you like to go?</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <button onClick={onClose} style={pickerBtn('#1a1a1a')}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f5f5f5'; e.currentTarget.style.borderColor = '#1a1a1a'; }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#1a1a1a33'; }}
-            >
-              Continue on-site <ArrowRight size={16} />
-            </button>
-            <button onClick={() => goTo('/vendors/dashboard')} style={pickerBtn('#16a34a')}
-              onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f0fdf4'; e.currentTarget.style.borderColor = '#16a34a'; }}
-              onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff'; e.currentTarget.style.borderColor = '#16a34a33'; }}
-            >
-              Go to Vendor Dashboard <ArrowRight size={16} />
-            </button>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>You&apos;re in</h2>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 22px 0' }}>What would you like to manage?</p>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '10px',
+          }}>
+            {STAFF_TILES.map(tile => (
+              <button
+                key={tile.key}
+                onClick={() => goTo(tile.to)}
+                style={staffTileStyle(tile.accent)}
+                onMouseEnter={e => staffTileHover(tile.accent)(e, true)}
+                onMouseLeave={e => staffTileHover(tile.accent)(e, false)}
+              >
+                <div style={staffTileIconWrap(tile.accent)}>{tile.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1a1a1a' }}>{tile.label}</div>
+                    <ArrowRight size={16} style={{ color: tile.accent, flexShrink: 0 }} />
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: 3, lineHeight: 1.35 }}>{tile.desc}</div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
     );
   }
 
-  // ─── Phase 1: login form ────────────────────────────────
+  // ─── Phase: intent fork (signup with no preset intent) ──
+  if (phase === 'fork') {
+    const forkOpt = (color, icon, title, desc, onClick) => (
+      <button onClick={onClick} style={staffTileStyle(color)}
+        onMouseEnter={e => staffTileHover(color)(e, true)}
+        onMouseLeave={e => staffTileHover(color)(e, false)}
+      >
+        <div style={staffTileIconWrap(color)}>{icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1a1a1a' }}>{title}</div>
+            <ArrowRight size={16} style={{ color: color, flexShrink: 0 }} />
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#666', marginTop: 3, lineHeight: 1.35 }}>{desc}</div>
+        </div>
+      </button>
+    );
+    return (
+      <div style={overlayStyle} onClick={onClose}>
+        <div style={cardStyle} onClick={e => e.stopPropagation()}>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>What brings you in?</h2>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 18px 0' }}>Pick the path that fits — we'll set you up from there.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {forkOpt(
+              '#16a34a',
+              <Briefcase size={20} />,
+              'Apply to partner with Trainer Center',
+              'For sellers, collectors, and creators who want a table at our events.',
+              () => pickIntent('vendor')
+            )}
+            {forkOpt(
+              '#ea580c',
+              <Bell size={20} />,
+              'Notifications & reminders',
+              'Be a member — get event alerts, lock in favorites at trade nights.',
+              () => pickIntent('member')
+            )}
+          </div>
+          {/* Already have an account? Switch to login. */}
+          <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#666', margin: '20px 0 0 0' }}>
+            Already have an account?{' '}
+            <button type="button" onClick={() => switchMode('login')} style={{
+              background: 'none', border: 'none', padding: 0,
+              color: '#C8102E', fontWeight: 800, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '0.85rem',
+            }}>Log in</button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Phase: email + password form (login OR signup) ─────
+  const isSignup = mode === 'signup';
+  const accent = '#C8102E';
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={cardStyle} onClick={e => e.stopPropagation()}>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1a1a1a', margin: '0 0 4px 0' }}>Staff &amp; Vendor Login</h2>
-        <p style={{ fontSize: '0.8rem', color: '#999', margin: '0 0 20px 0' }}>Trainer Center HB</p>
-        <form onSubmit={handleLogin}>
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
+        {/* Mode toggle — only shown when signup is allowed */}
+        {allowSignup && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+            <button type="button" onClick={() => switchMode('login')} style={{
+              flex: 1, padding: '10px', borderRadius: 8,
+              backgroundColor: !isSignup ? accent : '#fff',
+              color: !isSignup ? '#fff' : '#666',
+              border: !isSignup ? 'none' : '1px solid #ddd',
+              fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}>Log in</button>
+            <button type="button" onClick={() => switchMode('signup')} style={{
+              flex: 1, padding: '10px', borderRadius: 8,
+              backgroundColor: isSignup ? accent : '#fff',
+              color: isSignup ? '#fff' : '#666',
+              border: isSignup ? 'none' : '1px solid #ddd',
+              fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}>Create account</button>
+          </div>
+        )}
+
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px 0' }}>
+          {isSignup ? intentCopy.signupTitle : 'Log in'}
+        </h2>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px 0' }}>
+          {isSignup ? intentCopy.signupSub : 'Trainer Center HB'}
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <input type="email" required placeholder="you@example.com"
+            value={email} onChange={e => setEmail(e.target.value)}
+            autoComplete="email"
             style={{
-              width: '100%', padding: '12px 14px', fontSize: '0.9rem', border: '1px solid #ddd',
-              borderRadius: '8px', marginBottom: '10px', boxSizing: 'border-box', outline: 'none'
+              width: '100%', padding: '12px 14px', fontSize: '0.95rem',
+              border: '1px solid #ddd', borderRadius: 10,
+              marginBottom: 10, boxSizing: 'border-box', outline: 'none',
             }}
           />
-          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
-            style={{
-              width: '100%', padding: '12px 14px', fontSize: '0.9rem', border: '1px solid #ddd',
-              borderRadius: '8px', marginBottom: '16px', boxSizing: 'border-box', outline: 'none'
-            }}
-          />
+          <div style={{ position: 'relative', marginBottom: 14 }}>
+            <input type={showPw ? 'text' : 'password'} required
+              placeholder={isSignup ? 'At least 6 characters' : 'Your password'}
+              minLength={6}
+              value={password} onChange={e => setPassword(e.target.value)}
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              style={{
+                width: '100%', padding: '12px 14px', fontSize: '0.95rem',
+                border: '1px solid #ddd', borderRadius: 10,
+                boxSizing: 'border-box', outline: 'none', paddingRight: 68,
+              }}
+            />
+            <button type="button" onClick={() => setShowPw(s => !s)} style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '0.78rem', fontWeight: 700, color: '#666',
+              padding: '6px 10px', borderRadius: 6, fontFamily: 'inherit',
+            }}>{showPw ? 'Hide' : 'Show'}</button>
+          </div>
+
           {error && (
-            <p style={{ color: '#C8102E', fontSize: '0.8rem', margin: '0 0 12px 0' }}>{error}</p>
+            <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{error}</p>
           )}
+
           <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '12px', backgroundColor: '#C8102E', color: '#fff',
-            border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem',
-            cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1
+            width: '100%', padding: 14, backgroundColor: accent, color: '#fff',
+            border: 'none', borderRadius: 10, fontWeight: 800, fontSize: '0.95rem',
+            cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1,
+            fontFamily: 'inherit',
           }}>
-            {loading ? 'Logging in...' : 'Log In'}
+            {loading
+              ? (isSignup ? 'Creating account…' : 'Logging in…')
+              : (isSignup ? 'Create account' : 'Log in')}
           </button>
         </form>
+
+        {/* Signup mode with an explicit intent: show a back link to swap. */}
+        {isSignup && intent && allowSignup && (
+          <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#888', margin: '14px 0 0 0' }}>
+            <button type="button" onClick={() => { setIntent(null); setPhase('fork'); }} style={{
+              background: 'none', border: 'none', padding: 0,
+              color: '#888', cursor: 'pointer', textDecoration: 'underline',
+              fontFamily: 'inherit', fontSize: '0.78rem',
+            }}>Wrong path? Pick again</button>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -13768,7 +13927,13 @@ function App() {
   const staff = staffUser?.id && staffProfile
     ? { id: staffUser.id, name: staffProfile.name, isAdmin }
     : null;
-  const [showLogin, setShowLogin] = useState(false);
+  // authConfig drives the unified AuthModal. null = closed; otherwise
+  // { defaultMode, intent, allowSignup, onSuccess }. Helper openers below
+  // wrap the common entry points so callers don't have to repeat shape.
+  const [authConfig, setAuthConfig] = useState(null);
+  const openLogin = (overrides = {}) => setAuthConfig({ defaultMode: 'login', ...overrides });
+  // eslint-disable-next-line no-unused-vars
+  const openSignup = (overrides = {}) => setAuthConfig({ defaultMode: 'signup', ...overrides });
   const [menuOpen, setMenuOpen] = useState(false);
   // Staff badge dropdown — exposes Edit Calendar, Manage Vendors,
   // Manage Members, Communication, Business Hours, Log out. Only renders
@@ -13854,7 +14019,7 @@ function App() {
     isMember,
     isLoggedIn,
     hasReminders,
-    onLogin: () => setShowLogin(true),
+    onLogin: () => openLogin(),
     onLogout: () => handleLogout(),
   });
 
@@ -14409,11 +14574,23 @@ function App() {
         <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
       </Routes>
 
-      {/* Staff Login Modal */}
-      {showLogin && (
-        <StaffLogin
-          onClose={() => setShowLogin(false)}
-          onLogin={() => { /* auth listener handles setStaffUser */ }}
+      {/* Unified auth modal — replaces the old StaffLogin. Driven by
+          authConfig state so callers can request login vs signup, optional
+          intent (vendor / member), and an onSuccess callback. */}
+      {authConfig && (
+        <AuthModal
+          defaultMode={authConfig.defaultMode || 'login'}
+          intent={authConfig.intent || null}
+          allowSignup={authConfig.allowSignup !== false}
+          onClose={() => setAuthConfig(null)}
+          onSuccess={(result) => {
+            // Auth listener handles setStaffUser; caller's onSuccess is
+            // for redirect / next-step coordination. When deferClose is
+            // true (staff picker stage) we keep the modal open so the
+            // user can pick a tile; the picker itself calls onClose.
+            authConfig.onSuccess && authConfig.onSuccess(result);
+            if (!result?.deferClose) setAuthConfig(null);
+          }}
         />
       )}
 
