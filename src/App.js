@@ -14265,17 +14265,46 @@ function EventTimeMapPage({ isMobile, staff }) {
     ? (coverage.reduce((sum, c) => sum + c.count, 0) / coverage.length).toFixed(1)
     : 0;
 
-  // Hour heat colors — 5 bins relative to peak so subtle differences still
-  // show up. Keeps the chart informative when most hours hover near peak
-  // and also when concurrent counts are in the single digits.
-  const heatColor = (count) => {
-    if (count === 0) return { bg: '#f9fafb', fg: '#9ca3af', border: '#e5e7eb' };
+  // Bar color — 5 bins relative to peak so subtle differences still show
+  // up. Use full counts (not min-baselined) so a flat-near-peak day still
+  // reads as "mostly hot" while a sparse day reads as cool.
+  const barColor = (count) => {
+    if (count === 0) return { bar: '#e5e7eb', fg: '#9ca3af' };
     const r = peak.count > 0 ? count / peak.count : 0;
-    if (r < 0.25) return { bg: '#ecfdf5', fg: '#065f46', border: '#a7f3d0' };
-    if (r < 0.5)  return { bg: '#dcfce7', fg: '#15803d', border: '#86efac' };
-    if (r < 0.75) return { bg: '#fef3c7', fg: '#92400e', border: '#fde68a' };
-    if (r < 0.95) return { bg: '#fed7aa', fg: '#9a3412', border: '#fdba74' };
-    return { bg: '#fecaca', fg: '#991b1b', border: '#fca5a5' };
+    if (r < 0.25) return { bar: '#86efac', fg: '#065f46' };
+    if (r < 0.5)  return { bar: '#4ade80', fg: '#15803d' };
+    if (r < 0.75) return { bar: '#fbbf24', fg: '#92400e' };
+    if (r < 0.95) return { bar: '#fb923c', fg: '#9a3412' };
+    return { bar: '#ef4444', fg: '#991b1b' };
+  };
+
+  // Nice axis range — picks (axisMin, axisMax, step) that frames the data
+  // with a sensible step size. Spread of 1-5 steps in 1s, 6-20 in 2s, etc.
+  // Pads above and below the data range by one step so peak bars don't
+  // pin to the top of the chart and min bars don't disappear to a sliver.
+  const niceAxis = (() => {
+    const counts = coverage.map(c => c.count);
+    const min = Math.min(...counts, 0);
+    const max = Math.max(...counts, 0);
+    if (max === 0) return { min: 0, max: 1, step: 1 };
+    const range = Math.max(1, max - min);
+    let step = 1;
+    if (range > 5)   step = 2;
+    if (range > 12)  step = 5;
+    if (range > 30)  step = 10;
+    if (range > 75)  step = 25;
+    if (range > 200) step = 50;
+    if (range > 500) step = 100;
+    const axisMin = Math.max(0, Math.floor(min / step) * step - step);
+    const axisMax = Math.ceil(max / step) * step + step;
+    return { min: axisMin, max: axisMax, step };
+  })();
+  // Build the gridline ticks (axisMin, +step, +step, ..., axisMax).
+  const axisTicks = [];
+  for (let t = niceAxis.min; t <= niceAxis.max; t += niceAxis.step) axisTicks.push(t);
+  const barHeight = (count) => {
+    const pct = (count - niceAxis.min) / (niceAxis.max - niceAxis.min);
+    return Math.max(0, Math.min(1, pct)) * 100; // %
   };
 
   // Now indicator — only meaningful when the event is today.
@@ -14312,17 +14341,17 @@ function EventTimeMapPage({ isMobile, staff }) {
 
         <SectionHeader title="Time Map" subtitle={`${event.title || 'Vendor Day'} · ${dateLabel}`} />
 
-        {/* Summary stat tiles */}
+        {/* Summary stat tiles. Window is shown prominently in the big
+            start/end band below, so we don't repeat it here. */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
           gap: '10px',
           marginBottom: '18px',
         }}>
           <StatTile label="Vendors approved" value={totalSlots} />
           <StatTile label="Peak concurrent" value={peak.count} accent="#C8102E" sub={peak.count > 0 ? `at ${fmt12(peak.hour * 60)}` : '—'} />
           <StatTile label="Avg concurrent" value={avgConcurrent} />
-          <StatTile label="Window" value={`${fmt12(windowStart)} – ${fmt12(windowEnd)}`} small />
         </div>
 
         {withoutTime > 0 && (
@@ -14358,59 +14387,184 @@ function EventTimeMapPage({ isMobile, staff }) {
           ))}
         </div>
 
-        {/* Gantt — vendor lanes with a coverage heat strip on top */}
+        {/* Coverage chart card — big START → END band on top, real bar
+            chart underneath with a Y-axis sized to the data range so 12
+            vs 16 reads as a meaningful difference. */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '14px' : '18px 22px',
+          marginBottom: '14px',
+        }}>
+          {/* START → END band */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '14px',
+            marginBottom: '18px',
+            flexDirection: isMobile ? 'column' : 'row',
+          }}>
+            <div style={{
+              flex: '0 0 auto', textAlign: isMobile ? 'center' : 'left',
+              display: 'flex', flexDirection: 'column', gap: '2px',
+            }}>
+              <div style={{
+                fontSize: '0.62rem', fontWeight: '800', color: '#888',
+                textTransform: 'uppercase', letterSpacing: '0.12em',
+              }}>Start</div>
+              <div style={{ fontSize: '1.65rem', fontWeight: '900', color: '#1a1a1a', lineHeight: 1 }}>
+                {fmt12(windowStart)}
+              </div>
+            </div>
+            <div style={{
+              flex: 1,
+              height: isMobile ? '2px' : '4px',
+              background: 'linear-gradient(90deg, #C8102E 0%, #1a1a1a 100%)',
+              borderRadius: '2px',
+              position: 'relative',
+              minWidth: isMobile ? '120px' : '0',
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                backgroundColor: '#fff', border: '1px solid #e5e7eb',
+                borderRadius: '999px',
+                padding: '4px 12px',
+                fontSize: '0.72rem', fontWeight: '700', color: '#666',
+                whiteSpace: 'nowrap',
+              }}>
+                {Math.round(windowLen / 60 * 10) / 10} hour{windowLen === 60 ? '' : 's'}
+              </div>
+            </div>
+            <div style={{
+              flex: '0 0 auto', textAlign: isMobile ? 'center' : 'right',
+              display: 'flex', flexDirection: 'column', gap: '2px',
+            }}>
+              <div style={{
+                fontSize: '0.62rem', fontWeight: '800', color: '#888',
+                textTransform: 'uppercase', letterSpacing: '0.12em',
+              }}>End</div>
+              <div style={{ fontSize: '1.65rem', fontWeight: '900', color: '#1a1a1a', lineHeight: 1 }}>
+                {fmt12(windowEnd)}
+              </div>
+            </div>
+          </div>
+
+          {/* Bar chart — Y axis on left, bars in the middle, peak star */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+            {/* Y axis ticks */}
+            <div style={{
+              display: 'flex', flexDirection: 'column-reverse',
+              justifyContent: 'space-between',
+              fontSize: '0.65rem', fontWeight: '700', color: '#888',
+              paddingBottom: '20px', minWidth: '26px',
+              textAlign: 'right',
+            }}>
+              {axisTicks.map(t => (
+                <div key={t} style={{ lineHeight: 1 }}>{t}</div>
+              ))}
+            </div>
+
+            {/* Chart area */}
+            <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+              {/* Gridlines */}
+              <div style={{
+                position: 'absolute', left: 0, right: 0, top: 0, bottom: '20px',
+                display: 'flex', flexDirection: 'column-reverse', justifyContent: 'space-between',
+                pointerEvents: 'none',
+              }}>
+                {axisTicks.map((t, i) => (
+                  <div key={t} style={{
+                    borderTop: i === 0 ? '1px solid #d1d5db' : '1px dashed #f3f4f6',
+                    height: 0,
+                  }} />
+                ))}
+              </div>
+
+              {/* Bars */}
+              <div style={{
+                position: 'relative',
+                display: 'flex', alignItems: 'flex-end', gap: '4px',
+                height: '160px',
+              }}>
+                {coverage.map(({ hour, count }) => {
+                  const color = barColor(count);
+                  const isPeak = peak.count > 0 && count === peak.count;
+                  return (
+                    <div key={hour} style={{
+                      flex: 1, minWidth: 0, height: '100%',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+                      position: 'relative',
+                    }}>
+                      {/* Count label above the bar */}
+                      <div style={{
+                        fontSize: '0.78rem', fontWeight: '800',
+                        color: color.fg, marginBottom: '3px',
+                        display: 'flex', alignItems: 'center', gap: '3px',
+                      }}>
+                        {isPeak && (
+                          <span style={{
+                            backgroundColor: '#C8102E', color: '#fff',
+                            width: '14px', height: '14px', borderRadius: '50%',
+                            fontSize: '0.55rem', fontWeight: '900',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          }} title="Peak hour">★</span>
+                        )}
+                        {count}
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: `${barHeight(count)}%`,
+                        minHeight: count === 0 ? '0' : '6px',
+                        backgroundColor: color.bar,
+                        borderRadius: '6px 6px 0 0',
+                        border: isPeak ? `2px solid #C8102E` : `1px solid ${color.bar}`,
+                        boxSizing: 'border-box',
+                        transition: 'height 0.2s',
+                      }} />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* X axis hour labels */}
+              <div style={{
+                display: 'flex', gap: '4px',
+                marginTop: '6px',
+              }}>
+                {coverage.map(({ hour }) => (
+                  <div key={hour} style={{
+                    flex: 1, minWidth: 0, textAlign: 'center',
+                    fontSize: '0.7rem', fontWeight: '700', color: '#666',
+                  }}>{fmtShort(hour * 60)}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '0.78rem', color: '#666', marginTop: '14px', lineHeight: 1.5,
+            paddingTop: '12px', borderTop: '1px solid #f3f4f6',
+          }}>
+            Each bar = concurrent vendors that hour.
+            {peak.count > 0 && <> Plan for at least <strong style={{ color: '#C8102E' }}>{peak.count}</strong> table{peak.count === 1 ? '' : 's'} at peak (<strong>{fmt12(peak.hour * 60)}</strong>).</>}
+            {' '}Axis steps by {niceAxis.step}.
+          </div>
+        </div>
+
+        {/* Gantt — vendor lanes */}
         <div style={{
           backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
           padding: isMobile ? '12px' : '18px 22px',
           overflowX: 'auto',
         }}>
-          {/* Heat strip — one cell per hour. Sits directly above the Gantt
-              lanes so Chef can scan down from a hour's count to see exactly
-              which vendors are present. Peak hour gets a small marker. */}
-          <div style={{
-            display: 'flex', alignItems: 'stretch', gap: '4px',
-            marginLeft: isMobile ? 0 : '190px',
-            marginBottom: '10px',
-          }}>
-            {coverage.map(({ hour, count }) => {
-              const heat = heatColor(count);
-              const isPeak = peak.count > 0 && count === peak.count;
-              return (
-                <div key={hour} style={{
-                  flex: 1, minWidth: 0, position: 'relative',
-                  backgroundColor: heat.bg, color: heat.fg,
-                  border: `1px solid ${heat.border}`,
-                  borderRadius: '8px',
-                  padding: '8px 4px',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  textAlign: 'center',
-                }}>
-                  {isPeak && (
-                    <span style={{
-                      position: 'absolute', top: '-7px', right: '-7px',
-                      width: '18px', height: '18px',
-                      backgroundColor: '#C8102E', color: '#fff',
-                      borderRadius: '50%',
-                      fontSize: '0.6rem', fontWeight: '800',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 0 0 2px #fff',
-                    }} title="Peak hour">★</span>
-                  )}
-                  <div style={{ fontSize: '1.05rem', fontWeight: '800', lineHeight: 1 }}>{count}</div>
-                  <div style={{ fontSize: '0.62rem', fontWeight: '700', opacity: 0.75, marginTop: '3px', letterSpacing: '0.02em' }}>
-                    {fmtShort(hour * 60)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{
-            fontSize: '0.72rem', color: '#666', marginBottom: '12px',
-            marginLeft: isMobile ? 0 : '190px', lineHeight: 1.5,
-          }}>
-            Each box = concurrent vendors in that hour.
-            {peak.count > 0 && <> Plan for at least <strong>{peak.count}</strong> table{peak.count === 1 ? '' : 's'} at peak ({fmt12(peak.hour * 60)}).</>}
+          {/* Hour axis above lanes — matches the Gantt's percentage-based
+              positioning so labels sit over the right vertical position. */}
+          <div style={{ position: 'relative', height: '20px', marginLeft: isMobile ? 0 : '190px', marginBottom: '8px' }}>
+            {hours.map(h => (
+              <div key={h} style={{
+                position: 'absolute', left: pctLeft(h * 60), top: 0,
+                fontSize: '0.7rem', fontWeight: '700', color: '#888',
+                transform: 'translateX(-50%)',
+              }}>{fmtShort(h * 60)}</div>
+            ))}
           </div>
 
           {/* Lanes */}
