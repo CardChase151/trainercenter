@@ -12727,7 +12727,6 @@ function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpen
 }
 
 function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
-  const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
   const [search, setSearch] = useState('');
@@ -12884,14 +12883,18 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                       </span>
                     ) : !isPast && (
                       <>
-                        <button onClick={() => setAddingTo(ev)} style={{
-                          backgroundColor: '#16a34a', color: '#fff', border: 'none',
-                          padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                          fontSize: '0.75rem', cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', gap: '4px'
-                        }}>
-                          <Plus size={12} /> Add vendor
-                        </button>
+                        <Link
+                          to={`/staff/events/${ev.id}/timemap`}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            backgroundColor: '#1a1a1a', color: '#fff',
+                            padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                            fontSize: '0.75rem', textDecoration: 'none',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          }}
+                        >
+                          <Clock size={12} /> Time map
+                        </Link>
                         <button onClick={() => setCancelling(ev)} style={{
                           backgroundColor: '#fff', color: '#dc2626',
                           padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
@@ -12999,16 +13002,6 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
         </div>
       )}
 
-      {addingTo && (
-        <AddVendorToEventModal
-          event={addingTo}
-          allVendors={allVendors}
-          existingApps={addingTo.vendor_applications || []}
-          staff={staff}
-          onClose={() => setAddingTo(null)}
-          onSaved={() => { setAddingTo(null); onChange(); }}
-        />
-      )}
       {cancelling && (
         <CancelEventModal
           event={cancelling}
@@ -13350,114 +13343,6 @@ function CancelEventModal({ event, onClose, onCancelled }) {
   );
 }
 
-// Modal for adding approved vendors directly to an event roster.
-// Inserts vendor_applications rows with status='approved' for picked vendors
-// (skipping any that already have a row on this event).
-function AddVendorToEventModal({ event, allVendors, existingApps, staff, onClose, onSaved }) {
-  const existingIds = new Set((existingApps || []).map(a => a.vendor_id));
-  const candidates = (allVendors || [])
-    .filter(v => v.status === 'approved' && !existingIds.has(v.id))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const [selected, setSelected] = useState(new Set());
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const toggle = (vid) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(vid) ? next.delete(vid) : next.add(vid);
-      return next;
-    });
-  };
-
-  const handleSave = async () => {
-    if (selected.size === 0) {
-      onClose();
-      return;
-    }
-    setSaving(true);
-    setError('');
-    const rows = [...selected].map(vid => ({
-      vendor_id: vid,
-      event_id: event.id,
-      status: 'approved',
-      decision_note: 'Added directly by staff',
-      decided_at: new Date().toISOString(),
-      decided_by: staff?.id || null,
-    }));
-    const { error: insertErr } = await supabase
-      .from('vendor_applications')
-      .upsert(rows, { onConflict: 'vendor_id,event_id' });
-    setSaving(false);
-    if (insertErr) {
-      setError(insertErr.message);
-      return;
-    }
-    onSaved();
-  };
-
-  const dateStr = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
-  return (
-    <div style={modalBackdropStyle} onClick={onClose}>
-      <div style={{ ...modalCardStyle, maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0' }}>
-          Add vendors to {event.title || 'Vendor Day'}
-        </h3>
-        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 16px 0' }}>{dateStr}</p>
-
-        {candidates.length === 0 ? (
-          <div style={{
-            backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '8px',
-            padding: '20px', textAlign: 'center', color: '#888', fontSize: '0.85rem'
-          }}>
-            All approved vendors are already on this event's roster. Approve more vendors in the All vendors tab to expand the pool.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '320px', overflowY: 'auto', marginBottom: '14px' }}>
-            {candidates.map(v => {
-              const checked = selected.has(v.id);
-              return (
-                <label key={v.id} style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '10px 12px',
-                  backgroundColor: checked ? '#f0fdf4' : '#fafafa',
-                  border: `1px solid ${checked ? '#bbf7d0' : '#eee'}`,
-                  borderRadius: '8px', cursor: 'pointer',
-                  fontSize: '0.9rem'
-                }}>
-                  <input type="checkbox" checked={checked} onChange={() => toggle(v.id)} />
-                  {v.avatar_url && (
-                    <img src={v.avatar_url} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: '700', color: '#1a1a1a' }}>{v.name}</div>
-                    {v.specialty && <div style={{ fontSize: '0.75rem', color: '#888' }}>{v.specialty}</div>}
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        )}
-
-        {error && <div style={{ ...errorStyle, marginBottom: '12px' }}><AlertCircle size={16} />{error}</div>}
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={handleSave} disabled={saving || candidates.length === 0} style={{
-            flex: 1, padding: '12px',
-            backgroundColor: (saving || candidates.length === 0) ? '#999' : '#16a34a',
-            color: '#fff', border: 'none', borderRadius: '8px',
-            fontWeight: '700', fontSize: '0.95rem',
-            cursor: (saving || candidates.length === 0) ? 'not-allowed' : 'pointer'
-          }}>
-            {saving ? 'Adding...' : selected.size === 0 ? 'Pick vendors' : `Add ${selected.size} to roster`}
-          </button>
-          <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ApplicationStatusBadge({ status }) {
   const styles = {
@@ -14226,6 +14111,428 @@ function StaffInstagramPage({ isMobile, staff }) {
         )}
       </div>
     </PageWrapper>
+  );
+}
+
+// ─── Staff Event Time Map (/staff/events/:eventId/timemap) ──
+// Visual Gantt + hourly coverage for an event's approved vendor
+// lineup. Chef uses this to plan the day — see how many vendors
+// overlap each hour, whose slot starts when, who needs an extra
+// table because they're packed in alongside others. Defaults the
+// timeline to event.vendor_start_time → vendor_end_time, falling
+// back to start_time/end_time, then to 12pm-10pm.
+function EventTimeMapPage({ isMobile, staff }) {
+  const { eventId } = useParams();
+  const isAdmin = !!staff?.isAdmin;
+
+  const [event, setEvent] = useState(null);
+  const [apps, setApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sort, setSort] = useState('start'); // start | name | duration
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!isAdmin || !eventId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const [evRes, appsRes] = await Promise.all([
+        supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
+        supabase.from('vendor_applications')
+          .select('id, status, requested_start_time, requested_end_time, vendor_note, vendor:vendors(*)')
+          .eq('event_id', eventId)
+          .eq('status', 'approved'),
+      ]);
+      if (cancelled) return;
+      if (evRes.error) { setError(evRes.error.message); setLoading(false); return; }
+      if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
+      setEvent(evRes.data || null);
+      setApps(appsRes.data || []);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [eventId, isAdmin]);
+
+  // Tick every minute when the event is today, so the "now" line moves.
+  useEffect(() => {
+    const tick = setInterval(() => setNow(new Date()), 60 * 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#666' }}>
+          Staff only.
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#999' }}>
+          <Loader2 size={18} className="spin" /> Loading time map…
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (error || !event) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#991b1b' }}>
+          {error || 'Event not found.'}
+          <div style={{ marginTop: '14px' }}>
+            <Link to="/staff/vendors" style={{ color: '#1a1a1a' }}>← Back to staff dashboard</Link>
+          </div>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // Time helpers — work in minutes-since-midnight for arithmetic, format
+  // back to 12-hour labels when rendering.
+  const parseTime = (t) => {
+    if (!t) return null;
+    const [h, m] = String(t).slice(0, 5).split(':');
+    const hh = parseInt(h, 10), mm = parseInt(m, 10);
+    if (isNaN(hh) || isNaN(mm)) return null;
+    return hh * 60 + mm;
+  };
+  const fmt12 = (mins) => {
+    if (mins == null) return '';
+    const hh = Math.floor(mins / 60), mm = mins % 60;
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+    return mm === 0 ? `${h12} ${ampm}` : `${h12}:${String(mm).padStart(2, '0')} ${ampm}`;
+  };
+  const fmtShort = (mins) => {
+    if (mins == null) return '';
+    const hh = Math.floor(mins / 60);
+    const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+    return `${h12}${hh >= 12 ? 'p' : 'a'}`;
+  };
+
+  // Timeline window
+  const windowStart = parseTime(event.vendor_start_time) ?? parseTime(event.start_time) ?? (12 * 60);
+  const windowEnd = parseTime(event.vendor_end_time) ?? parseTime(event.end_time) ?? (22 * 60);
+  const windowLen = Math.max(60, windowEnd - windowStart);
+
+  // Per-vendor slot. Missing times → fall back to the event window.
+  const slots = apps.map(a => {
+    const v = a.vendor || {};
+    const sRaw = parseTime(a.requested_start_time);
+    const eRaw = parseTime(a.requested_end_time);
+    const hasSlot = sRaw != null && eRaw != null;
+    const s = hasSlot ? Math.max(windowStart, sRaw) : windowStart;
+    const e = hasSlot ? Math.min(windowEnd, eRaw) : windowEnd;
+    return {
+      app_id: a.id,
+      vendor: v,
+      name: v.name || '(no name)',
+      avatar_url: v.avatar_url,
+      requested_start: sRaw,
+      requested_end: eRaw,
+      hasSlot,
+      start: s,
+      end: Math.max(s + 15, e),
+    };
+  });
+
+  // Sort
+  const sortedSlots = slots.slice().sort((a, b) => {
+    if (sort === 'name') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    if (sort === 'duration') return (b.end - b.start) - (a.end - a.start);
+    return a.start - b.start || a.name.localeCompare(b.name);
+  });
+
+  // Hourly coverage: count concurrent vendors at each hour bucket.
+  const startHour = Math.floor(windowStart / 60);
+  const endHour = Math.ceil(windowEnd / 60);
+  const hours = [];
+  for (let h = startHour; h < endHour; h++) hours.push(h);
+  const coverage = hours.map(h => {
+    const hStart = h * 60;
+    const hEnd = (h + 1) * 60;
+    const count = slots.filter(s => s.start < hEnd && s.end > hStart).length;
+    return { hour: h, count };
+  });
+  const peak = coverage.reduce((acc, c) => c.count > acc.count ? c : acc, { hour: 0, count: 0 });
+  const totalSlots = slots.length;
+  const withoutTime = slots.filter(s => !s.hasSlot).length;
+  const avgConcurrent = coverage.length > 0
+    ? (coverage.reduce((sum, c) => sum + c.count, 0) / coverage.length).toFixed(1)
+    : 0;
+
+  // Hour color: green (light) → orange (moderate) → red (heavy).
+  // Scaled relative to peak so it always shows contrast.
+  const heatColor = (count) => {
+    if (count === 0) return { bg: '#f3f4f6', fg: '#9ca3af' };
+    const r = peak.count > 0 ? count / peak.count : 0;
+    if (r < 0.4) return { bg: '#dcfce7', fg: '#15803d' };
+    if (r < 0.75) return { bg: '#fed7aa', fg: '#9a3412' };
+    return { bg: '#fecaca', fg: '#991b1b' };
+  };
+
+  // Now indicator — only meaningful when the event is today.
+  const todayStr = todayISO();
+  const isToday = event.event_date === todayStr;
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const showNow = isToday && nowMins >= windowStart && nowMins <= windowEnd;
+  const nowPct = ((nowMins - windowStart) / windowLen) * 100;
+
+  // Position helpers as percentages of the timeline width.
+  const pctLeft = (mins) => `${((mins - windowStart) / windowLen) * 100}%`;
+  const pctWidth = (s, e) => `${((e - s) / windowLen) * 100}%`;
+
+  const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Color a vendor lane by relative position so the chart isn't a wall of
+  // red. Hash the id into a small palette of accent colors.
+  const palette = ['#C8102E', '#1d4ed8', '#0d9488', '#7c3aed', '#b45309', '#be185d', '#15803d', '#475569'];
+  const colorFor = (id) => {
+    let h = 0;
+    for (let i = 0; i < (id || '').length; i++) h = (h * 31 + (id.charCodeAt(i) || 0)) >>> 0;
+    return palette[h % palette.length];
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+        <Link to="/staff/vendors" style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to staff dashboard
+        </Link>
+
+        <SectionHeader title="Time Map" subtitle={`${event.title || 'Vendor Day'} · ${dateLabel}`} />
+
+        {/* Summary stat tiles */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+          gap: '10px',
+          marginBottom: '18px',
+        }}>
+          <StatTile label="Vendors approved" value={totalSlots} />
+          <StatTile label="Peak concurrent" value={peak.count} accent="#C8102E" sub={peak.count > 0 ? `at ${fmt12(peak.hour * 60)}` : '—'} />
+          <StatTile label="Avg concurrent" value={avgConcurrent} />
+          <StatTile label="Window" value={`${fmt12(windowStart)} – ${fmt12(windowEnd)}`} small />
+        </div>
+
+        {withoutTime > 0 && (
+          <div style={{
+            backgroundColor: '#fef3c7', border: '1px solid #fde68a',
+            borderRadius: '10px', padding: '10px 14px',
+            fontSize: '0.85rem', color: '#92400e', marginBottom: '14px',
+          }}>
+            <strong>{withoutTime}</strong> approved vendor{withoutTime === 1 ? '' : 's'} ha{withoutTime === 1 ? 's' : 've'} no requested time on file — defaulted to the full event window.
+          </div>
+        )}
+
+        {/* Hourly coverage chart */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '14px' : '18px 22px', marginBottom: '14px',
+        }}>
+          <div style={{
+            fontSize: '0.78rem', fontWeight: '800', color: '#666',
+            textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px',
+          }}>
+            Hourly coverage · tables needed
+          </div>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', height: '120px' }}>
+            {coverage.map(({ hour, count }) => {
+              const heat = heatColor(count);
+              const heightPct = peak.count > 0 ? (count / peak.count) * 100 : 0;
+              return (
+                <div key={hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: 0 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: '800', color: heat.fg }}>{count}</div>
+                  <div style={{
+                    width: '100%',
+                    height: `${Math.max(4, heightPct)}%`,
+                    minHeight: '4px',
+                    backgroundColor: heat.bg,
+                    border: `1px solid ${heat.fg}`,
+                    borderRadius: '6px 6px 0 0',
+                    transition: 'height 0.2s',
+                  }} />
+                  <div style={{ fontSize: '0.65rem', color: '#888', fontWeight: '700' }}>{fmtShort(hour * 60)}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '8px', lineHeight: 1.5 }}>
+            Each bar = concurrent vendors that hour. Plan for at least <strong>{peak.count}</strong> table{peak.count === 1 ? '' : 's'} during peak ({peak.count > 0 ? fmt12(peak.hour * 60) : '—'}).
+          </div>
+        </div>
+
+        {/* Sort control */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.78rem', color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sort by</span>
+          {[
+            { key: 'start',    label: 'Start time' },
+            { key: 'name',     label: 'Name' },
+            { key: 'duration', label: 'Duration' },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setSort(opt.key)}
+              style={{
+                padding: '6px 12px', fontSize: '0.78rem', fontWeight: '700',
+                border: sort === opt.key ? '1px solid #1a1a1a' : '1px solid #e5e7eb',
+                backgroundColor: sort === opt.key ? '#1a1a1a' : '#fff',
+                color: sort === opt.key ? '#fff' : '#666',
+                borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >{opt.label}</button>
+          ))}
+        </div>
+
+        {/* Gantt — vendor lanes */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '12px' : '18px 22px',
+          overflowX: 'auto',
+        }}>
+          {/* Hour axis at top */}
+          <div style={{ position: 'relative', height: '24px', marginLeft: isMobile ? '0' : '180px', marginBottom: '6px' }}>
+            {hours.map(h => (
+              <div key={h} style={{
+                position: 'absolute',
+                left: pctLeft(h * 60),
+                top: 0,
+                fontSize: '0.7rem', color: '#999', fontWeight: '700',
+                transform: 'translateX(-50%)',
+              }}>{fmtShort(h * 60)}</div>
+            ))}
+          </div>
+
+          {/* Lanes */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {sortedSlots.length === 0 ? (
+              <div style={{ color: '#888', fontSize: '0.9rem', padding: '20px', textAlign: 'center' }}>
+                No approved vendors for this event yet.
+              </div>
+            ) : sortedSlots.map(s => {
+              const accent = colorFor(s.vendor.id || s.app_id);
+              return (
+                <div key={s.app_id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  alignItems: isMobile ? 'stretch' : 'center',
+                }}>
+                  {/* Name label */}
+                  <div style={{
+                    width: isMobile ? 'auto' : '180px',
+                    flexShrink: 0,
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    minWidth: 0,
+                  }}>
+                    <div style={{
+                      width: '4px', height: '24px', backgroundColor: accent, borderRadius: '2px', flexShrink: 0,
+                    }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '0.85rem', fontWeight: '700', color: '#1a1a1a',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{s.name}</div>
+                      {s.hasSlot ? (
+                        <div style={{ fontSize: '0.7rem', color: '#666' }}>
+                          {fmt12(s.requested_start)} – {fmt12(s.requested_end)}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.7rem', color: '#92400e' }}>No requested time</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Bar */}
+                  <div style={{
+                    position: 'relative',
+                    flex: 1,
+                    height: '28px',
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '6px',
+                    border: '1px solid #f3f4f6',
+                    minWidth: isMobile ? 0 : '320px',
+                  }}>
+                    {/* Hour gridlines */}
+                    {hours.slice(1).map(h => (
+                      <div key={h} style={{
+                        position: 'absolute', left: pctLeft(h * 60), top: 0, bottom: 0,
+                        width: '1px', backgroundColor: '#eef2f7',
+                      }} />
+                    ))}
+                    {/* The slot bar */}
+                    <div title={`${fmt12(s.start)} – ${fmt12(s.end)}`}
+                      style={{
+                        position: 'absolute',
+                        left: pctLeft(s.start),
+                        width: pctWidth(s.start, s.end),
+                        top: '3px',
+                        bottom: '3px',
+                        backgroundColor: accent,
+                        opacity: s.hasSlot ? 0.92 : 0.45,
+                        borderRadius: '4px',
+                        backgroundImage: s.hasSlot ? 'none' : `repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.4) 5px, rgba(255,255,255,0.4) 10px)`,
+                      }} />
+                    {/* Now line */}
+                    {showNow && (
+                      <div style={{
+                        position: 'absolute',
+                        left: `${nowPct}%`,
+                        top: '-4px', bottom: '-4px',
+                        width: '2px',
+                        backgroundColor: '#1a1a1a',
+                        boxShadow: '0 0 0 1px #fff',
+                        pointerEvents: 'none',
+                      }} />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {showNow && (
+            <div style={{
+              marginTop: '10px', fontSize: '0.72rem', color: '#1a1a1a', fontWeight: '700',
+            }}>
+              Now: {fmt12(nowMins)}
+            </div>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// Compact metric tile used by the Time Map page.
+function StatTile({ label, value, sub, accent, small }) {
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+      padding: '12px 14px',
+      display: 'flex', flexDirection: 'column', gap: '2px',
+    }}>
+      <div style={{
+        fontSize: '0.65rem', fontWeight: '800', color: '#888',
+        textTransform: 'uppercase', letterSpacing: '0.08em',
+      }}>{label}</div>
+      <div style={{
+        fontSize: small ? '0.95rem' : '1.5rem', fontWeight: '800',
+        color: accent || '#1a1a1a',
+      }}>{value}</div>
+      {sub && (
+        <div style={{ fontSize: '0.72rem', color: '#666' }}>{sub}</div>
+      )}
+    </div>
   );
 }
 
@@ -15141,6 +15448,7 @@ function App() {
         <Route path="/guest/dashboard" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/events/:eventId/timemap" element={<EventTimeMapPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
