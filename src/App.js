@@ -14466,7 +14466,22 @@ function EventTimeMapPage({ isMobile, staff }) {
                 fontFamily: 'inherit',
               }}
             >
-              Print check-in sheet
+              Print
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintChecklist}
+              title="Opens the print dialog — pick 'Save as PDF' as the destination to download."
+              style={{
+                backgroundColor: '#1a1a1a', color: '#fff',
+                border: '1px solid #1a1a1a',
+                padding: '10px 14px', borderRadius: '10px',
+                fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                fontFamily: 'inherit',
+              }}
+            >
+              Download PDF
             </button>
           </div>
         </div>
