@@ -14265,14 +14265,17 @@ function EventTimeMapPage({ isMobile, staff }) {
     ? (coverage.reduce((sum, c) => sum + c.count, 0) / coverage.length).toFixed(1)
     : 0;
 
-  // Hour color: green (light) → orange (moderate) → red (heavy).
-  // Scaled relative to peak so it always shows contrast.
+  // Hour heat colors — 5 bins relative to peak so subtle differences still
+  // show up. Keeps the chart informative when most hours hover near peak
+  // and also when concurrent counts are in the single digits.
   const heatColor = (count) => {
-    if (count === 0) return { bg: '#f3f4f6', fg: '#9ca3af' };
+    if (count === 0) return { bg: '#f9fafb', fg: '#9ca3af', border: '#e5e7eb' };
     const r = peak.count > 0 ? count / peak.count : 0;
-    if (r < 0.4) return { bg: '#dcfce7', fg: '#15803d' };
-    if (r < 0.75) return { bg: '#fed7aa', fg: '#9a3412' };
-    return { bg: '#fecaca', fg: '#991b1b' };
+    if (r < 0.25) return { bg: '#ecfdf5', fg: '#065f46', border: '#a7f3d0' };
+    if (r < 0.5)  return { bg: '#dcfce7', fg: '#15803d', border: '#86efac' };
+    if (r < 0.75) return { bg: '#fef3c7', fg: '#92400e', border: '#fde68a' };
+    if (r < 0.95) return { bg: '#fed7aa', fg: '#9a3412', border: '#fdba74' };
+    return { bg: '#fecaca', fg: '#991b1b', border: '#fca5a5' };
   };
 
   // Now indicator — only meaningful when the event is today.
@@ -14332,43 +14335,6 @@ function EventTimeMapPage({ isMobile, staff }) {
           </div>
         )}
 
-        {/* Hourly coverage chart */}
-        <div style={{
-          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
-          padding: isMobile ? '14px' : '18px 22px', marginBottom: '14px',
-        }}>
-          <div style={{
-            fontSize: '0.78rem', fontWeight: '800', color: '#666',
-            textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px',
-          }}>
-            Hourly coverage · tables needed
-          </div>
-          <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', height: '120px' }}>
-            {coverage.map(({ hour, count }) => {
-              const heat = heatColor(count);
-              const heightPct = peak.count > 0 ? (count / peak.count) * 100 : 0;
-              return (
-                <div key={hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: '800', color: heat.fg }}>{count}</div>
-                  <div style={{
-                    width: '100%',
-                    height: `${Math.max(4, heightPct)}%`,
-                    minHeight: '4px',
-                    backgroundColor: heat.bg,
-                    border: `1px solid ${heat.fg}`,
-                    borderRadius: '6px 6px 0 0',
-                    transition: 'height 0.2s',
-                  }} />
-                  <div style={{ fontSize: '0.65rem', color: '#888', fontWeight: '700' }}>{fmtShort(hour * 60)}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '8px', lineHeight: 1.5 }}>
-            Each bar = concurrent vendors that hour. Plan for at least <strong>{peak.count}</strong> table{peak.count === 1 ? '' : 's'} during peak ({peak.count > 0 ? fmt12(peak.hour * 60) : '—'}).
-          </div>
-        </div>
-
         {/* Sort control */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sort by</span>
@@ -14392,23 +14358,59 @@ function EventTimeMapPage({ isMobile, staff }) {
           ))}
         </div>
 
-        {/* Gantt — vendor lanes */}
+        {/* Gantt — vendor lanes with a coverage heat strip on top */}
         <div style={{
           backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
           padding: isMobile ? '12px' : '18px 22px',
           overflowX: 'auto',
         }}>
-          {/* Hour axis at top */}
-          <div style={{ position: 'relative', height: '24px', marginLeft: isMobile ? '0' : '180px', marginBottom: '6px' }}>
-            {hours.map(h => (
-              <div key={h} style={{
-                position: 'absolute',
-                left: pctLeft(h * 60),
-                top: 0,
-                fontSize: '0.7rem', color: '#999', fontWeight: '700',
-                transform: 'translateX(-50%)',
-              }}>{fmtShort(h * 60)}</div>
-            ))}
+          {/* Heat strip — one cell per hour. Sits directly above the Gantt
+              lanes so Chef can scan down from a hour's count to see exactly
+              which vendors are present. Peak hour gets a small marker. */}
+          <div style={{
+            display: 'flex', alignItems: 'stretch', gap: '4px',
+            marginLeft: isMobile ? 0 : '190px',
+            marginBottom: '10px',
+          }}>
+            {coverage.map(({ hour, count }) => {
+              const heat = heatColor(count);
+              const isPeak = peak.count > 0 && count === peak.count;
+              return (
+                <div key={hour} style={{
+                  flex: 1, minWidth: 0, position: 'relative',
+                  backgroundColor: heat.bg, color: heat.fg,
+                  border: `1px solid ${heat.border}`,
+                  borderRadius: '8px',
+                  padding: '8px 4px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  textAlign: 'center',
+                }}>
+                  {isPeak && (
+                    <span style={{
+                      position: 'absolute', top: '-7px', right: '-7px',
+                      width: '18px', height: '18px',
+                      backgroundColor: '#C8102E', color: '#fff',
+                      borderRadius: '50%',
+                      fontSize: '0.6rem', fontWeight: '800',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 0 0 2px #fff',
+                    }} title="Peak hour">★</span>
+                  )}
+                  <div style={{ fontSize: '1.05rem', fontWeight: '800', lineHeight: 1 }}>{count}</div>
+                  <div style={{ fontSize: '0.62rem', fontWeight: '700', opacity: 0.75, marginTop: '3px', letterSpacing: '0.02em' }}>
+                    {fmtShort(hour * 60)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{
+            fontSize: '0.72rem', color: '#666', marginBottom: '12px',
+            marginLeft: isMobile ? 0 : '190px', lineHeight: 1.5,
+          }}>
+            Each box = concurrent vendors in that hour.
+            {peak.count > 0 && <> Plan for at least <strong>{peak.count}</strong> table{peak.count === 1 ? '' : 's'} at peak ({fmt12(peak.hour * 60)}).</>}
           </div>
 
           {/* Lanes */}
