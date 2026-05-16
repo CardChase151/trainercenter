@@ -7709,13 +7709,20 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   const isPast = event.event_date < today;
 
   const submitApplication = async ({ requested_start_time, requested_end_time, vendor_note }) => {
+    // The apply modal enforces non-null times; if we somehow get here
+    // without them, fail loudly instead of writing null. The DB also
+    // has a NOT NULL constraint on these columns now (see migration
+    // 20260516_vendor_apps_time_not_null.sql).
+    if (!requested_start_time || !requested_end_time) {
+      throw new Error('Pick both an arrival time and a leave time before submitting.');
+    }
     const { data, error: insertError } = await supabase
       .from('vendor_applications')
       .insert({
         vendor_id: vendorId,
         event_id: event.id,
-        requested_start_time: requested_start_time || null,
-        requested_end_time: requested_end_time || null,
+        requested_start_time,
+        requested_end_time,
         vendor_note: vendor_note || null,
       })
       .select()
@@ -8454,6 +8461,13 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Defense in depth: HTML `required` blocks empty submits in most
+    // browsers, but iOS Safari has historically been loose with native
+    // time inputs. Re-validate here so the DB never sees a null slot.
+    if (!startTime || !endTime) {
+      setError('Pick both an arrival time and a leave time.');
+      return;
+    }
     if (endTime <= startTime) {
       setError('End time must be after start time.');
       return;
