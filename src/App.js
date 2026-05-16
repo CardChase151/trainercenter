@@ -10385,16 +10385,51 @@ function VendorDetailModal({ vendor, profilesById, onClose }) {
           </DetailSection>
         )}
 
-        {(v.heard_from || v.referred_by_name) && (
-          <DetailSection label="How they heard about us">
-            {v.heard_from && <div>Source: {String(v.heard_from).replace(/_/g, ' ')}</div>}
-            {v.referred_by_name && (
-              <div>
-                Referred by: <strong>{v.referred_by_name}</strong>
-                {v.referred_by_handle && ` (@${v.referred_by_handle})`}
-                {v.referred_by_contact && ` · ${v.referred_by_contact}`}
+        {v.experience_level && (
+          <DetailSection label="Vendor experience">
+            <div>{({
+              first_show: 'This is my first show',
+              '1_to_5':   '1–5 shows',
+              '5_to_10':  '5–10 shows',
+              '10_to_50': '10–50 shows',
+              '50_plus':  '50+ shows',
+            })[v.experience_level] || v.experience_level}</div>
+          </DetailSection>
+        )}
+
+        {v.applicant_questions && (
+          <DetailSection label="Questions for Chef">
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{v.applicant_questions}</div>
+          </DetailSection>
+        )}
+
+        {/* Vendor-referral callout. Pulled out of the generic "heard from"
+            section because Chef wants to see at a glance when a partner sent
+            someone our way -- that's the most actionable referral signal. */}
+        {v.heard_from === 'vendor_referral' && (
+          <DetailSection label="Referred by another vendor">
+            {v.referred_by_name ? (
+              <div style={{
+                backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+                borderRadius: '8px', padding: '10px 12px',
+                display: 'flex', flexDirection: 'column', gap: '2px',
+              }}>
+                <div><strong>{v.referred_by_name}</strong>
+                  {v.referred_by_handle && ` · @${v.referred_by_handle}`}
+                </div>
+                {v.referred_by_contact && (
+                  <div style={{ fontSize: '0.82rem', color: '#15803d' }}>{v.referred_by_contact}</div>
+                )}
               </div>
+            ) : (
+              <div style={{ color: '#92400e' }}>Vendor referral, but no referrer name on file.</div>
             )}
+          </DetailSection>
+        )}
+
+        {v.heard_from && v.heard_from !== 'vendor_referral' && (
+          <DetailSection label="How they heard about us">
+            <div>{String(v.heard_from).replace(/_/g, ' ')}</div>
           </DetailSection>
         )}
 
