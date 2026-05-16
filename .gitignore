@@ -51,3 +51,7 @@ __pycache__/
 # local-only planning / strategy docs
 SEO_STANDINGS.md
 TOMORROW.md
+
+# Instagram data export (~1.5GB zip + extracted JSONs). Local-only,
+# never commit. Used by scripts/import-ig-contacts.js.
+/instagram-archive

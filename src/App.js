@@ -3,7 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Instagram, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3 } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -486,6 +486,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     { key: 'vendors',  label: 'Vendors',  desc: 'Approve, manage, review applications', icon: <Briefcase size={20} />, to: '/staff/vendors', accent: '#C8102E' },
     { key: 'members',  label: 'Members',  desc: 'Customer list and vote history', icon: <Users size={20} />, to: '/staff/members', accent: '#C8102E' },
     { key: 'comms',    label: 'Communication', desc: 'Compose a vendor or customer blast', icon: <Mail size={20} />, to: '/staff/comms', accent: '#C8102E' },
+    { key: 'instagram', label: 'Instagram Contacts', desc: 'Tag followers as member, vendor, or influencer', icon: <IgIcon size={20} />, to: '/staff/instagram', accent: '#C8102E' },
     { key: 'analytics', label: 'Analytics', desc: 'Daily SEO + traffic dashboard', icon: <BarChart3 size={20} />, to: '/staff/analytics', accent: '#C8102E' },
     { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
   ];
@@ -13587,6 +13588,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Manage Vendors', to: '/staff/vendors' },
             { label: 'Manage Members', to: '/staff/members' },
             { label: 'Communication', to: '/staff/comms' },
+            { label: 'Instagram Contacts', to: '/staff/instagram' },
             { label: 'Analytics', to: '/staff/analytics' },
             { label: 'Business Hours', to: '/#visit-us' },
             ...(remindersIn === 'staff' ? [reminderItem] : []),
@@ -13620,6 +13622,421 @@ const MARKETING_CATEGORIES = [
   { key: 'store_news',  label: 'Store news and updates',      help: 'Hours, restocks, new arrivals, store happenings.' },
   { key: 'blog',        label: 'New blog posts',              help: 'Articles and guides we publish on the site.' },
 ];
+
+// ─── Staff Instagram Contacts Page (/staff/instagram) ──────
+// Address book of every account that follows @trainercenter.pokemon.
+// Seeded from the IG data export via scripts/import-ig-contacts.js.
+// Staff tag each handle as member / vendor / influencer and click
+// through to IG to message them directly. RLS gates everything to
+// admins.
+const IG_TAGS = [
+  { key: 'member',     label: 'Member',     color: '#1d4ed8' },
+  { key: 'vendor',     label: 'Vendor',     color: '#C8102E' },
+  { key: 'influencer', label: 'Influencer', color: '#7c3aed' },
+];
+const IG_LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
+
+function StaffInstagramPage({ isMobile, staff }) {
+  const isAdmin = !!staff?.isAdmin;
+
+  const [rows, setRows] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [counts, setCounts] = useState({ total: 0, untagged: 0, member: 0, vendor: 0, influencer: 0 });
+  const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [letter, setLetter] = useState('all');           // 'all' | '#' | 'A'..'Z'
+  const [tagFilter, setTagFilter] = useState('all');     // 'all' | 'untagged' | tag key
+  const [relFilter, setRelFilter] = useState('all');     // 'all' | follower | following | mutual
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+
+  // Per-row pending state for notes debounce + busy indication.
+  const [busyHandle, setBusyHandle] = useState(null);
+  const [notesDraft, setNotesDraft] = useState({}); // handle -> string
+  const notesTimer = useRef(null);
+
+  const fetchPage = useCallback(async () => {
+    setLoading(true);
+    let q = supabase
+      .from('ig_contacts')
+      .select('handle, profile_url, relationship, followed_at, tag, notes, last_contacted_at', { count: 'exact' })
+      .order('handle', { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+
+    if (search) q = q.ilike('handle', `%${search}%`);
+    if (letter === '#') {
+      // Anything not starting with a letter — numerics, underscores, etc.
+      q = q.not('handle', 'ilike', 'a%')
+           .not('handle', 'ilike', 'b%').not('handle', 'ilike', 'c%').not('handle', 'ilike', 'd%')
+           .not('handle', 'ilike', 'e%').not('handle', 'ilike', 'f%').not('handle', 'ilike', 'g%')
+           .not('handle', 'ilike', 'h%').not('handle', 'ilike', 'i%').not('handle', 'ilike', 'j%')
+           .not('handle', 'ilike', 'k%').not('handle', 'ilike', 'l%').not('handle', 'ilike', 'm%')
+           .not('handle', 'ilike', 'n%').not('handle', 'ilike', 'o%').not('handle', 'ilike', 'p%')
+           .not('handle', 'ilike', 'q%').not('handle', 'ilike', 'r%').not('handle', 'ilike', 's%')
+           .not('handle', 'ilike', 't%').not('handle', 'ilike', 'u%').not('handle', 'ilike', 'v%')
+           .not('handle', 'ilike', 'w%').not('handle', 'ilike', 'x%').not('handle', 'ilike', 'y%')
+           .not('handle', 'ilike', 'z%');
+    } else if (letter !== 'all') {
+      q = q.ilike('handle', `${letter.toLowerCase()}%`);
+    }
+    if (tagFilter === 'untagged') q = q.is('tag', null);
+    else if (tagFilter !== 'all') q = q.eq('tag', tagFilter);
+    if (relFilter !== 'all') q = q.eq('relationship', relFilter);
+
+    const { data, error, count } = await q;
+    setLoading(false);
+    if (error) {
+      console.error('[StaffInstagram] fetch failed', error);
+      alert(`Could not load IG contacts: ${error.message}`);
+      return;
+    }
+    setRows(data || []);
+    setTotalCount(count || 0);
+  }, [search, letter, tagFilter, relFilter, page]);
+
+  const fetchCounts = useCallback(async () => {
+    // Cheap aggregate so the header can show "X total · Y untagged".
+    const total = await supabase.from('ig_contacts').select('*', { count: 'exact', head: true });
+    const untagged = await supabase.from('ig_contacts').select('*', { count: 'exact', head: true }).is('tag', null);
+    const member = await supabase.from('ig_contacts').select('*', { count: 'exact', head: true }).eq('tag', 'member');
+    const vendor = await supabase.from('ig_contacts').select('*', { count: 'exact', head: true }).eq('tag', 'vendor');
+    const influencer = await supabase.from('ig_contacts').select('*', { count: 'exact', head: true }).eq('tag', 'influencer');
+    setCounts({
+      total: total.count || 0,
+      untagged: untagged.count || 0,
+      member: member.count || 0,
+      vendor: vendor.count || 0,
+      influencer: influencer.count || 0,
+    });
+  }, []);
+
+  useEffect(() => { if (isAdmin) fetchPage(); }, [fetchPage, isAdmin]);
+  useEffect(() => { if (isAdmin) fetchCounts(); }, [fetchCounts, isAdmin]);
+
+  const submitSearch = (e) => {
+    e?.preventDefault?.();
+    setPage(0);
+    setSearch(searchInput.trim());
+  };
+  const clearAllFilters = () => {
+    setSearchInput(''); setSearch(''); setLetter('all');
+    setTagFilter('all'); setRelFilter('all'); setPage(0);
+  };
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const setTag = async (handle, nextTag) => {
+    setBusyHandle(handle);
+    // Optimistic update so the pill flips immediately.
+    setRows(prev => prev.map(r => r.handle === handle ? { ...r, tag: nextTag } : r));
+    const { error } = await supabase
+      .from('ig_contacts')
+      .update({ tag: nextTag })
+      .eq('handle', handle);
+    setBusyHandle(null);
+    if (error) {
+      alert(`Could not update tag: ${error.message}`);
+      // Refetch to recover from the optimistic flip.
+      fetchPage();
+      return;
+    }
+    fetchCounts();
+  };
+
+  const saveNotes = async (handle, value) => {
+    const { error } = await supabase
+      .from('ig_contacts')
+      .update({ notes: value || null })
+      .eq('handle', handle);
+    if (error) {
+      console.error('[StaffInstagram] notes save failed', error);
+    }
+  };
+  const onNotesChange = (handle, value) => {
+    setNotesDraft(prev => ({ ...prev, [handle]: value }));
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(() => saveNotes(handle, value), 600);
+  };
+
+  const markContactedNow = async (handle) => {
+    const { error } = await supabase
+      .from('ig_contacts')
+      .update({ last_contacted_at: new Date().toISOString() })
+      .eq('handle', handle);
+    if (error) { alert(`Could not record contact: ${error.message}`); return; }
+    fetchPage();
+  };
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#666' }}>
+          Staff only.
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const fmtDate = (iso) => {
+    if (!iso) return null;
+    try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+    catch { return null; }
+  };
+
+  const chip = (label, color, bg) => (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      fontSize: '0.65rem', fontWeight: '800',
+      color, backgroundColor: bg,
+      padding: '2px 8px', borderRadius: '12px',
+      textTransform: 'uppercase', letterSpacing: '0.05em',
+    }}>{label}</span>
+  );
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+        <Link to="/staff/vendors" style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to staff dashboard
+        </Link>
+        <SectionHeader title="Instagram Contacts" subtitle="Tag every handle so staff can reach the right people fast" />
+
+        {/* Counts strip */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '8px',
+          marginBottom: '14px',
+        }}>
+          {chip(`${counts.total.toLocaleString()} total`, '#1a1a1a', '#f3f4f6')}
+          {chip(`${counts.untagged.toLocaleString()} untagged`, '#92400e', '#fef3c7')}
+          {chip(`${counts.member.toLocaleString()} member`, '#fff', '#1d4ed8')}
+          {chip(`${counts.vendor.toLocaleString()} vendor`, '#fff', '#C8102E')}
+          {chip(`${counts.influencer.toLocaleString()} influencer`, '#fff', '#7c3aed')}
+        </div>
+
+        {/* Filter bar */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: isMobile ? '14px' : '18px 22px', marginBottom: '14px',
+        }}>
+          <form onSubmit={submitSearch} style={{
+            display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
+          }}>
+            <div style={{ position: 'relative', flex: '1 1 220px' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
+              <input
+                type="search"
+                placeholder="Search handle"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 30px', fontSize: '0.9rem',
+                  border: '1px solid #ddd', borderRadius: '8px',
+                  fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <select value={tagFilter} onChange={e => { setPage(0); setTagFilter(e.target.value); }}
+              style={{ padding: '10px 12px', fontSize: '0.9rem', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#fff', fontFamily: 'inherit' }}>
+              <option value="all">All tags</option>
+              <option value="untagged">Untagged</option>
+              <option value="member">Member</option>
+              <option value="vendor">Vendor</option>
+              <option value="influencer">Influencer</option>
+            </select>
+            <select value={relFilter} onChange={e => { setPage(0); setRelFilter(e.target.value); }}
+              style={{ padding: '10px 12px', fontSize: '0.9rem', cursor: 'pointer', border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#fff', fontFamily: 'inherit' }}>
+              <option value="all">All relationships</option>
+              <option value="follower">Followers</option>
+              <option value="following">Following</option>
+              <option value="mutual">Mutuals</option>
+            </select>
+            <button type="submit" style={{
+              padding: '10px 16px', fontSize: '0.9rem', fontWeight: '700',
+              backgroundColor: '#1a1a1a', color: '#fff',
+              border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Search</button>
+            {(search || searchInput || letter !== 'all' || tagFilter !== 'all' || relFilter !== 'all') && (
+              <button type="button" onClick={clearAllFilters} style={{
+                padding: '10px 14px', fontSize: '0.85rem', fontWeight: '700',
+                backgroundColor: '#f3f4f6', color: '#666',
+                border: '1px solid #e5e7eb', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>Clear</button>
+            )}
+          </form>
+
+          {/* A-Z jump bar */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '4px',
+            marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f3f4f6',
+          }}>
+            <button type="button" onClick={() => { setPage(0); setLetter('all'); }} style={{
+              padding: '4px 10px', fontSize: '0.75rem', fontWeight: '700',
+              border: letter === 'all' ? '1px solid #1a1a1a' : '1px solid #e5e7eb',
+              backgroundColor: letter === 'all' ? '#1a1a1a' : '#fff',
+              color: letter === 'all' ? '#fff' : '#666',
+              borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit', minWidth: '30px',
+            }}>All</button>
+            {IG_LETTERS.map(L => (
+              <button key={L} type="button" onClick={() => { setPage(0); setLetter(L); }} style={{
+                padding: '4px 0', width: '28px', fontSize: '0.75rem', fontWeight: '700',
+                border: letter === L ? '1px solid #1a1a1a' : '1px solid #e5e7eb',
+                backgroundColor: letter === L ? '#1a1a1a' : '#fff',
+                color: letter === L ? '#fff' : '#666',
+                borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>{L}</button>
+            ))}
+          </div>
+
+          <p style={{ fontSize: '0.78rem', color: '#888', margin: '10px 2px 0' }}>
+            {loading ? 'Loading...' : `${totalCount.toLocaleString()} match · page ${page + 1} of ${totalPages}`}
+          </p>
+        </div>
+
+        {/* Rows */}
+        {!loading && rows.length === 0 && (
+          <div style={{
+            backgroundColor: '#fff', border: '1px dashed #ddd',
+            borderRadius: '14px', padding: '40px 20px', textAlign: 'center',
+            color: '#888', fontSize: '0.9rem',
+          }}>No handles match the current filter.</div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {rows.map(row => {
+            const igUrl = row.profile_url || `https://www.instagram.com/${row.handle}`;
+            const draft = notesDraft[row.handle] !== undefined ? notesDraft[row.handle] : (row.notes || '');
+            const busy = busyHandle === row.handle;
+            return (
+              <div key={row.handle} style={{
+                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+                padding: isMobile ? '12px' : '14px 18px',
+                display: 'flex', flexDirection: 'column', gap: '10px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                    <div style={{ fontWeight: '800', fontSize: '0.95rem', color: '#1a1a1a', wordBreak: 'break-all' }}>
+                      @{row.handle}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px', alignItems: 'center' }}>
+                      {row.relationship === 'mutual'
+                        ? chip('Mutual', '#065f46', '#d1fae5')
+                        : row.relationship === 'following'
+                          ? chip('We follow', '#1e3a8a', '#dbeafe')
+                          : chip('Follower', '#374151', '#f3f4f6')}
+                      {row.followed_at && (
+                        <span style={{ fontSize: '0.7rem', color: '#888' }}>
+                          since {fmtDate(row.followed_at)}
+                        </span>
+                      )}
+                      {row.last_contacted_at && (
+                        <span style={{ fontSize: '0.7rem', color: '#065f46' }}>
+                          last contacted {fmtDate(row.last_contacted_at)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {IG_TAGS.map(t => {
+                      const active = row.tag === t.key;
+                      return (
+                        <button
+                          key={t.key}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setTag(row.handle, active ? null : t.key)}
+                          style={{
+                            padding: '6px 10px', fontSize: '0.75rem', fontWeight: '800',
+                            border: active ? `2px solid ${t.color}` : '2px solid #e5e7eb',
+                            backgroundColor: active ? t.color : '#fff',
+                            color: active ? '#fff' : t.color,
+                            borderRadius: '999px', cursor: busy ? 'wait' : 'pointer',
+                            fontFamily: 'inherit', textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}
+                        >{t.label}</button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <a
+                      href={igUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => markContactedNow(row.handle)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 12px', fontSize: '0.8rem', fontWeight: '700',
+                        backgroundColor: '#C8102E', color: '#fff',
+                        textDecoration: 'none', borderRadius: '8px',
+                      }}
+                    >
+                      <IgIcon size={14} /> Open IG <ExternalLink size={12} />
+                    </a>
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="Notes (saved automatically)"
+                  value={draft}
+                  onChange={e => onNotesChange(row.handle, e.target.value)}
+                  style={{
+                    padding: '8px 10px', fontSize: '0.82rem',
+                    border: '1px solid #eee', borderRadius: '8px',
+                    fontFamily: 'inherit', width: '100%', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{
+            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+            marginTop: '20px',
+          }}>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              style={{
+                padding: '8px 14px', fontSize: '0.85rem', fontWeight: '700',
+                backgroundColor: page === 0 ? '#f3f4f6' : '#fff',
+                color: page === 0 ? '#aaa' : '#1a1a1a',
+                border: '1px solid #e5e7eb', borderRadius: '8px',
+                cursor: page === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              }}
+            >← Prev</button>
+            <span style={{ fontSize: '0.85rem', color: '#666' }}>
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              style={{
+                padding: '8px 14px', fontSize: '0.85rem', fontWeight: '700',
+                backgroundColor: page >= totalPages - 1 ? '#f3f4f6' : '#fff',
+                color: page >= totalPages - 1 ? '#aaa' : '#1a1a1a',
+                border: '1px solid #e5e7eb', borderRadius: '8px',
+                cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              }}
+            >Next →</button>
+          </div>
+        )}
+      </div>
+    </PageWrapper>
+  );
+}
 
 function UnsubscribePage({ isMobile }) {
   const [searchParams] = useSearchParams();
@@ -14535,6 +14952,7 @@ function App() {
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
       </Routes>
 
