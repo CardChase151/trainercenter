@@ -14141,10 +14141,24 @@ function EventTimeMapPage({ isMobile, staff }) {
 
   const [event, setEvent] = useState(null);
   const [apps, setApps] = useState([]);
+  const [attendance, setAttendance] = useState({}); // vendor_id -> row
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sort, setSort] = useState('start'); // start | name | duration
   const [now, setNow] = useState(() => new Date());
+  const [checkinBusy, setCheckinBusy] = useState(null); // vendor_id
+
+  const refreshAttendance = useCallback(async () => {
+    if (!eventId) return;
+    const { data, error: attErr } = await supabase
+      .from('vendor_attendance')
+      .select('id, vendor_id, checked_in_at, geo_verified')
+      .eq('event_id', eventId);
+    if (attErr) { console.warn('[time-map] attendance fetch', attErr); return; }
+    const next = {};
+    (data || []).forEach(r => { next[r.vendor_id] = r; });
+    setAttendance(next);
+  }, [eventId]);
 
   useEffect(() => {
     if (!isAdmin || !eventId) return;
@@ -14163,16 +14177,75 @@ function EventTimeMapPage({ isMobile, staff }) {
       if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
       setEvent(evRes.data || null);
       setApps(appsRes.data || []);
+      await refreshAttendance();
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventId, isAdmin]);
+  }, [eventId, isAdmin, refreshAttendance]);
 
-  // Tick every minute when the event is today, so the "now" line moves.
+  // Tick every minute when the event is today, so the "now" line moves
+  // and the header clock stays current.
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), 60 * 1000);
     return () => clearInterval(tick);
   }, []);
+
+  // Staff check-in: stamp the vendor as arrived right now (honor system,
+  // no geo). Optimistic so the row flips instantly. RLS allows admins to
+  // manage all attendance rows.
+  const checkInNow = async (vendorId) => {
+    if (!vendorId || checkinBusy) return;
+    setCheckinBusy(vendorId);
+    const stamp = new Date().toISOString();
+    // Optimistic
+    setAttendance(prev => ({ ...prev, [vendorId]: { vendor_id: vendorId, checked_in_at: stamp, geo_verified: false, _pending: true } }));
+    const { data, error: insErr } = await supabase
+      .from('vendor_attendance')
+      .insert({
+        vendor_id: vendorId,
+        event_id: eventId,
+        checked_in_at: stamp,
+        geo_verified: false,
+      })
+      .select('id, vendor_id, checked_in_at, geo_verified')
+      .single();
+    setCheckinBusy(null);
+    if (insErr) {
+      console.error('[time-map] check-in failed', insErr);
+      alert(`Could not record check-in: ${insErr.message}`);
+      // Rollback by re-pulling truth.
+      refreshAttendance();
+      return;
+    }
+    setAttendance(prev => ({ ...prev, [vendorId]: data }));
+  };
+
+  const undoCheckIn = async (vendorId) => {
+    const row = attendance[vendorId];
+    if (!row?.id) return;
+    if (!window.confirm('Undo this check-in?')) return;
+    setCheckinBusy(vendorId);
+    const { error: delErr } = await supabase
+      .from('vendor_attendance')
+      .delete()
+      .eq('id', row.id);
+    setCheckinBusy(null);
+    if (delErr) {
+      alert(`Could not undo: ${delErr.message}`);
+      return;
+    }
+    setAttendance(prev => {
+      const next = { ...prev };
+      delete next[vendorId];
+      return next;
+    });
+  };
+
+  const handlePrintChecklist = () => {
+    // Use the browser's print dialog. Print-only CSS hides the rest of
+    // the page and renders the checklist block as a clean letter sheet.
+    window.print();
+  };
 
   if (!isAdmin) {
     return (
@@ -14345,7 +14418,19 @@ function EventTimeMapPage({ isMobile, staff }) {
 
   return (
     <PageWrapper isMobile={isMobile}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+      {/* Print styles: hide the whole app shell + dashboard layout during
+          window.print() and reveal only the .time-map-print-only block. */}
+      <style>{`
+        @media print {
+          body { background: #fff !important; }
+          .no-print, .no-print * { display: none !important; }
+          .time-map-print-only { display: block !important; }
+          .time-map-print-only .checklist-row { page-break-inside: avoid; }
+        }
+        .time-map-print-only { display: none; }
+      `}</style>
+
+      <div className="no-print" style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
         <Link to="/staff/vendors" style={{
           color: '#666', fontSize: '0.78rem', fontWeight: '700',
           textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
@@ -14353,17 +14438,49 @@ function EventTimeMapPage({ isMobile, staff }) {
           ← Back to staff dashboard
         </Link>
 
-        <SectionHeader title="Time Map" subtitle={`${event.title || 'Vendor Day'} · ${dateLabel}`} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+          <SectionHeader title="Time Map" subtitle={`${event.title || 'Vendor Day'} · ${dateLabel}`} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Live clock — Chef uses this to confirm the time he's
+                stamping vendors in at when he's clicking "Here". */}
+            <div style={{
+              backgroundColor: '#1a1a1a', color: '#fff',
+              padding: '8px 14px', borderRadius: '10px',
+              display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
+              minWidth: '92px',
+            }}>
+              <div style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Now</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: '900', letterSpacing: '0.02em', lineHeight: 1.1 }}>
+                {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handlePrintChecklist}
+              style={{
+                backgroundColor: '#fff', color: '#1a1a1a',
+                border: '1px solid #1a1a1a',
+                padding: '10px 14px', borderRadius: '10px',
+                fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                fontFamily: 'inherit',
+              }}
+            >
+              Print check-in sheet
+            </button>
+          </div>
+        </div>
 
-        {/* Summary stat tiles. Window is shown prominently in the big
-            start/end band below, so we don't repeat it here. */}
+        {/* Summary stat tiles — adds a "Checked in" count so Chef can
+            see roll-call progress at a glance. */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
           gap: '10px',
           marginBottom: '18px',
         }}>
           <StatTile label="Vendors approved" value={totalSlots} />
+          <StatTile label="Checked in" value={`${Object.keys(attendance).length} / ${totalSlots}`} accent={Object.keys(attendance).length === totalSlots && totalSlots > 0 ? '#15803d' : '#1a1a1a'} />
           <StatTile label="Peak concurrent" value={peak.count} accent="#C8102E" sub={peak.count > 0 ? `at ${fmt12(peak.hour * 60)}` : '—'} />
           <StatTile label="Avg concurrent" value={avgConcurrent} />
         </div>
@@ -14589,13 +14706,22 @@ function EventTimeMapPage({ isMobile, staff }) {
               </div>
             ) : sortedSlots.map(s => {
               const accent = colorFor(s.vendor.id || s.app_id);
+              const att = attendance[s.vendor.id];
+              const isCheckedIn = !!att;
+              const isBusy = checkinBusy === s.vendor.id;
+              const arriveLabel = att?.checked_in_at
+                ? new Date(att.checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                : null;
               return (
                 <div key={s.app_id} style={{
                   display: 'flex',
-                  alignItems: 'center',
                   gap: '10px',
                   flexDirection: isMobile ? 'column' : 'row',
                   alignItems: isMobile ? 'stretch' : 'center',
+                  backgroundColor: isCheckedIn ? '#f0fdf4' : 'transparent',
+                  borderRadius: '8px',
+                  padding: isCheckedIn ? '4px' : '0',
+                  transition: 'background-color 0.15s',
                 }}>
                   {/* Name label */}
                   <div style={{
@@ -14665,6 +14791,51 @@ function EventTimeMapPage({ isMobile, staff }) {
                       }} />
                     )}
                   </div>
+
+                  {/* Check-in control. "Here" stamps the row with the
+                      current time; clicking the green pill undoes it. */}
+                  <div style={{
+                    flexShrink: 0,
+                    width: isMobile ? 'auto' : '140px',
+                    display: 'flex', justifyContent: isMobile ? 'flex-end' : 'flex-start',
+                  }}>
+                    {isCheckedIn ? (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => undoCheckIn(s.vendor.id)}
+                        title="Click to undo"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          backgroundColor: '#dcfce7', color: '#15803d',
+                          border: '1px solid #86efac',
+                          padding: '6px 10px', borderRadius: '999px',
+                          fontSize: '0.78rem', fontWeight: '700',
+                          cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Here · {arriveLabel}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => checkInNow(s.vendor.id)}
+                        style={{
+                          backgroundColor: '#16a34a', color: '#fff',
+                          border: 'none',
+                          padding: '8px 16px', borderRadius: '8px',
+                          fontSize: '0.85rem', fontWeight: '800',
+                          cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          opacity: isBusy ? 0.7 : 1,
+                          minWidth: '90px',
+                        }}
+                      >
+                        {isBusy ? '…' : 'Here'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -14677,6 +14848,70 @@ function EventTimeMapPage({ isMobile, staff }) {
               Now: {fmt12(nowMins)}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ────── Print-only check-in sheet ──────────────────────
+          Hidden on screen; revealed only during window.print(). Staff who
+          aren't in front of a computer at the event can print this out,
+          mark arrivals by hand, and hand it back so we can backfill into
+          the system later. */}
+      <div className="time-map-print-only" style={{
+        padding: '24px 32px', fontFamily: 'sans-serif', color: '#000',
+      }}>
+        <div style={{ borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '800', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            Trainer Center HB · Vendor Day Check-In
+          </div>
+          <div style={{ fontSize: '22px', fontWeight: '900', marginTop: '4px' }}>{event.title || 'Vendor Day'}</div>
+          <div style={{ fontSize: '13px', marginTop: '2px' }}>{dateLabel} · {fmt12(windowStart)} – {fmt12(windowEnd)}</div>
+          <div style={{ fontSize: '11px', marginTop: '6px', color: '#444' }}>
+            {totalSlots} approved vendor{totalSlots === 1 ? '' : 's'}.
+            Mark each vendor's actual arrival time. Hand back to Chef for entry.
+          </div>
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #000' }}>
+              <th style={{ textAlign: 'left', padding: '6px 4px', width: '22px' }}>✓</th>
+              <th style={{ textAlign: 'left', padding: '6px 4px' }}>Vendor</th>
+              <th style={{ textAlign: 'left', padding: '6px 4px', width: '120px' }}>Requested slot</th>
+              <th style={{ textAlign: 'left', padding: '6px 4px', width: '130px' }}>Actual arrival</th>
+              <th style={{ textAlign: 'left', padding: '6px 4px', width: '120px' }}>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedSlots.map(s => {
+              const att = attendance[s.vendor.id];
+              const prefilled = att?.checked_in_at
+                ? new Date(att.checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                : '';
+              return (
+                <tr key={s.app_id} className="checklist-row" style={{ borderBottom: '1px solid #ddd' }}>
+                  <td style={{ padding: '10px 4px', verticalAlign: 'top' }}>
+                    <div style={{ width: '14px', height: '14px', border: '1.5px solid #000', borderRadius: '2px' }} />
+                  </td>
+                  <td style={{ padding: '10px 4px', fontWeight: '700', verticalAlign: 'top' }}>{s.name}</td>
+                  <td style={{ padding: '10px 4px', verticalAlign: 'top' }}>
+                    {s.hasSlot ? `${fmt12(s.requested_start)} – ${fmt12(s.requested_end)}` : 'No slot'}
+                  </td>
+                  <td style={{ padding: '10px 4px', verticalAlign: 'top', fontFamily: 'monospace' }}>
+                    {prefilled || <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '110px', paddingBottom: '1px' }}>&nbsp;</span>}
+                  </td>
+                  <td style={{ padding: '10px 4px', verticalAlign: 'top' }}>
+                    <span style={{ borderBottom: '1px solid #ccc', display: 'inline-block', minWidth: '110px' }}>&nbsp;</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <div style={{ marginTop: '28px', fontSize: '11px', color: '#444' }}>
+          Staff signature: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '220px' }}>&nbsp;</span>
+          &nbsp;&nbsp;&nbsp;&nbsp;
+          Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '120px' }}>&nbsp;</span>
         </div>
       </div>
     </PageWrapper>
