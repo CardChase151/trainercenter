@@ -12577,6 +12577,76 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
 }
 
 // ─── Event roster tab ─────────────────────────────────────
+// ─── NotAppliedRoster ─────────────────────────────────────
+// Inside an expanded upcoming-event card, show every approved vendor
+// who hasn't applied to this event. Reuses VendorRichCard so the
+// signup-track drip dots (T-21 → T-1) line up automatically — Chef
+// can see who's been emailed about the open slot and who's been
+// silent. Collapsed by default because the list can be long.
+function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpenDetail, isMobile }) {
+  const [open, setOpen] = useState(false);
+  if (notApplied.length === 0) return null;
+  const sorted = notApplied.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  return (
+    <div style={{
+      marginTop: '14px', paddingTop: '14px', borderTop: '1px dashed #e5e7eb',
+    }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'none', border: 'none', padding: '4px 0',
+          fontSize: '0.82rem', fontWeight: '800', color: '#92400e',
+          cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'inherit',
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <ChevronDown size={14} style={{
+            transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+            transition: 'transform 0.15s',
+          }} />
+          No request · {notApplied.length} approved vendor{notApplied.length === 1 ? '' : 's'}
+        </span>
+        <span style={{
+          fontSize: '0.65rem', fontWeight: '700', letterSpacing: '0.04em',
+          color: '#92400e', backgroundColor: '#fef3c7',
+          padding: '2px 8px', borderRadius: '999px',
+        }}>
+          Drip · Track A (signup)
+        </span>
+      </button>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          {sorted.map(v => (
+            <VendorRichCard
+              key={v.id}
+              vendor={v}
+              isMobile={isMobile}
+              emails={emailLog[v.id] || []}
+              eventId={event.id}
+              eventLabel={null}
+              nextEvent={vendorNextEvent[v.id] || null}
+              onClick={() => onOpenDetail && onOpenDetail(v)}
+              statusBadge={
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: '800',
+                  color: '#92400e', backgroundColor: '#fef3c7',
+                  padding: '3px 10px', borderRadius: '999px',
+                  textTransform: 'uppercase', letterSpacing: '0.4px',
+                  border: '1px solid #fde68a',
+                }}>No request</span>
+              }
+              decisionLine={null}
+              actions={null}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
   const [addingTo, setAddingTo] = useState(null); // event row when adding
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
@@ -12677,6 +12747,13 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
             const pending = apps.filter(a => a.status === 'pending');
             const isExpanded = effectiveExpanded.has(ev.id);
             const isPast = ev.event_date < todayStr;
+            // Everyone who's approved as a partner but hasn't applied to THIS
+            // event yet. Drives the "No request" subsection. Only meaningful
+            // for upcoming, uncancelled events.
+            const appliedIds = new Set(apps.map(a => a.vendor_id));
+            const notApplied = (!isPast && !ev.cancelled)
+              ? allVendors.filter(v => v.status === 'approved' && !appliedIds.has(v.id))
+              : [];
             return (
               <div key={ev.id} style={{
                 backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
@@ -12753,7 +12830,8 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                   <div style={{ padding: isMobile ? '0 16px 14px' : '0 20px 16px' }}>
                     {apps.length === 0 ? (
                       <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic', paddingTop: '8px' }}>No applications yet.</div>
-                    ) : (
+                    ) : null}
+                    {apps.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '6px' }}>
                         {apps.slice().sort((a, b) => (((a.vendor||{}).name||'').localeCompare(((b.vendor||{}).name||''), undefined, { sensitivity: 'base' }))).map(a => {
                           const checkedIn = evAttend[a.vendor_id];
@@ -12825,6 +12903,14 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         })}
                       </div>
                     )}
+                    <NotAppliedRoster
+                      event={ev}
+                      notApplied={notApplied}
+                      emailLog={emailLog}
+                      vendorNextEvent={vendorNextEvent}
+                      onOpenDetail={onOpenDetail}
+                      isMobile={isMobile}
+                    />
                   </div>
                 )}
               </div>
