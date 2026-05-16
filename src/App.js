@@ -14247,6 +14247,114 @@ function EventTimeMapPage({ isMobile, staff }) {
     window.print();
   };
 
+  // Generate a real PDF (text-selectable, sharp at any zoom) and trigger
+  // a download. Dynamic imports keep the ~180 KB of jspdf out of the
+  // bundle until Chef actually clicks Download.
+  const handleDownloadChecklist = async () => {
+    try {
+      const jspdfMod = await import('jspdf');
+      await import('jspdf-autotable');
+      const JsPDF = jspdfMod.jsPDF || jspdfMod.default;
+      const doc = new JsPDF({ unit: 'pt', format: 'letter' });
+
+      const margin = 40;
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text('TRAINER CENTER HB · VENDOR DAY CHECK-IN', margin, margin);
+
+      doc.setFontSize(18);
+      doc.setTextColor(20);
+      doc.text(event.title || 'Vendor Day', margin, margin + 22);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(60);
+      doc.text(`${dateLabel} · ${fmt12(windowStart)} – ${fmt12(windowEnd)}`, margin, margin + 40);
+
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(
+        `${totalSlots} approved vendor${totalSlots === 1 ? '' : 's'}. Mark each vendor's actual arrival time.`,
+        margin, margin + 56
+      );
+
+      // Table rows
+      const rows = sortedSlots.map(s => {
+        const att = attendance[s.vendor.id];
+        const prefilled = att?.checked_in_at
+          ? new Date(att.checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+          : '';
+        const slot = s.hasSlot ? `${fmt12(s.requested_start)} – ${fmt12(s.requested_end)}` : 'No slot';
+        return [' ', s.name, slot, prefilled, ''];
+      });
+
+      doc.autoTable({
+        startY: margin + 72,
+        margin: { left: margin, right: margin },
+        head: [['✓', 'Vendor', 'Requested slot', 'Actual arrival', 'Notes']],
+        body: rows,
+        styles: { font: 'helvetica', fontSize: 10, cellPadding: 6, lineColor: [200, 200, 200], lineWidth: 0.5 },
+        headStyles: { fillColor: [26, 26, 26], textColor: [255, 255, 255], fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 22, halign: 'center' },
+          1: { fontStyle: 'bold' },
+          2: { cellWidth: 110 },
+          3: { cellWidth: 100, font: 'courier' },
+          4: { cellWidth: 130 },
+        },
+        // Draw an empty checkbox in the first column for the manual paper flow.
+        didDrawCell: (data) => {
+          if (data.section === 'body' && data.column.index === 0) {
+            const x = data.cell.x + (data.cell.width - 12) / 2;
+            const y = data.cell.y + (data.cell.height - 12) / 2;
+            doc.setDrawColor(20);
+            doc.setLineWidth(1);
+            doc.rect(x, y, 12, 12);
+          }
+          // Draw a thin underline in the "Actual arrival" column when blank,
+          // so staff has a clear write-in line on the printed page.
+          if (data.section === 'body' && data.column.index === 3 && !data.cell.raw) {
+            const x = data.cell.x + 6;
+            const y = data.cell.y + data.cell.height - 8;
+            doc.setDrawColor(150);
+            doc.setLineWidth(0.5);
+            doc.line(x, y, x + data.cell.width - 12, y);
+          }
+          if (data.section === 'body' && data.column.index === 4) {
+            const x = data.cell.x + 6;
+            const y = data.cell.y + data.cell.height - 8;
+            doc.setDrawColor(200);
+            doc.setLineWidth(0.5);
+            doc.line(x, y, x + data.cell.width - 12, y);
+          }
+        },
+      });
+
+      // Signature footer
+      const finalY = doc.lastAutoTable?.finalY || margin + 200;
+      doc.setFontSize(10);
+      doc.setTextColor(80);
+      doc.text('Staff signature:', margin, finalY + 36);
+      doc.setDrawColor(20);
+      doc.setLineWidth(0.5);
+      doc.line(margin + 90, finalY + 38, margin + 290, finalY + 38);
+
+      doc.text('Date:', margin + 320, finalY + 36);
+      doc.line(margin + 360, finalY + 38, pageWidth - margin, finalY + 38);
+
+      const safeTitle = (event.title || 'vendor-day').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const filename = `checkin-${event.event_date}-${safeTitle || 'vendor-day'}.pdf`;
+      doc.save(filename);
+    } catch (err) {
+      console.error('[time-map] PDF download failed', err);
+      alert(`Could not generate PDF: ${err.message}`);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <PageWrapper isMobile={isMobile}>
@@ -14470,8 +14578,8 @@ function EventTimeMapPage({ isMobile, staff }) {
             </button>
             <button
               type="button"
-              onClick={handlePrintChecklist}
-              title="Opens the print dialog — pick 'Save as PDF' as the destination to download."
+              onClick={handleDownloadChecklist}
+              title="Generates a real PDF file and saves it to your downloads."
               style={{
                 backgroundColor: '#1a1a1a', color: '#fff',
                 border: '1px solid #1a1a1a',
