@@ -8384,6 +8384,57 @@ function todayISO() {
   return fmt.format(new Date()); // 'en-CA' yields YYYY-MM-DD
 }
 
+// ─── vendorMatchesQuery ───────────────────────────────────
+// Shared free-text search used by every vendor-list surface on the
+// staff page (Newly applying, Pending, Event roster, All vendors).
+// Matches against every field a vendor fills out on the application
+// so Chef can find someone by social handle, specialty, referrer,
+// etc. — not just name + email. Phone is normalized to digits so
+// "714 458 1163" and "7144581163" both hit.
+const VENDOR_HEARD_FROM_LABELS = {
+  trainer_center_customer: 'shop at trainer center',
+  word_of_mouth: 'word of mouth',
+  social_media: 'social media',
+  vendor_referral: 'another vendor referred',
+  event: 'saw it at an event',
+  other: 'other',
+};
+const VENDOR_EXPERIENCE_LABELS = {
+  first_show: 'first show',
+  '1_to_5':   '1 to 5 shows',
+  '5_to_10':  '5 to 10 shows',
+  '10_to_50': '10 to 50 shows',
+  '50_plus':  '50 plus shows',
+};
+function vendorMatchesQuery(vendor, query) {
+  if (!query) return true;
+  if (!vendor) return false;
+  const q = String(query).trim().toLowerCase();
+  if (!q) return true;
+  const qDigits = q.replace(/\D/g, '');
+  const v = vendor;
+  const candidates = [
+    v.name, v.first_name, v.last_name,
+    v.email,
+    v.specialty, v.bio,
+    v.ig_handle, v.tiktok_handle, v.fb_handle,
+    v.applicant_questions,
+    v.heard_from, VENDOR_HEARD_FROM_LABELS[v.heard_from],
+    v.experience_level, VENDOR_EXPERIENCE_LABELS[v.experience_level],
+    v.referred_by_name, v.referred_by_handle, v.referred_by_contact,
+  ];
+  for (const c of candidates) {
+    if (c && String(c).toLowerCase().includes(q)) return true;
+  }
+  // Phone: digits-only substring match so 714-458-1163, (714)4581163,
+  // and 7144581163 all match the same search.
+  if (qDigits.length >= 3) {
+    const phoneDigits = String(v.phone || '').replace(/\D/g, '');
+    if (phoneDigits && phoneDigits.includes(qDigits)) return true;
+  }
+  return false;
+}
+
 // ─── Apply-for-event modal ────────────────────────────────
 // Shown when a logged-in approved vendor clicks "Apply for this date" on
 // their dashboard. Collects:
@@ -12410,6 +12461,7 @@ const voteTD = { padding: '8px', verticalAlign: 'top' };
 
 // ─── Pending applications tab ─────────────────────────────
 function PendingApplicationsList({ items, onDecide, isMobile }) {
+  const [search, setSearch] = useState('');
   if (items.length === 0) {
     return (
       <div style={{
@@ -12420,11 +12472,38 @@ function PendingApplicationsList({ items, onDecide, isMobile }) {
       </div>
     );
   }
+  // Match the vendor across every field they submitted; also let staff
+  // filter by event title in case multiple events are open at once.
+  const q = search.trim().toLowerCase();
+  const filtered = !q ? items : items.filter(app => {
+    if (vendorMatchesQuery(app.vendor || {}, search)) return true;
+    if (((app.event || {}).title || '').toLowerCase().includes(q)) return true;
+    return false;
+  });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {items.map(app => (
-        <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} isMobile={isMobile} />
-      ))}
+    <div>
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search vendor name, email, phone, social, specialty, event…"
+        style={{
+          width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+          border: '1px solid #ddd', borderRadius: '8px',
+          marginBottom: '12px', boxSizing: 'border-box',
+        }}
+      />
+      {filtered.length === 0 ? (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+          padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
+        }}>No matches.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {filtered.map(app => (
+            <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} isMobile={isMobile} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -12668,12 +12747,13 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
 
   const list = filter === 'upcoming' ? upcoming : past;
 
-  // Search filter: match event title OR any vendor name in the roster.
+  // Search filter: match event title OR any vendor in the roster (across
+  // every field they filled out — name, social, specialty, bio, etc.).
   const q = search.trim().toLowerCase();
   const filtered = !q ? list : list.filter(ev => {
     if ((ev.title || '').toLowerCase().includes(q)) return true;
     const apps = ev.vendor_applications || [];
-    return apps.some(a => ((a.vendor || {}).name || '').toLowerCase().includes(q));
+    return apps.some(a => vendorMatchesQuery(a.vendor || {}, search));
   });
 
   // When the user searches, auto-expand matching events so vendor hits show.
@@ -12718,7 +12798,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
       <input
         value={search}
         onChange={e => setSearch(e.target.value)}
-        placeholder="Search by event or vendor name…"
+        placeholder="Search event title, vendor name, social, specialty, bio…"
         style={{
           width: '100%', padding: '10px 14px', fontSize: '0.9rem',
           border: '1px solid #ddd', borderRadius: '8px',
@@ -13407,19 +13487,14 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
   };
   // Alphabetize by name (case-insensitive). Keeps the list predictable as it grows.
   const sorted = vendors.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
-  const q = search.trim().toLowerCase();
-  const filtered = !q ? sorted : sorted.filter(v =>
-    (v.name || '').toLowerCase().includes(q) ||
-    (v.email || '').toLowerCase().includes(q) ||
-    (v.specialty || '').toLowerCase().includes(q)
-  );
+  const filtered = sorted.filter(v => vendorMatchesQuery(v, search));
 
   return (
     <div>
       <input
         value={search}
         onChange={e => setSearch(e.target.value)}
-        placeholder="Search by name, email, or specialty…"
+        placeholder="Search name, email, phone, social, specialty, bio, referrer…"
         style={{
           width: '100%', padding: '10px 14px', fontSize: '0.9rem',
           border: '1px solid #ddd', borderRadius: '8px',
@@ -13431,7 +13506,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
           backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
           padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
         }}>
-          {q ? 'No matches.' : 'No new vendor applications. When someone signs up to become a vendor, they\'ll show up here.'}
+          {search.trim() ? 'No matches.' : 'No new vendor applications. When someone signs up to become a vendor, they\'ll show up here.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -13537,12 +13612,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
   // Alphabetize → status filter → search filter.
   const sorted = vendors.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   const byStatus = statusFilter === 'all' ? sorted : sorted.filter(v => v.status === statusFilter);
-  const q = search.trim().toLowerCase();
-  const filtered = !q ? byStatus : byStatus.filter(v =>
-    (v.name || '').toLowerCase().includes(q) ||
-    (v.email || '').toLowerCase().includes(q) ||
-    (v.specialty || '').toLowerCase().includes(q)
-  );
+  const filtered = byStatus.filter(v => vendorMatchesQuery(v, search));
 
   const statusBtn = (active) => ({
     padding: '6px 12px',
@@ -13574,7 +13644,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
       <input
         value={search}
         onChange={e => setSearch(e.target.value)}
-        placeholder="Search by name, email, or specialty…"
+        placeholder="Search name, email, phone, social, specialty, bio, referrer…"
         style={{
           width: '100%', padding: '10px 14px', fontSize: '0.9rem',
           border: '1px solid #ddd', borderRadius: '8px',
@@ -13586,7 +13656,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
           backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
           padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem'
         }}>
-          {q || statusFilter !== 'all' ? 'No matches.' : 'No vendors yet.'}
+          {search.trim() || statusFilter !== 'all' ? 'No matches.' : 'No vendors yet.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
