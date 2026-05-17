@@ -5545,9 +5545,14 @@ function VendorDayAboutPage({ isMobile }) {
   // off /vendors) still have a path to recent lineups.
   const [lastEvent, setLastEvent] = useState(null);
   // Recent submissions feed reuses the same data shape as /vendors so
-  // VendorSubmissionCard renders unchanged. Limited to 6 for this page —
-  // it's a teaser, the full feed lives at /vendors for logged-out folks.
+  // VendorSubmissionCard renders unchanged. Gated: hidden entirely until
+  // we have 10+ visible submissions on file (don't want a sparse gallery
+  // making the program look quiet). Once the threshold's hit, we slice
+  // down to 6 for the on-page teaser.
+  const SUBMISSIONS_REVEAL_AT = 10;
+  const SUBMISSIONS_DISPLAY_LIMIT = 6;
   const [submissions, setSubmissions] = useState([]);
+  const [submissionCount, setSubmissionCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -5566,15 +5571,17 @@ function VendorDayAboutPage({ isMobile }) {
           .order('event_date', { ascending: false })
           .limit(1),
         supabase.from('vendor_submissions')
-          .select('*, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)')
+          .select('*, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, fb_handle, specialty), event:events(id, title, event_date), media:vendor_media(*)',
+                  { count: 'exact' })
           .eq('visible', true)
           .order('submitted_at', { ascending: false })
-          .limit(6),
+          .limit(SUBMISSIONS_DISPLAY_LIMIT),
       ]);
       if (cancelled) return;
       setNextEvent((nextRes.data || []).find(e => !e.cancelled) || null);
       setLastEvent((lastRes.data || []).find(e => !e.cancelled) || null);
       setSubmissions(subsRes.data || []);
+      setSubmissionCount(subsRes.count || 0);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -5748,8 +5755,11 @@ function VendorDayAboutPage({ isMobile }) {
           </div>
 
           {/* Recent vendor uploads gallery — same shape as /vendors used to
-              run, just lives here now since /vendors is a promo page. */}
-          {submissions.length > 0 && (
+              run, just lives here now since /vendors is a promo page.
+              Hidden until at least SUBMISSIONS_REVEAL_AT visible submissions
+              exist site-wide; one or two stray photos look weaker than no
+              gallery at all. */}
+          {submissionCount >= SUBMISSIONS_REVEAL_AT && submissions.length > 0 && (
             <>
               <h2 style={h2}>Recent posts from our vendors</h2>
               <p style={{ ...para, marginBottom: '20px' }}>
