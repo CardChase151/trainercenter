@@ -654,7 +654,7 @@
         </button>
         <div class="or-divider"><span>or — find your vendor</span></div>
         <div class="picker">
-          <span class="icon">🔎</span>
+          <span class="icon"></span>
           <input class="picker-input" id="picker-input" placeholder="Search vendor name or handle...">
         </div>
         <div class="picker-options" id="picker-options"></div>
@@ -666,13 +666,13 @@
 
     <!-- STEP 2 — purpose-framed: "select your favorites" leads to login -->
     <div class="door-step" id="door-s2">
-      <div class="pick-chip" id="pick-chip">✓ Picked</div>
+      <div class="pick-chip" id="pick-chip"> Picked</div>
       <div class="step-block">
         <div class="step-head" style="margin:6pt 0 6pt">Select your favorites tonight.</div>
         <div class="step-sub" style="margin:0 0 14px 0">
           Three vendors. You'll award them points toward <strong>Favorite Vendor of the Night</strong>. Quick account first so your picks save to your name and you can come back to change them any time before 10 PM.
         </div>
-        <div class="no-spam">🔒 No spam, ever. Promise.</div>
+        <div class="no-spam"> No spam, ever. Promise.</div>
         <div class="field">
           <label>Email</label>
           <input type="email" placeholder="you@email.com" id="signup-email">
@@ -688,7 +688,7 @@
 
     <!-- STEP 3 — voting screen, persisted -->
     <div class="door-step" id="door-s3">
-      <div class="member-chip">★ You're in · saved to your account</div>
+      <div class="member-chip">* You're in · saved to your account</div>
       <div class="step-block">
         <div class="step-head" style="margin:6pt 0 6pt">Award your 3 points.</div>
         <div class="step-sub" style="margin:0 0 14px 0">
@@ -799,7 +799,7 @@
         pickedKey = o.dataset.key;
         const vendor = vendors.find(v => v.handle === pickedKey);
         pickerInput.value = vendor.name + ' · ' + vendor.handle;
-        pickChip.innerHTML = '✓ Invited by <strong style="margin-left:4px">' + vendor.name + '</strong>';
+        pickChip.innerHTML = ' Invited by <strong style="margin-left:4px">' + vendor.name + '</strong>';
         renderPickerOptions(pickerInput.value);
         // Cascade — auto-advance after a short beat so it feels natural
         setTimeout(() => showStep(2), 400);
@@ -813,7 +813,7 @@
   // Quick "None" path — same advance, different chip label
   document.getElementById('none-quick').addEventListener('click', () => {
     pickedKey = '__none__';
-    pickChip.innerHTML = '✓ Walked in on my own';
+    pickChip.innerHTML = ' Walked in on my own';
     setTimeout(() => showStep(2), 250);
   });
 
@@ -835,7 +835,7 @@
       const card = document.createElement('div');
       card.className = 'vendor-card' + (isVoted ? ' voted' : '');
       card.innerHTML = `
-        <div class="v-badge">${isVoted ? '★' : ''}</div>
+        <div class="v-badge">${isVoted ? '*' : ''}</div>
         <div class="v-name">${v.name}</div>
         <div class="v-handle">${v.handle}</div>
       `;
