@@ -4,6 +4,7 @@ import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -3367,8 +3368,8 @@ function EventDayHero({ event, isMobile, isPreview }) {
         display: 'flex',
         flexDirection: isMobile ? 'column' : 'row',
         alignItems: isMobile ? 'flex-start' : 'center',
-        justifyContent: 'space-between',
-        gap: isMobile ? 0 : '40px',
+        justifyContent: 'center',
+        gap: isMobile ? 0 : '32px',
       }}>
         {/* Decorative pokeball-ring corner motif */}
         <div style={{
@@ -3423,7 +3424,7 @@ function EventDayHero({ event, isMobile, isPreview }) {
             marginBottom: '16px',
           }}>
             <strong style={{ color: '#fff' }}>
-              {event.start_time && event.end_time ? `${event.start_time.slice(0,5)} - ${event.end_time.slice(0,5)}` : 'Open now'}
+              {event.start_time && event.end_time ? `${formatTime(event.start_time)} - ${formatTime(event.end_time)}` : 'Open now'}
             </strong>
             {' · 4911 Warner Ave #210, HB'}
             <br />
@@ -3475,7 +3476,7 @@ function EventDayHero({ event, isMobile, isPreview }) {
               {title}.
             </h3>
             <p style={{ fontSize: '14px', color: '#525252', lineHeight: 1.5, margin: '0 0 14px' }}>
-              <strong style={{ color: '#1a1a1a' }}>Open until {event.end_time ? event.end_time.slice(0,5) : '10:00 PM'} tonight.</strong>{' '}
+              <strong style={{ color: '#1a1a1a' }}>Open until {event.end_time ? formatTime(event.end_time) : '10 PM'} tonight.</strong>{' '}
               Free for guests. Vintage, modern, slabs &amp; sealed all under one roof.
             </p>
             <button
@@ -6056,6 +6057,7 @@ function StaffPreviewPage({ isMobile }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [selectedId, setSelectedId] = useState('');
+  const [shopToken, setShopToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -6065,21 +6067,30 @@ function StaffPreviewPage({ isMobile }) {
     let cancelled = false;
     (async () => {
       const today = todayISO();
-      const { data } = await supabase
-        .from('events')
-        .select('id, title, event_date, start_time, end_time, has_vendors, cancelled')
-        .eq('has_vendors', true)
-        .gte('event_date', today)
-        .order('event_date', { ascending: true })
-        .limit(10);
+      const [{ data: eventData }, { data: settings }] = await Promise.all([
+        supabase.from('events')
+          .select('id, title, event_date, start_time, end_time, has_vendors, cancelled')
+          .eq('has_vendors', true)
+          .gte('event_date', today)
+          .order('event_date', { ascending: true })
+          .limit(10),
+        supabase.from('site_settings').select('shop_door_token').eq('id', 1).maybeSingle(),
+      ]);
       if (cancelled) return;
-      const upcoming = (data || []).filter(e => !e.cancelled);
+      const upcoming = (eventData || []).filter(e => !e.cancelled);
       setEvents(upcoming);
       if (upcoming.length > 0) setSelectedId(upcoming[0].id);
+      setShopToken(settings?.shop_door_token || null);
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Reusable shop QR — same physical print works for every event night
+  // (real or in preview). Routes to whatever has_vendors event is today.
+  const shopDoorUrl = shopToken
+    ? `${window.location.origin}/checkin?key=${shopToken}`
+    : null;
 
   async function startPreview() {
     if (!selectedId) return;
@@ -6156,7 +6167,38 @@ function StaffPreviewPage({ isMobile }) {
         </>
       )}
 
-      <div style={{ marginTop: '40px', padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+      {shopDoorUrl && (
+        <div style={{ marginTop: '40px', padding: '20px', background: '#fff', borderRadius: '14px', border: '1.5px solid #e5e7eb' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: 800, margin: '0 0 6px', color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Shop door QR (print once, reuse forever)
+          </h3>
+          <p style={{ fontSize: '13px', color: '#525252', lineHeight: 1.5, margin: '0 0 16px' }}>
+            One QR for the door. Routes to whatever event is happening today. Also works during preview mode (routes to the previewed event automatically). Print on the 11×17 sign once and forget about it.
+          </p>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ background: '#fff', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
+              <QRCodeSVG value={shopDoorUrl} size={180} level="H" />
+            </div>
+            <div style={{ flex: 1, minWidth: '220px' }}>
+              <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px', fontWeight: 700 }}>
+                URL
+              </div>
+              <code style={{ fontSize: '12px', color: '#1a1a1a', wordBreak: 'break-all', display: 'block', background: '#f9fafb', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
+                {shopDoorUrl}
+              </code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(shopDoorUrl); }}
+                style={{ background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+              >Copy URL</button>
+              <p style={{ fontSize: '11px', color: '#888', margin: '12px 0 0', lineHeight: 1.5 }}>
+                <strong style={{ color: '#525252' }}>Test it now:</strong> open the URL above on your phone or scan the QR. It'll route to today's event, or the previewed event if you've started a preview above.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: '24px', padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
         <h3 style={{ fontSize: '13px', fontWeight: 800, margin: '0 0 8px', color: '#525252' }}>What happens when you start a preview</h3>
         <ul style={{ margin: 0, paddingLeft: '20px', color: '#525252', fontSize: '13px', lineHeight: 1.6 }}>
           <li>The home page (<code>/</code>) shows the event-day takeover for everyone.</li>
@@ -6187,6 +6229,7 @@ function GuestCheckinPage({ isMobile }) {
   const [searchParams] = useSearchParams();
   const eventIdParam = searchParams.get('event');
   const tokenParam = searchParams.get('token');
+  const keyParam = searchParams.get('key');         // shop-level door token (reusable across events)
   const isLocalPreview = searchParams.get('preview') === '1';
   const activePreview = useActivePreview();
   // Site-wide global preview also lets the door QR work without a token,
@@ -6227,10 +6270,20 @@ function GuestCheckinPage({ isMobile }) {
         const { data } = await evQuery;
         ev = (data || []).find(e => !e.cancelled) || null;
         setTokenValid(true);
+      } else if (keyParam) {
+        // Shop-level door token. One reusable QR for the location — routes to
+        // whatever has_vendors event is happening today (or the previewed
+        // event when site-wide preview is active).
+        const { data, error } = await supabase
+          .rpc('event_for_shop_door', { p_token: keyParam });
+        if (!error && data && data.length > 0) {
+          ev = data[0];
+          setTokenValid(true);
+        } else {
+          setTokenValid(false);
+        }
       } else if (eventIdParam && tokenParam) {
-        // Real check-in: validate event_id + token via SECURITY DEFINER RPC.
-        // The RPC only returns rows when both match — bypasses RLS so the
-        // anon role can verify before auth.
+        // Per-event token (legacy / specific QR for one event)
         const { data, error } = await supabase
           .rpc('event_by_door_token', { p_event_id: eventIdParam, p_token: tokenParam });
         if (!error && data && data.length > 0) {
@@ -6288,7 +6341,7 @@ function GuestCheckinPage({ isMobile }) {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [eventIdParam, tokenParam, isPreview, activePreview?.event_id]);
+  }, [eventIdParam, tokenParam, keyParam, isPreview, activePreview?.event_id]);
 
   // Auto-advance from step 1 once an inviter is picked
   const advanceFromStep1 = (inviter) => {
