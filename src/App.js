@@ -3531,7 +3531,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       // Load approved vendors for this event
       const { data: apps } = await supabase
         .from('vendor_applications')
-        .select('vendor_id, vendors(id, name, ig_handle, avatar_url)')
+        .select('vendor_id, vendors(id, name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
         .eq('event_id', event.id)
         .eq('status', 'approved');
       const vs = (apps || [])
@@ -3616,15 +3616,9 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       <h2 style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#C8102E', margin: '0 0 14px' }}>
         Tonight's vendors · {vendors.length} confirmed
       </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
         {vendors.map(v => (
-          <div key={v.id} style={{
-            background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '14px',
-            padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>{v.name}</div>
-            <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
-          </div>
+          <VendorCard key={v.id} vendor={v} />
         ))}
       </div>
     </div>
@@ -6303,7 +6297,7 @@ function GuestCheckinPage({ isMobile }) {
       if (ev) {
         const { data: apps } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendors(id, name, ig_handle, avatar_url)')
+          .select('vendor_id, vendors(id, name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
           .eq('event_id', ev.id)
           .eq('status', 'approved');
         if (!cancelled) {
@@ -6724,7 +6718,9 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '0 24px 100px' }}>
+      {/* Compact list so 30 vendors are easy to scan + tap. Avatar on the left,
+          name + handle stacked, vote badge top-right. Tap row to toggle. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 16px 100px' }}>
         {vendors.map(v => {
           const isVoted = votes.has(v.id);
           return (
@@ -6734,25 +6730,34 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
               style={{
                 background: isVoted ? '#fef3c7' : '#fff',
                 border: isVoted ? '1.5px solid #d97706' : '1.5px solid #e5e7eb',
-                borderRadius: '14px',
-                padding: '14px',
+                borderRadius: '12px',
+                padding: '10px 14px',
                 position: 'relative',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
-                boxShadow: isVoted ? '0 4px 16px rgba(217,119,6,0.18)' : '0 1px 3px rgba(0,0,0,0.04)',
+                boxShadow: isVoted ? '0 4px 12px rgba(217,119,6,0.15)' : '0 1px 2px rgba(0,0,0,0.03)',
+                display: 'flex', alignItems: 'center', gap: '12px',
               }}
             >
-              <div style={{
-                position: 'absolute', top: '10px', right: '10px',
-                width: '24px', height: '24px', borderRadius: '50%',
-                background: isVoted ? '#d97706' : '#f3f4f6',
-                color: isVoted ? '#fff' : '#999',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{isVoted && <Star size={14} strokeWidth={2.5} fill="currentColor" />}</div>
-              <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>
-                {v.name}
+              <VendorAvatar vendor={v} size={42} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a' }}>
+                  {v.name}
+                </div>
+                <div style={{ fontSize: '11px', color: '#888' }}>
+                  {v.ig_handle ? `@${v.ig_handle.replace(/^@/, '')}` : ''}
+                  {v.specialty && (
+                    <span style={{ color: '#525252' }}>{v.ig_handle ? ' · ' : ''}{v.specialty}</span>
+                  )}
+                </div>
               </div>
-              <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
+              <div style={{
+                width: '28px', height: '28px', borderRadius: '50%',
+                background: isVoted ? '#d97706' : '#f3f4f6',
+                color: isVoted ? '#fff' : '#bbb',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+              }}>{isVoted ? <Star size={15} strokeWidth={2.5} fill="currentColor" /> : <Star size={14} strokeWidth={2} />}</div>
             </div>
           );
         })}
