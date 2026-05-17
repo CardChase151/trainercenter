@@ -3512,7 +3512,7 @@ function EventDayHero({ event, isMobile, isPreview }) {
   );
 }
 
-function HomePage({ isMobile }) {
+function HomePage({ isMobile, authUser }) {
   const [searchParams] = useSearchParams();
   const isLocalPreview = searchParams.get('preview') === 'tradenight';
   const activePreview = useActivePreview();
@@ -3523,12 +3523,27 @@ function HomePage({ isMobile }) {
   const isPreview = isLocalPreview || !!activePreview;
   const showTakeover = !eventLoading && todayEvent;
 
+  // Takeover layout — single-purpose page. Hero on top, voting/CTA below.
+  // Everything else (OpenNowBanner, mission, NextVendorDayBanner, visit-us)
+  // is hidden so this is THE event experience. Returning members who are
+  // logged in see their voting view inline; everyone else sees a "come
+  // down and scan the door QR" prompt.
+  if (showTakeover) {
+    return (
+      <>
+        <EventDayHero event={todayEvent} isMobile={isMobile} isPreview={isPreview} />
+        <EventDayBody
+          event={todayEvent}
+          authUser={authUser}
+          isMobile={isMobile}
+          isPreview={isPreview}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      {showTakeover ? (
-        <EventDayHero event={todayEvent} isMobile={isMobile} isPreview={isPreview} />
-      ) : (
-      <>
       {/* Hero - Full Viewport. Class drives iOS-aware 100dvh height so the
           hero doesn't push past Safari's URL bar on first paint. */}
       <header className="hero-fullscreen" style={{
@@ -16132,6 +16147,7 @@ const PRINTABLES = [
     title: 'Daily Social Media',
     desc: 'What to post, where, and when. Clip to the counter for the shift.',
     file: '/printables/daily-social-media.pdf',
+    thumb: '/printables/thumb-daily-social-media.png',
     kind: 'pdf',
     accent: '#C8102E',
   },
@@ -16140,6 +16156,7 @@ const PRINTABLES = [
     title: 'Vendor Card (4×6)',
     desc: 'Tabletop card vendors keep at their station with our QR codes.',
     file: '/printables/vendor-card.pdf',
+    thumb: '/printables/thumb-vendor-card.png',
     kind: 'pdf',
     accent: '#1d4ed8',
   },
@@ -16312,21 +16329,28 @@ function StaffPrintablesPage({ isMobile, staff }) {
                   </div>
                 </div>
 
-                {/* Preview thumbnail for QR images so staff can verify it's
-                    the right code at a glance. PDFs get a neutral block. */}
-                {isImage && (
+                {/* Preview thumbnail. For QRs the file IS the image, so we
+                    fall back to it when no explicit thumb is set. For PDFs
+                    a separate `thumb` is required (the browser can't render
+                    a PDF as an <img> tag). */}
+                {(item.thumb || isImage) && (
                   <div style={{
                     backgroundColor: '#f9fafb', border: '1px solid #f3f4f6',
                     borderRadius: '10px',
-                    padding: '12px',
-                    display: 'flex', justifyContent: 'center',
+                    padding: isImage ? '12px' : '10px',
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    minHeight: '160px',
                   }}>
                     <img
-                      src={item.file}
+                      src={item.thumb || item.file}
                       alt={item.title}
                       style={{
-                        width: '120px', height: '120px', objectFit: 'contain',
+                        width: isImage ? '120px' : '100%',
+                        maxHeight: isImage ? '120px' : '200px',
+                        objectFit: 'contain',
                         display: 'block',
+                        borderRadius: isImage ? '0' : '6px',
+                        boxShadow: isImage ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
                       }}
                     />
                   </div>
@@ -17274,7 +17298,7 @@ function App() {
 
       {/* Routes */}
       <Routes>
-        <Route path="/" element={<HomePage isMobile={isMobile} />} />
+        <Route path="/" element={<HomePage isMobile={isMobile} authUser={staffUser} />} />
         <Route path="/unsubscribe" element={<UnsubscribePage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
