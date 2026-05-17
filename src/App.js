@@ -6187,7 +6187,7 @@ function GuestCheckinPage({ isMobile }) {
         profile_id: s.user.id,
         invited_by_vendor_id: pickedInviter?.id || null,
         preview: isPreview,
-      }, { onConflict: 'event_id,profile_id' });
+      }, { onConflict: 'event_id,profile_id,preview' });
       if (ciErr) console.warn('check-in upsert error', ciErr);
 
       setStep(3);
