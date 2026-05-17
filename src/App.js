@@ -9365,11 +9365,23 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
           padding: isMobile ? '24px 20px' : '36px',
         }}>
-          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 24px 0' }}>
+          <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
             {isEdit
               ? 'Update anything that\'s changed. Only your name is required. Your approval status is unaffected.'
               : 'All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.'}
           </p>
+
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            background: '#ecfdf5', border: '1px solid #bbf7d0',
+            borderRadius: '10px', padding: '10px 14px',
+            fontSize: '0.82rem', color: '#15803d', marginBottom: '24px',
+          }}>
+            <Check size={14} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+            <span>
+              Account email <strong style={{ color: '#14532d' }}>{session?.user?.email}</strong> — this is what your vendor profile is tied to. No need to re-enter it.
+            </span>
+          </div>
 
           <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#525252', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
             Personal info
