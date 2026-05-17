@@ -3,7 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -3240,11 +3240,13 @@ function PreviewModeBanner({ preview, isAdmin, onStop, stopping }) {
       borderBottom: '2px solid #d97706',
       flexWrap: 'wrap',
     }}>
-      <div>
-        <span style={{ fontSize: '15px' }}>🧪</span>{' '}
-        <strong>Trade Night experience test in progress.</strong>{' '}
-        <span style={{ fontWeight: 500 }}>
-          The site looks different than usual. Real next event coming soon.
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <FlaskConical size={16} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+        <span>
+          <strong>Trade Night experience test in progress.</strong>{' '}
+          <span style={{ fontWeight: 500 }}>
+            The site looks different than usual. Real next event coming soon.
+          </span>
         </span>
       </div>
       {isAdmin && (
@@ -3347,8 +3349,10 @@ function EventDayHero({ event, isMobile, isPreview }) {
           padding: '6px 12px', textAlign: 'center',
           fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em',
           textTransform: 'uppercase',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
         }}>
-          🧪 Preview Mode · Not Live
+          <FlaskConical size={12} strokeWidth={2.5} />
+          Preview Mode · Not Live
         </div>
       )}
       <header style={{
@@ -5963,7 +5967,10 @@ function StaffPreviewPage({ isMobile }) {
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '24px 16px' : '48px 24px' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 900, margin: '0 0 8px' }}>🧪 Trade Night Preview</h1>
+      <h1 style={{ fontSize: '24px', fontWeight: 900, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <FlaskConical size={26} strokeWidth={2.5} />
+        Trade Night Preview
+      </h1>
       <p style={{ color: '#525252', fontSize: '14px', lineHeight: 1.5, margin: '0 0 24px' }}>
         Flips the site into event-day mode for everyone (visitors see a yellow notice banner). Auto-exits after 30 min. Real check-ins and votes recorded during preview are tagged <strong>preview=true</strong> and filtered out of leaderboards.
       </p>
@@ -6013,7 +6020,7 @@ function StaffPreviewPage({ isMobile }) {
               cursor: busy ? 'wait' : 'pointer',
               boxShadow: busy ? 'none' : '0 8px 20px rgba(200,16,46,0.3)',
             }}
-          >🧪 Start preview now</button>
+          ><FlaskConical size={16} strokeWidth={2.5} style={{ marginRight: '8px', verticalAlign: '-3px' }} />Start preview now</button>
         </>
       )}
 
@@ -6277,8 +6284,10 @@ function CheckinShell({ children, isPreview }) {
           padding: '6px 12px', textAlign: 'center',
           fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em',
           textTransform: 'uppercase',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
         }}>
-          🧪 Preview Mode · Not Live
+          <FlaskConical size={12} strokeWidth={2.5} />
+          Preview Mode · Not Live
         </div>
       )}
       <div style={{ maxWidth: '420px', margin: '0 auto', background: '#fafafa' }}>
@@ -6351,7 +6360,7 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
           <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
         </div>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#888' }}>🔎</span>
+          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#888' }} />
           <input
             type="text"
             value={query}
@@ -6399,8 +6408,8 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const chipLabel = pickedInviter?.id
-    ? `✓ Invited by ${pickedInviter.name}`
-    : '✓ Walked in on my own';
+    ? `Invited by ${pickedInviter.name}`
+    : 'Walked in on my own';
   return (
     <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
       <div style={{
@@ -6410,7 +6419,7 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
         padding: '5px 12px', borderRadius: '999px',
         fontSize: '11px', fontWeight: 800,
         margin: '18px 24px 0',
-      }}>{chipLabel}</div>
+      }}><Check size={12} strokeWidth={3} />{chipLabel}</div>
 
       <div style={{ padding: '22px 24px 0' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1a1a1a', margin: '6px 0 6px' }}>
@@ -6427,7 +6436,7 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
           padding: '5px 12px', borderRadius: '999px',
           fontSize: '11px', fontWeight: 800,
           marginBottom: '14px',
-        }}>🔒 No spam, ever. Promise.</div>
+        }}><Lock size={12} strokeWidth={2.5} />No spam, ever. Promise.</div>
 
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
@@ -6498,7 +6507,7 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
         padding: '5px 12px', borderRadius: '999px',
         fontSize: '11px', fontWeight: 800,
         margin: '18px 24px 0',
-      }}>★ You're in · saved to your account</div>
+      }}><Star size={12} strokeWidth={2.5} fill="currentColor" />You're in · saved to your account</div>
 
       <div style={{ padding: '22px 24px 0' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1a1a1a', margin: '6px 0 6px' }}>
@@ -6532,9 +6541,8 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
                 width: '24px', height: '24px', borderRadius: '50%',
                 background: isVoted ? '#d97706' : '#f3f4f6',
                 color: isVoted ? '#fff' : '#999',
-                fontSize: '13px', fontWeight: 800,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{isVoted ? '★' : ''}</div>
+              }}>{isVoted && <Star size={14} strokeWidth={2.5} fill="currentColor" />}</div>
               <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>
                 {v.name}
               </div>
@@ -14726,7 +14734,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             // Trade Night preview — flips the entire site into event-day
             // mode (for everyone) so staff can run a real end-to-end test.
             // Auto-expires after 30 min, all data tagged preview=true.
-            { label: '🧪 Trade Night Preview', to: '/staff/preview' },
+            { label: 'Trade Night Preview', to: '/staff/preview' },
             ...(remindersIn === 'staff' ? [reminderItem] : []),
             ...authTail('staff'),
           ]
@@ -16118,10 +16126,10 @@ function StatTile({ label, value, sub, accent, small }) {
 // browser print dialog without a page nav) and a Download button.
 const PRINTABLES = [
   {
-    key: 'staff-daily',
-    title: 'Staff Daily Sheet',
-    desc: 'Opening, mid-day, and closing routine. Print and clip to the counter.',
-    file: '/printables/staff-daily.pdf',
+    key: 'daily-social-media',
+    title: 'Daily Social Media',
+    desc: 'What to post, where, and when. Clip to the counter for the shift.',
+    file: '/printables/daily-social-media.pdf',
     kind: 'pdf',
     accent: '#C8102E',
   },
