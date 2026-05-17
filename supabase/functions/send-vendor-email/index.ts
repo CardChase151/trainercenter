@@ -24,7 +24,10 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 // Display name is intentionally quoted (RFC 5322 quoted-string form). Zoho
 // strips unquoted display names with spaces; Gmail/Outlook accept either.
 const FROM_ADDRESS = '"Trainer Center HB" <noreply@mysendz.com>'
-const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'Sethmcparty@gmail.com', 'chase@cardchase.org']
+// Staff notification recipients. Curated list only — do NOT replace this
+// with a profiles.is_admin lookup. Seth is intentionally excluded; he
+// doesn't want these on his inbox.
+const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'chase@cardchase.org']
 const SITE_URL = 'https://pokemontrainercenter.com'
 
 const corsHeaders = {
