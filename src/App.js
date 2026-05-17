@@ -9191,6 +9191,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
   const [form, setForm] = useState({
     first_name: existingVendor?.first_name || '',
     last_name: existingVendor?.last_name || '',
+    business_name: existingVendor?.business_name || '',
     phone: existingVendor?.phone || '',
     ig_handle: existingVendor?.ig_handle || '',
     tiktok_handle: existingVendor?.tiktok_handle || '',
@@ -9225,13 +9226,19 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
     }
     setSubmitting(true);
     setError('');
-    const fullName = `${form.first_name.trim()} ${form.last_name.trim()}`;
+    const personalFull = `${form.first_name.trim()} ${form.last_name.trim()}`;
+    const businessName = form.business_name.trim();
+    // Public display name: business name if provided, else personal full name.
+    // The existing `name` column is what every site card reads — by writing
+    // the right value here we keep all display code working without changes.
+    const displayName = businessName || personalFull;
 
     // Build the row payload shared by both modes.
     const payload = {
       first_name: form.first_name.trim(),
       last_name: form.last_name.trim(),
-      name: fullName,
+      business_name: businessName || null,
+      name: displayName,
       phone: form.phone.trim() || null,
       ig_handle: cleanHandle(form.ig_handle),
       tiktok_handle: cleanHandle(form.tiktok_handle),
@@ -9353,11 +9360,32 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
               : 'All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.'}
           </p>
 
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#525252', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
+            Personal info
+          </h3>
+          <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Used for your account + our records. Not displayed publicly unless you skip the business name below.
+          </p>
+
           <label style={labelCss}>First name *</label>
           <input required value={form.first_name} onChange={setField('first_name')} style={inputCss} />
 
           <label style={labelCss}>Last name *</label>
           <input required value={form.last_name} onChange={setField('last_name')} style={inputCss} />
+
+          <div style={{ height: '20px' }} />
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#525252', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 4px' }}>
+            Business / display info
+          </h3>
+          <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 14px', lineHeight: 1.5 }}>
+            What shows up on our website and at events.
+          </p>
+
+          <label style={labelCss}>Business name (optional)</label>
+          <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '6px' }}>
+            Your brand / shop name. Leave blank to use your personal name above.
+          </div>
+          <input value={form.business_name} onChange={setField('business_name')} placeholder="e.g. Mint 9 Slabs" style={inputCss} />
 
           <label style={labelCss}>Vendor logo {isEdit ? '(optional)' : '*'}</label>
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '8px' }}>
