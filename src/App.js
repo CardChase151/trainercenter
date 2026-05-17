@@ -3531,7 +3531,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       // Load approved vendors for this event
       const { data: apps } = await supabase
         .from('vendor_applications')
-        .select('vendor_id, vendors(id, name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
+        .select('vendor_id, vendors(id, name, business_name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
         .eq('event_id', event.id)
         .eq('status', 'approved');
       const vs = (apps || [])
@@ -5696,6 +5696,13 @@ function BlogPostPage({ isMobile }) {
 // Vendors don't always upload a logo. When they do, render it. When they
 // don't, render a colored circle with their initials. Color is hashed from
 // the vendor name so the same person always gets the same color.
+// Display-name fallback: prefer the optional business_name, fall back to the
+// stored `name` column (which save logic also writes as business || personal).
+// Belt-and-suspenders: any public display reads the same value either way.
+function vendorDisplayName(v) {
+  return v?.business_name || v?.name || '';
+}
+
 function VendorAvatar({ vendor, size = 96 }) {
   const palette = ['#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#c026d3'];
   const hash = (vendor?.name || '?').split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
@@ -5711,7 +5718,7 @@ function VendorAvatar({ vendor, size = 96 }) {
     return (
       <img
         src={vendor.avatar_url}
-        alt={vendor.name}
+        alt={vendorDisplayName(vendor)}
         style={{
           width: size, height: size, borderRadius: '50%',
           objectFit: 'cover', display: 'block',
@@ -5792,7 +5799,7 @@ function VendorCard({ vendor, isOwn }) {
       <VendorAvatar vendor={vendor} size={104} />
       <div style={{ minWidth: 0, width: '100%' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: '800', color: '#1a1a1a', lineHeight: 1.2 }}>
-          {vendor.name}
+          {vendorDisplayName(vendor)}
         </h3>
         {vendor.specialty && (
           <span style={{
@@ -6297,7 +6304,7 @@ function GuestCheckinPage({ isMobile }) {
       if (ev) {
         const { data: apps } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendors(id, name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
+          .select('vendor_id, vendors(id, name, business_name, ig_handle, avatar_url, specialty, bio, tiktok_handle, fb_handle)')
           .eq('event_id', ev.id)
           .eq('status', 'approved');
         if (!cancelled) {
@@ -6531,10 +6538,14 @@ function CheckinHeader({ step, event }) {
 
 function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
   const [query, setQuery] = useState('');
-  const filtered = vendors.filter(v =>
-    (v.name || '').toLowerCase().includes(query.toLowerCase()) ||
-    (v.ig_handle || '').toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = vendors.filter(v => {
+    const q = query.toLowerCase();
+    return (
+      (v.business_name || '').toLowerCase().includes(q) ||
+      (v.name || '').toLowerCase().includes(q) ||
+      (v.ig_handle || '').toLowerCase().includes(q)
+    );
+  });
   return (
     <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
       <div style={{ padding: '24px 24px 0' }}>
@@ -6590,7 +6601,7 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
             >
               <VendorAvatar vendor={v} size={32} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: '#1a1a1a' }}>{v.name}</div>
+                <div style={{ fontWeight: 700, color: '#1a1a1a' }}>{vendorDisplayName(v)}</div>
                 <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
               </div>
             </div>
@@ -6742,7 +6753,7 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
               <VendorAvatar vendor={v} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a' }}>
-                  {v.name}
+                  {vendorDisplayName(v)}
                 </div>
                 <div style={{ fontSize: '11px', color: '#888' }}>
                   {v.ig_handle ? `@${v.ig_handle.replace(/^@/, '')}` : ''}
@@ -7469,7 +7480,7 @@ function VendorSubmissionCard({ submission }) {
             {v.avatar_url && (
               <img
                 src={v.avatar_url}
-                alt={`${v.name} logo`}
+                alt={`${vendorDisplayName(v)} logo`}
                 style={{
                   width: '36px', height: '36px', borderRadius: '50%',
                   objectFit: 'cover', flexShrink: 0,
@@ -7478,7 +7489,7 @@ function VendorSubmissionCard({ submission }) {
               />
             )}
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{vendorDisplayName(v)}</div>
               {v.specialty && (
                 <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: '700', marginTop: '2px' }}>
                   {v.specialty}
