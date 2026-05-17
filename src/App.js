@@ -487,6 +487,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     { key: 'members',  label: 'Members',  desc: 'Customer list and vote history', icon: <Users size={20} />, to: '/staff/members', accent: '#C8102E' },
     { key: 'comms',    label: 'Communication', desc: 'Compose a vendor or customer blast', icon: <Mail size={20} />, to: '/staff/comms', accent: '#C8102E' },
     { key: 'instagram', label: 'Instagram Contacts', desc: 'Tag followers as member, vendor, or influencer', icon: <IgIcon size={20} />, to: '/staff/instagram', accent: '#C8102E' },
+    { key: 'printables', label: 'Printables', desc: 'Staff sheets + QR codes — print or download', icon: <FileEdit size={20} />, to: '/staff/printables', accent: '#C8102E' },
     { key: 'analytics', label: 'Analytics', desc: 'Daily SEO + traffic dashboard', icon: <BarChart3 size={20} />, to: '/staff/analytics', accent: '#C8102E' },
     { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
   ];
@@ -14719,6 +14720,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Manage Members', to: '/staff/members' },
             { label: 'Communication', to: '/staff/comms' },
             { label: 'Instagram Contacts', to: '/staff/instagram' },
+            { label: 'Printables', to: '/staff/printables' },
             { label: 'Analytics', to: '/staff/analytics' },
             { label: 'Business Hours', to: '/#visit-us' },
             // Trade Night preview — flips the entire site into event-day
@@ -16108,6 +16110,270 @@ function StatTile({ label, value, sub, accent, small }) {
   );
 }
 
+// ─── Staff Printables (/staff/printables) ──────────────────
+// One-stop shop for things Chef + crew need to print at the shop:
+// laminated daily sheets, vendor-day promo cards, and the QR codes
+// that route customers to our review/social profiles. Each item has
+// a one-click Print (renders into a hidden iframe and triggers the
+// browser print dialog without a page nav) and a Download button.
+const PRINTABLES = [
+  {
+    key: 'staff-daily',
+    title: 'Staff Daily Sheet',
+    desc: 'Opening, mid-day, and closing routine. Print and clip to the counter.',
+    file: '/printables/staff-daily.pdf',
+    kind: 'pdf',
+    accent: '#C8102E',
+  },
+  {
+    key: 'vendor-card',
+    title: 'Vendor Card (4×6)',
+    desc: 'Tabletop card vendors keep at their station with our QR codes.',
+    file: '/printables/vendor-card.pdf',
+    kind: 'pdf',
+    accent: '#1d4ed8',
+  },
+  {
+    key: 'qr-google',
+    title: 'Google Review QR',
+    desc: 'Routes customers straight to leaving a Google review.',
+    file: '/printables/qr-google.png',
+    kind: 'image',
+    accent: '#15803d',
+  },
+  {
+    key: 'qr-yelp',
+    title: 'Yelp QR',
+    desc: 'Routes to our Yelp page for a review.',
+    file: '/printables/qr-yelp.png',
+    kind: 'image',
+    accent: '#c2410c',
+  },
+  {
+    key: 'qr-instagram',
+    title: 'Instagram QR',
+    desc: 'Routes to @trainercenter.pokemon on Instagram.',
+    file: '/printables/qr-instagram.png',
+    kind: 'image',
+    accent: '#be185d',
+  },
+  {
+    key: 'qr-cardchase',
+    title: 'CardChase QR',
+    desc: 'Routes to cardchase.org — the app for tracking and trading your collection.',
+    file: '/printables/qr-cardchase.png',
+    kind: 'image',
+    accent: '#7c3aed',
+  },
+];
+
+function StaffPrintablesPage({ isMobile, staff }) {
+  const isAdmin = !!staff?.isAdmin;
+  const printFrameRef = useRef(null);
+  const [busy, setBusy] = useState(null); // key currently triggering print
+
+  // Print flow: drop the file into a hidden iframe, wait for it to
+  // render, then call the iframe's print() so the user gets the print
+  // dialog without leaving the page. Works for PDFs and images in
+  // every modern browser.
+  const printItem = (item) => {
+    if (!printFrameRef.current) return;
+    setBusy(item.key);
+    const frame = printFrameRef.current;
+    const cleanup = () => setBusy(null);
+    frame.onload = () => {
+      try {
+        // For images, swap in a tiny HTML doc so it prints centered.
+        if (item.kind === 'image') {
+          const doc = frame.contentDocument;
+          if (doc) {
+            doc.open();
+            doc.write(`<!doctype html><html><head><title>${item.title}</title><style>
+              @page { margin: 0.5in; }
+              html,body { margin:0; padding:0; display:flex; align-items:center; justify-content:center; height:100vh; }
+              img { max-width: 90vw; max-height: 90vh; }
+            </style></head><body><img src="${item.file}" onload="setTimeout(()=>window.print(),100)" /></body></html>`);
+            doc.close();
+            setTimeout(cleanup, 1500);
+            return;
+          }
+        }
+        // For PDFs, the browser's PDF viewer inside the iframe handles
+        // print natively when we trigger contentWindow.print().
+        const w = frame.contentWindow;
+        if (w) {
+          setTimeout(() => {
+            try { w.focus(); w.print(); } catch (e) { console.warn('print failed', e); }
+            cleanup();
+          }, 400);
+        }
+      } catch (e) {
+        console.warn('printItem error', e);
+        cleanup();
+      }
+    };
+    frame.src = item.file;
+  };
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#666' }}>
+          Staff only.
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const IconForKind = ({ kind, accent }) => {
+    if (kind === 'pdf') {
+      return (
+        <div style={{
+          width: '56px', height: '56px', borderRadius: '12px',
+          backgroundColor: `${accent}15`, color: accent,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, position: 'relative',
+        }}>
+          <FileEdit size={28} />
+        </div>
+      );
+    }
+    return (
+      <div style={{
+        width: '56px', height: '56px', borderRadius: '12px',
+        backgroundColor: `${accent}15`, color: accent,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, padding: '6px',
+      }}>
+        <svg width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <path d="M14 14h3v3" />
+          <path d="M21 14v3" />
+          <path d="M14 21h3" />
+          <path d="M21 21h-3v-3" />
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+        <Link to="/staff/vendors" style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to staff dashboard
+        </Link>
+
+        <SectionHeader title="Printables" subtitle="Shop-floor documents + QR codes — print or download" />
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '14px',
+          marginTop: '14px',
+        }}>
+          {PRINTABLES.map(item => {
+            const isImage = item.kind === 'image';
+            return (
+              <div key={item.key} style={{
+                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+                padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px',
+              }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <IconForKind kind={item.kind} accent={item.accent} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{
+                      fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
+                      marginBottom: '2px',
+                    }}>{item.title}</div>
+                    <div style={{
+                      fontSize: '0.78rem', color: '#666', lineHeight: 1.45,
+                    }}>{item.desc}</div>
+                    <div style={{
+                      fontSize: '0.6rem', fontWeight: '800', letterSpacing: '0.08em',
+                      textTransform: 'uppercase', color: item.accent, marginTop: '6px',
+                    }}>
+                      {item.kind === 'pdf' ? 'PDF' : 'QR · PNG'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview thumbnail for QR images so staff can verify it's
+                    the right code at a glance. PDFs get a neutral block. */}
+                {isImage && (
+                  <div style={{
+                    backgroundColor: '#f9fafb', border: '1px solid #f3f4f6',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    display: 'flex', justifyContent: 'center',
+                  }}>
+                    <img
+                      src={item.file}
+                      alt={item.title}
+                      style={{
+                        width: '120px', height: '120px', objectFit: 'contain',
+                        display: 'block',
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    disabled={busy === item.key}
+                    onClick={() => printItem(item)}
+                    style={{
+                      flex: 1,
+                      backgroundColor: '#1a1a1a', color: '#fff',
+                      border: 'none', padding: '10px 14px',
+                      borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
+                      cursor: busy === item.key ? 'wait' : 'pointer', fontFamily: 'inherit',
+                      opacity: busy === item.key ? 0.7 : 1,
+                    }}
+                  >
+                    {busy === item.key ? 'Loading…' : 'Print'}
+                  </button>
+                  <a
+                    href={item.file}
+                    download
+                    style={{
+                      flex: 1, textAlign: 'center',
+                      backgroundColor: '#fff', color: '#1a1a1a',
+                      border: '1px solid #1a1a1a', padding: '10px 14px',
+                      borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
+                      textDecoration: 'none', fontFamily: 'inherit',
+                    }}
+                  >
+                    Download
+                  </a>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <p style={{
+          fontSize: '0.75rem', color: '#888', marginTop: '20px', lineHeight: 1.5,
+        }}>
+          Need a new item here? Drop the file into <code style={{ fontFamily: 'ui-monospace, monospace' }}>public/printables/</code> and add it to the <code style={{ fontFamily: 'ui-monospace, monospace' }}>PRINTABLES</code> array in <code style={{ fontFamily: 'ui-monospace, monospace' }}>src/App.js</code>.
+        </p>
+      </div>
+
+      {/* Hidden iframe used by the Print buttons. Re-targeted per click. */}
+      <iframe
+        ref={printFrameRef}
+        title="print-frame"
+        style={{ position: 'fixed', width: 0, height: 0, border: 0, top: '-10000px', left: '-10000px' }}
+      />
+    </PageWrapper>
+  );
+}
+
 function UnsubscribePage({ isMobile }) {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -17027,6 +17293,7 @@ function App() {
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/printables" element={<StaffPrintablesPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
       </Routes>
 
