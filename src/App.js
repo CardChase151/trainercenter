@@ -3512,6 +3512,124 @@ function EventDayHero({ event, isMobile, isPreview }) {
   );
 }
 
+// ─── Event-day body below the takeover hero ────────────────────────
+// Two states:
+//   - Logged-in member who has checked in → voting view (same as /checkin
+//     step 3, persisted, vote count + 10pm lock)
+//   - Anonymous OR logged in but no check-in row → vendor list + prompt to
+//     scan the door QR at the event
+function EventDayBody({ event, authUser, isMobile, isPreview }) {
+  const [vendors, setVendors] = useState([]);
+  const [checkin, setCheckin] = useState(null);
+  const [votes, setVotes] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Load approved vendors for this event
+      const { data: apps } = await supabase
+        .from('vendor_applications')
+        .select('vendor_id, vendors(id, name, ig_handle)')
+        .eq('event_id', event.id)
+        .eq('status', 'approved');
+      const vs = (apps || [])
+        .map(a => a.vendors)
+        .filter(Boolean)
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (cancelled) return;
+      setVendors(vs);
+
+      // If logged in, check for an existing check-in and load their votes
+      if (authUser) {
+        const { data: ci } = await supabase
+          .from('guest_checkins')
+          .select('id, invited_by_vendor_id')
+          .eq('event_id', event.id)
+          .eq('profile_id', authUser.id)
+          .eq('preview', isPreview)
+          .maybeSingle();
+        if (cancelled) return;
+        setCheckin(ci);
+        if (ci) {
+          const { data: vv } = await supabase
+            .from('vendor_votes')
+            .select('vendor_id')
+            .eq('event_id', event.id)
+            .eq('profile_id', authUser.id)
+            .eq('preview', isPreview);
+          if (!cancelled && vv) setVotes(new Set(vv.map(r => r.vendor_id)));
+        }
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [event.id, authUser?.id, isPreview]);
+
+  async function toggleVote(vendorId) {
+    if (!authUser) return;
+    if (votes.has(vendorId)) {
+      const next = new Set(votes); next.delete(vendorId); setVotes(next);
+      await supabase.from('vendor_votes').delete()
+        .eq('event_id', event.id)
+        .eq('profile_id', authUser.id)
+        .eq('vendor_id', vendorId)
+        .eq('preview', isPreview);
+    } else if (votes.size < 3) {
+      const next = new Set(votes); next.add(vendorId); setVotes(next);
+      const { error } = await supabase.from('vendor_votes').insert({
+        event_id: event.id,
+        profile_id: authUser.id,
+        vendor_id: vendorId,
+        preview: isPreview,
+      });
+      if (error) setVotes(votes);
+    }
+  }
+
+  if (loading) {
+    return <p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading…</p>;
+  }
+
+  // Logged-in member with a check-in row → render the voting view inline
+  if (authUser && checkin) {
+    return <CheckinStep3 vendors={vendors} votes={votes} onToggleVote={toggleVote} event={event} />;
+  }
+
+  // Anonymous or not-yet-checked-in: show the vendor lineup + "come down"
+  return (
+    <div style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 24px 80px' }}>
+      <div style={{
+        background: '#fff', border: '1.5px solid #FF1A8C', borderRadius: '14px',
+        padding: '18px 20px', marginBottom: '24px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{ fontSize: '11px', fontWeight: 800, color: '#FF1A8C', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: '6px' }}>
+          {authUser ? 'You\'re logged in — scan the door QR' : 'At the event?'}
+        </div>
+        <p style={{ margin: 0, fontSize: '14px', color: '#525252', lineHeight: 1.5 }}>
+          Scan the QR at the door to check in and unlock your 3 votes for tonight's favorite vendors.
+          {authUser ? '' : ' Or come down — we\'re open till 10.'}
+        </p>
+      </div>
+      <h2 style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#C8102E', margin: '0 0 14px' }}>
+        Tonight's vendors · {vendors.length} confirmed
+      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '10px' }}>
+        {vendors.map(v => (
+          <div key={v.id} style={{
+            background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '14px',
+            padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>{v.name}</div>
+            <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HomePage({ isMobile, authUser }) {
   const [searchParams] = useSearchParams();
   const isLocalPreview = searchParams.get('preview') === 'tradenight';
@@ -3656,8 +3774,6 @@ function HomePage({ isMobile, authUser }) {
           </div>
         </div>
       </header>
-      </>
-      )}
 
       <OpenNowBanner isMobile={isMobile} />
 
@@ -6067,6 +6183,7 @@ function StaffPreviewPage({ isMobile }) {
 //   ?door=<token>      — proof of being physically at the door (mocked for now)
 //   ?preview=1         — staff preview, writes are flagged preview=true
 function GuestCheckinPage({ isMobile }) {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const eventIdParam = searchParams.get('event');
   const tokenParam = searchParams.get('token');
@@ -6207,7 +6324,9 @@ function GuestCheckinPage({ isMobile }) {
       }, { onConflict: 'event_id,profile_id,preview' });
       if (ciErr) console.warn('check-in upsert error', ciErr);
 
-      setStep(3);
+      // Hand off to the home page — they're logged in + checked in, so
+      // HomePage will detect that and render the voting view inline.
+      navigate('/');
     } catch (e) {
       setAuthError(e.message || 'Could not create account. Try again.');
     }
