@@ -3142,9 +3142,388 @@ function OpenNowBanner({ isMobile }) {
   );
 }
 
-function HomePage({ isMobile }) {
+// ─── Site-wide event preview hook ──────────────────────────────────
+// Polls site_settings every 30s for an active preview. 30-min auto-expire
+// enforced server-side. When active, the home takeover shows for ALL
+// visitors and /checkin bypasses the token check.
+function useActivePreview() {
+  const [preview, setPreview] = React.useState(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    async function fetchPreview() {
+      const { data } = await supabase.rpc('active_event_preview');
+      if (cancelled) return;
+      setPreview((data && data[0]) || null);
+    }
+    fetchPreview();
+    const interval = setInterval(fetchPreview, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+  return preview;
+}
+
+// ─── Today's event lookup ──────────────────────────────────────────
+// Returns the first non-cancelled has_vendors=true event whose event_date
+// matches today, or null. Used by HomePage to swap the brand hero for the
+// LIVE-NOW takeover. The ?preview=tradenight URL flag and the site-wide
+// preview both force the takeover regardless of today's date.
+function useTodayEvent({ forcePreview, previewEvent }) {
+  const [event, setEvent] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Site-wide preview wins
+      if (previewEvent) {
+        setEvent({
+          id: previewEvent.event_id,
+          title: previewEvent.title,
+          event_date: previewEvent.event_date,
+          start_time: previewEvent.start_time,
+          end_time: previewEvent.end_time,
+          cancelled: false,
+        });
+        setLoading(false);
+        return;
+      }
+      const today = todayISO();
+      const query = supabase
+        .from('events')
+        .select('id, title, event_date, cancelled, start_time, end_time')
+        .eq('has_vendors', true)
+        .order('event_date', { ascending: true })
+        .limit(1);
+      const { data } = forcePreview
+        ? await query.gte('event_date', today)
+        : await query.eq('event_date', today);
+      if (cancelled) return;
+      const ev = (data || []).find(e => !e.cancelled);
+      setEvent(ev || null);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [forcePreview, previewEvent?.event_id]);
+
+  return { event, loading };
+}
+
+// ─── App-level wrapper: pulls the preview state + wires the stop handler
+function GlobalPreviewBanner({ isAdmin }) {
+  const preview = useActivePreview();
+  const [stopping, setStopping] = React.useState(false);
+  async function onStop() {
+    setStopping(true);
+    await supabase.rpc('stop_event_preview');
+    // Force a refresh so the banner disappears immediately
+    window.location.reload();
+  }
+  if (!preview) return null;
+  return <PreviewModeBanner preview={preview} isAdmin={isAdmin} onStop={onStop} stopping={stopping} />;
+}
+
+// ─── Preview maintenance banner — shown to everyone when global preview active
+function PreviewModeBanner({ preview, isAdmin, onStop, stopping }) {
+  if (!preview) return null;
+  const minsLeft = Math.max(0, Math.round(
+    (new Date(preview.expires_at).getTime() - Date.now()) / 60000
+  ));
+  return (
+    <div style={{
+      position: 'sticky', top: 0, zIndex: 1000,
+      background: '#fbbf24', color: '#1a1a1a',
+      padding: '8px 14px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: '12px',
+      fontSize: '13px', fontWeight: 700,
+      borderBottom: '2px solid #d97706',
+      flexWrap: 'wrap',
+    }}>
+      <div>
+        <span style={{ fontSize: '15px' }}>🧪</span>{' '}
+        <strong>Trade Night experience test in progress.</strong>{' '}
+        <span style={{ fontWeight: 500 }}>
+          The site looks different than usual. Real next event coming soon.
+        </span>
+      </div>
+      {isAdmin && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.8 }}>
+            Auto-exits in {minsLeft} min
+          </span>
+          <button
+            onClick={onStop}
+            style={{
+              background: '#1a1a1a', color: '#fff',
+              border: 'none', borderRadius: '8px',
+              padding: '6px 14px',
+              fontSize: '12px', fontWeight: 800,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+            }}
+          >Exit preview</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Address modal — opens from "Come down now" CTA ─────────────────
+function AddressModal({ open, onClose }) {
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+        zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: '18px', maxWidth: '380px', width: '100%',
+          padding: '26px 24px', position: 'relative',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+        }}
+      >
+        <button
+          onClick={onClose}
+          style={{ position: 'absolute', top: '12px', right: '14px', background: 'transparent', border: 'none', fontSize: '22px', color: '#888', cursor: 'pointer', lineHeight: 1 }}
+        >×</button>
+        <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#C8102E', marginBottom: '8px' }}>
+          We're open right now
+        </div>
+        <h3 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 900, letterSpacing: '-0.01em' }}>
+          Come on down.
+        </h3>
+        <p style={{ fontSize: '16px', color: '#525252', lineHeight: 1.5, margin: '0 0 18px' }}>
+          <strong style={{ color: '#1a1a1a' }}>4911 Warner Ave #210</strong><br />
+          Huntington Beach, CA 92647
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <a
+            href="https://maps.apple.com/?q=4911+Warner+Ave+%23210,+Huntington+Beach,+CA+92647"
+            target="_blank" rel="noopener noreferrer"
+            style={{ background: '#C8102E', color: '#fff', textDecoration: 'none', textAlign: 'center', padding: '12px 10px', borderRadius: '10px', fontSize: '13px', fontWeight: 800 }}
+          >Apple Maps</a>
+          <a
+            href="https://www.google.com/maps/dir/?api=1&destination=4911+Warner+Ave+%23210,+Huntington+Beach,+CA+92647"
+            target="_blank" rel="noopener noreferrer"
+            style={{ background: '#f3f4f6', color: '#1a1a1a', textDecoration: 'none', textAlign: 'center', padding: '12px 10px', borderRadius: '10px', fontSize: '13px', fontWeight: 800 }}
+          >Google Maps</a>
+        </div>
+        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #e5e7eb', fontSize: '12px', color: '#888', textAlign: 'center' }}>
+          Free for guests
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Event-day takeover hero ────────────────────────────────────────
+// Replaces the brand hero on event days. Bold red/pink gradient with
+// pokeball-ring motif. "Come down now" opens AddressModal; "More info on
+// IG" jumps to @trainercenter.pokemon.
+function EventDayHero({ event, isMobile, isPreview }) {
+  const [addrOpen, setAddrOpen] = React.useState(false);
+  const dateStr = React.useMemo(() => {
+    const d = new Date(event.event_date + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+  }, [event.event_date]);
+  const title = event.title || 'Trade Night';
+  const titleParts = title.toUpperCase().split(' ');
+  // For 2-3-word titles, stack last word on its own line for impact.
+  const stackTop = titleParts.slice(0, -1).join(' ');
+  const stackBottom = titleParts.slice(-1).join(' ');
+
   return (
     <>
+      {isPreview && (
+        <div style={{
+          background: '#fbbf24', color: '#1a1a1a',
+          padding: '6px 12px', textAlign: 'center',
+          fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}>
+          🧪 Preview Mode · Not Live
+        </div>
+      )}
+      <header style={{
+        position: 'relative',
+        overflow: 'hidden',
+        color: '#fff',
+        padding: isMobile ? '24px 22px 32px' : '56px 56px 64px',
+        background:
+          'radial-gradient(ellipse at top right, rgba(200,16,46,0.92), transparent 55%),' +
+          'radial-gradient(ellipse at bottom left, rgba(255,26,140,0.85), transparent 60%),' +
+          'linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 40%, #C8102E 100%)',
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        justifyContent: 'space-between',
+        gap: isMobile ? 0 : '40px',
+      }}>
+        {/* Decorative pokeball-ring corner motif */}
+        <div style={{
+          position: 'absolute', top: '-60px', right: '-60px',
+          width: '280px', height: '280px', borderRadius: '50%',
+          background: 'radial-gradient(circle, transparent 35%, rgba(255,255,255,0.18) 36%, rgba(255,255,255,0.22) 38%, transparent 40%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ flex: 1, maxWidth: isMobile ? '100%' : '640px', position: 'relative' }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            background: 'rgba(255,255,255,0.18)',
+            border: '1px solid rgba(255,255,255,0.4)',
+            color: '#fff',
+            padding: '6px 14px', borderRadius: '999px',
+            fontSize: '11px', fontWeight: 800,
+            letterSpacing: '0.16em', textTransform: 'uppercase',
+            backdropFilter: 'blur(4px)',
+          }}>
+            <span style={{
+              width: '7px', height: '7px', borderRadius: '50%',
+              background: '#fff',
+              animation: 'pulseDot 1.5s ease-in-out infinite',
+              boxShadow: '0 0 8px #fff',
+            }} />
+            LIVE NOW · {dateStr}
+          </div>
+
+          <h1 style={{
+            fontWeight: 900,
+            letterSpacing: '-0.02em',
+            lineHeight: 0.98,
+            margin: '14px 0 12px',
+            color: '#fff',
+            fontSize: isMobile ? '36px' : '64px',
+          }}>
+            <span style={{ display: 'block' }}>{stackTop || stackBottom}</span>
+            {stackTop && (
+              <span style={{
+                display: 'block',
+                color: '#ffd13f',
+                textShadow: '0 2px 16px rgba(0,0,0,0.3)',
+              }}>{stackBottom}</span>
+            )}
+          </h1>
+
+          <div style={{
+            fontSize: isMobile ? '14px' : '16px',
+            color: 'rgba(255,255,255,0.95)',
+            lineHeight: 1.5,
+            marginBottom: '16px',
+          }}>
+            <strong style={{ color: '#fff' }}>
+              {event.start_time && event.end_time ? `${event.start_time.slice(0,5)} - ${event.end_time.slice(0,5)}` : 'Open now'}
+            </strong>
+            {' · 4911 Warner Ave #210, HB'}
+            <br />
+            Free for guests. Vintage, modern, slabs &amp; sealed.
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setAddrOpen(true)}
+              style={{
+                background: '#fff', color: '#C8102E',
+                border: 'none', borderRadius: '12px',
+                padding: '14px 22px',
+                fontSize: '14px', fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                boxShadow: '0 8px 20px rgba(0,0,0,0.18)',
+              }}
+            >Come down now →</button>
+            <a
+              href="https://www.instagram.com/trainercenter.pokemon/"
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                background: 'rgba(255,255,255,0.15)', color: '#fff',
+                border: '1.5px solid rgba(255,255,255,0.6)', borderRadius: '12px',
+                padding: '14px 22px',
+                fontSize: '14px', fontWeight: 800,
+                textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+              }}
+            >More info on IG</a>
+          </div>
+        </div>
+
+        {!isMobile && (
+          <div style={{
+            flex: '0 0 340px',
+            background: 'rgba(255,255,255,0.97)',
+            color: '#1a1a1a',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
+            position: 'relative',
+          }}>
+            <div style={{ fontSize: '11px', fontWeight: 800, color: '#FF1A8C', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: '8px' }}>
+              Happening right now
+            </div>
+            <h3 style={{ fontSize: '22px', fontWeight: 900, margin: '0 0 10px', letterSpacing: '-0.01em' }}>
+              {title}.
+            </h3>
+            <p style={{ fontSize: '14px', color: '#525252', lineHeight: 1.5, margin: '0 0 14px' }}>
+              <strong style={{ color: '#1a1a1a' }}>Open until {event.end_time ? event.end_time.slice(0,5) : '10:00 PM'} tonight.</strong>{' '}
+              Free for guests. Vintage, modern, slabs &amp; sealed all under one roof.
+            </p>
+            <button
+              onClick={() => setAddrOpen(true)}
+              style={{
+                width: '100%', justifyContent: 'center',
+                background: '#C8102E', color: '#fff',
+                border: 'none', borderRadius: '12px',
+                padding: '14px 22px',
+                fontSize: '14px', fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                marginBottom: '8px',
+                boxShadow: '0 8px 20px rgba(200,16,46,0.3)',
+              }}
+            >Come down now →</button>
+            <a
+              href="https://www.instagram.com/trainercenter.pokemon/"
+              target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: '#C8102E', textDecoration: 'none' }}
+            >More info on IG →</a>
+            <div style={{ fontSize: '13px', color: '#525252', borderTop: '1px solid #e5e7eb', paddingTop: '12px', marginTop: '12px' }}>
+              <strong style={{ color: '#1a1a1a', display: 'block' }}>4911 Warner Ave #210</strong>
+              Huntington Beach, CA
+            </div>
+          </div>
+        )}
+      </header>
+
+      <AddressModal open={addrOpen} onClose={() => setAddrOpen(false)} />
+
+      <style>{`@keyframes pulseDot { 50% { opacity: 0.4; } }`}</style>
+    </>
+  );
+}
+
+function HomePage({ isMobile }) {
+  const [searchParams] = useSearchParams();
+  const isLocalPreview = searchParams.get('preview') === 'tradenight';
+  const activePreview = useActivePreview();
+  const { event: todayEvent, loading: eventLoading } = useTodayEvent({
+    forcePreview: isLocalPreview,
+    previewEvent: activePreview,
+  });
+  const isPreview = isLocalPreview || !!activePreview;
+  const showTakeover = !eventLoading && todayEvent;
+
+  return (
+    <>
+      {showTakeover ? (
+        <EventDayHero event={todayEvent} isMobile={isMobile} isPreview={isPreview} />
+      ) : (
+      <>
       {/* Hero - Full Viewport. Class drives iOS-aware 100dvh height so the
           hero doesn't push past Safari's URL bar on first paint. */}
       <header className="hero-fullscreen" style={{
@@ -3257,6 +3636,8 @@ function HomePage({ isMobile }) {
           </div>
         </div>
       </header>
+      </>
+      )}
 
       <OpenNowBanner isMobile={isMobile} />
 
@@ -5532,6 +5913,655 @@ function ApplyToVendBanner({ isMobile }) {
 }
 
 // ─── Public Vendor Day Showcase Page ──────────────────────
+// ─── Staff preview launcher (/staff/preview) ─────────────────────────
+// Lets admins flip the whole site into event-day mode for end-to-end testing.
+// Auto-expires after 30 min, but staff can also exit early via the banner.
+function StaffPreviewPage({ isMobile }) {
+  const navigate = useNavigate();
+  const [events, setEvents] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const activePreview = useActivePreview();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const today = todayISO();
+      const { data } = await supabase
+        .from('events')
+        .select('id, title, event_date, start_time, end_time, has_vendors, cancelled')
+        .eq('has_vendors', true)
+        .gte('event_date', today)
+        .order('event_date', { ascending: true })
+        .limit(10);
+      if (cancelled) return;
+      const upcoming = (data || []).filter(e => !e.cancelled);
+      setEvents(upcoming);
+      if (upcoming.length > 0) setSelectedId(upcoming[0].id);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function startPreview() {
+    if (!selectedId) return;
+    setBusy(true); setError(null);
+    const { error: err } = await supabase.rpc('start_event_preview', { p_event_id: selectedId });
+    if (err) { setError(err.message); setBusy(false); return; }
+    // Hop to home so they can see the takeover
+    navigate('/');
+  }
+
+  async function stopPreview() {
+    setBusy(true);
+    await supabase.rpc('stop_event_preview');
+    window.location.reload();
+  }
+
+  return (
+    <div style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '24px 16px' : '48px 24px' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: 900, margin: '0 0 8px' }}>🧪 Trade Night Preview</h1>
+      <p style={{ color: '#525252', fontSize: '14px', lineHeight: 1.5, margin: '0 0 24px' }}>
+        Flips the site into event-day mode for everyone (visitors see a yellow notice banner). Auto-exits after 30 min. Real check-ins and votes recorded during preview are tagged <strong>preview=true</strong> and filtered out of leaderboards.
+      </p>
+
+      {activePreview && (
+        <div style={{ background: '#fef3c7', border: '1.5px solid #d97706', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 800, color: '#92400e', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>
+            Preview is active
+          </div>
+          <p style={{ margin: '0 0 12px', color: '#1a1a1a' }}>
+            <strong>{activePreview.title}</strong> ({activePreview.event_date})
+          </p>
+          <button
+            onClick={stopPreview}
+            disabled={busy}
+            style={{ background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontWeight: 800, fontSize: '13px', cursor: busy ? 'wait' : 'pointer' }}
+          >Exit preview now</button>
+        </div>
+      )}
+
+      <h2 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px' }}>Pick an event to preview</h2>
+      {loading ? (
+        <p style={{ color: '#888' }}>Loading upcoming events…</p>
+      ) : events.length === 0 ? (
+        <p style={{ color: '#888' }}>No upcoming has_vendors events to preview. Add one on the calendar first.</p>
+      ) : (
+        <>
+          <select
+            value={selectedId}
+            onChange={e => setSelectedId(e.target.value)}
+            style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1.5px solid #e5e7eb', borderRadius: '10px', marginBottom: '16px', background: '#fff' }}
+          >
+            {events.map(e => (
+              <option key={e.id} value={e.id}>
+                {e.title} — {e.event_date} ({e.start_time?.slice(0,5)} - {e.end_time?.slice(0,5)})
+              </option>
+            ))}
+          </select>
+          {error && <p style={{ color: '#C8102E', fontSize: '13px', margin: '0 0 12px' }}>{error}</p>}
+          <button
+            onClick={startPreview}
+            disabled={busy || !selectedId}
+            style={{
+              background: busy ? '#9ca3af' : 'linear-gradient(135deg, #C8102E 0%, #FF1A8C 100%)',
+              color: '#fff', border: 'none', borderRadius: '12px',
+              padding: '14px 24px', fontWeight: 800, fontSize: '15px',
+              cursor: busy ? 'wait' : 'pointer',
+              boxShadow: busy ? 'none' : '0 8px 20px rgba(200,16,46,0.3)',
+            }}
+          >🧪 Start preview now</button>
+        </>
+      )}
+
+      <div style={{ marginTop: '40px', padding: '16px', background: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+        <h3 style={{ fontSize: '13px', fontWeight: 800, margin: '0 0 8px', color: '#525252' }}>What happens when you start a preview</h3>
+        <ul style={{ margin: 0, paddingLeft: '20px', color: '#525252', fontSize: '13px', lineHeight: 1.6 }}>
+          <li>The home page (<code>/</code>) shows the event-day takeover for everyone.</li>
+          <li>The door check-in (<code>/checkin</code>) works without a token.</li>
+          <li>A yellow notice banner appears at the top of every page.</li>
+          <li>All check-ins and votes are saved with <code>preview=true</code>.</li>
+          <li>Preview auto-exits in 30 minutes (or click "Exit preview").</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ─── Guest check-in page (/checkin) ─────────────────────────────────
+// Three-step cascade meant to be opened from the door QR code at events.
+// Each step auto-advances to feel like one continuous tap.
+//   Step 1: pick the vendor who invited you (or quick None button)
+//   Step 2: "Select your favorites" — login/signup gate framed as the unlock
+//   Step 3: cast/update your 3 vendor votes, persisted, locks at event end
+//
+// URL params:
+//   ?event=<event_id>  — which event this check-in is for (required)
+//   ?door=<token>      — proof of being physically at the door (mocked for now)
+//   ?preview=1         — staff preview, writes are flagged preview=true
+function GuestCheckinPage({ isMobile }) {
+  const [searchParams] = useSearchParams();
+  const eventIdParam = searchParams.get('event');
+  const tokenParam = searchParams.get('token');
+  const isLocalPreview = searchParams.get('preview') === '1';
+  const activePreview = useActivePreview();
+  // Site-wide global preview also lets the door QR work without a token,
+  // tagged with preview=true so writes don't pollute real analytics.
+  const isPreview = isLocalPreview || !!activePreview;
+
+  const [event, setEvent] = useState(null);
+  const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tokenValid, setTokenValid] = useState(null); // null=unknown, true/false after check
+  const [step, setStep] = useState(1);
+  const [pickedInviter, setPickedInviter] = useState(null); // vendor object OR { id: null } for None
+  const [authError, setAuthError] = useState(null);
+  const [session, setSession] = useState(null);
+  const [votes, setVotes] = useState(new Set()); // set of vendor_id
+
+  // Load event + vendors + existing session/votes on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const today = todayISO();
+      let ev = null;
+      // Preview mode: bypass token. Priority order:
+      //   1. Site-wide preview's selected event (most authoritative — staff picked it)
+      //   2. Explicit ?event=<id> URL param (local preview rehearsals)
+      //   3. Next upcoming has_vendors event (fallback)
+      if (isPreview) {
+        let targetEventId = activePreview?.event_id || eventIdParam || null;
+        let evQuery = supabase
+          .from('events')
+          .select('id, title, event_date, start_time, end_time, has_vendors, cancelled');
+        if (targetEventId) {
+          evQuery = evQuery.eq('id', targetEventId).limit(1);
+        } else {
+          evQuery = evQuery.eq('has_vendors', true).gte('event_date', today)
+            .order('event_date', { ascending: true }).limit(1);
+        }
+        const { data } = await evQuery;
+        ev = (data || []).find(e => !e.cancelled) || null;
+        setTokenValid(true);
+      } else if (eventIdParam && tokenParam) {
+        // Real check-in: validate event_id + token via SECURITY DEFINER RPC.
+        // The RPC only returns rows when both match — bypasses RLS so the
+        // anon role can verify before auth.
+        const { data, error } = await supabase
+          .rpc('event_by_door_token', { p_event_id: eventIdParam, p_token: tokenParam });
+        if (!error && data && data.length > 0) {
+          ev = data[0];
+          setTokenValid(true);
+        } else {
+          setTokenValid(false);
+        }
+      } else {
+        setTokenValid(false);
+      }
+      if (cancelled) return;
+      setEvent(ev || null);
+
+      // Pull approved vendors for the event
+      if (ev) {
+        const { data: apps } = await supabase
+          .from('vendor_applications')
+          .select('vendor_id, vendors(id, name, ig_handle)')
+          .eq('event_id', ev.id)
+          .eq('status', 'approved');
+        if (!cancelled) {
+          const vs = (apps || [])
+            .map(a => a.vendors)
+            .filter(Boolean)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          setVendors(vs);
+        }
+      }
+
+      // Existing session
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      setSession(s);
+
+      // If logged in + checked in already, jump to vote step
+      if (s && ev) {
+        const { data: ci } = await supabase
+          .from('guest_checkins')
+          .select('id, invited_by_vendor_id')
+          .eq('event_id', ev.id)
+          .eq('profile_id', s.user.id)
+          .maybeSingle();
+        if (ci) {
+          setStep(3);
+        }
+        const { data: vv } = await supabase
+          .from('vendor_votes')
+          .select('vendor_id')
+          .eq('event_id', ev.id)
+          .eq('profile_id', s.user.id);
+        if (!cancelled && vv) setVotes(new Set(vv.map(r => r.vendor_id)));
+      }
+
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [eventIdParam, tokenParam, isPreview, activePreview?.event_id]);
+
+  // Auto-advance from step 1 once an inviter is picked
+  const advanceFromStep1 = (inviter) => {
+    setPickedInviter(inviter);
+    setTimeout(() => setStep(2), 350);
+  };
+
+  // Step 2 — create account / sign in, then write check-in
+  async function handleCreateAccount(email, password) {
+    setAuthError(null);
+    try {
+      // Try sign-in first; if it fails (no account), sign up.
+      let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data?.session) {
+        const signup = await supabase.auth.signUp({
+          email, password,
+          options: { data: { source: 'door_checkin' } },
+        });
+        if (signup.error) throw signup.error;
+        // signUp returns a session when email confirmation is disabled.
+        data = signup.data;
+      }
+      const s = data.session;
+      if (!s) { setAuthError("We couldn't sign you in. Try a different password."); return; }
+      setSession(s);
+
+      // Record the check-in
+      const { error: ciErr } = await supabase.from('guest_checkins').upsert({
+        event_id: event.id,
+        profile_id: s.user.id,
+        invited_by_vendor_id: pickedInviter?.id || null,
+        preview: isPreview,
+      }, { onConflict: 'event_id,profile_id' });
+      if (ciErr) console.warn('check-in upsert error', ciErr);
+
+      setStep(3);
+    } catch (e) {
+      setAuthError(e.message || 'Could not create account. Try again.');
+    }
+  }
+
+  // Step 3 — toggle a vote (add or remove)
+  async function toggleVote(vendorId) {
+    if (!session) return;
+    if (votes.has(vendorId)) {
+      const next = new Set(votes); next.delete(vendorId); setVotes(next);
+      await supabase.from('vendor_votes')
+        .delete()
+        .eq('event_id', event.id)
+        .eq('profile_id', session.user.id)
+        .eq('vendor_id', vendorId);
+    } else if (votes.size < 3) {
+      const next = new Set(votes); next.add(vendorId); setVotes(next);
+      const { error } = await supabase.from('vendor_votes').insert({
+        event_id: event.id,
+        profile_id: session.user.id,
+        vendor_id: vendorId,
+        preview: isPreview,
+      });
+      if (error) {
+        // rollback local state if DB rejected (e.g. max 3 trigger)
+        const rolled = new Set(votes); setVotes(rolled);
+      }
+    }
+  }
+
+  if (loading) return <CheckinShell><p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading…</p></CheckinShell>;
+  if (tokenValid === false) {
+    return (
+      <CheckinShell>
+        <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+          <h2 style={{ margin: '0 0 12px' }}>This QR is no longer valid.</h2>
+          <p style={{ color: '#666', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Each event has its own QR. This one might be from a past event or scanned with a missing code. Try the QR at the front door of tonight's event.
+          </p>
+          <a href="/" style={{ color: '#C8102E', fontWeight: 800, textDecoration: 'none' }}>← Back to home</a>
+        </div>
+      </CheckinShell>
+    );
+  }
+  if (!event) {
+    return (
+      <CheckinShell>
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          <h2 style={{ margin: '0 0 12px' }}>No event happening right now.</h2>
+          <p style={{ color: '#666', margin: 0 }}>This QR is for live events. Come back during a Trade Night.</p>
+        </div>
+      </CheckinShell>
+    );
+  }
+
+  return (
+    <CheckinShell isPreview={isPreview}>
+      <CheckinHeader step={step} event={event} />
+      {step === 1 && (
+        <CheckinStep1
+          vendors={vendors}
+          onPickVendor={advanceFromStep1}
+          onPickNone={() => advanceFromStep1({ id: null })}
+        />
+      )}
+      {step === 2 && (
+        <CheckinStep2
+          pickedInviter={pickedInviter}
+          onCreate={handleCreateAccount}
+          authError={authError}
+        />
+      )}
+      {step === 3 && (
+        <CheckinStep3
+          vendors={vendors}
+          votes={votes}
+          onToggleVote={toggleVote}
+          event={event}
+        />
+      )}
+    </CheckinShell>
+  );
+}
+
+function CheckinShell({ children, isPreview }) {
+  return (
+    <div style={{ background: '#fafafa', minHeight: '100vh' }}>
+      {isPreview && (
+        <div style={{
+          background: '#fbbf24', color: '#1a1a1a',
+          padding: '6px 12px', textAlign: 'center',
+          fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}>
+          🧪 Preview Mode · Not Live
+        </div>
+      )}
+      <div style={{ maxWidth: '420px', margin: '0 auto', background: '#fafafa' }}>
+        {children}
+      </div>
+      <style>{`
+        @keyframes pulseDot { 50% { opacity: 0.4; } }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}
+
+function CheckinHeader({ step, event }) {
+  const subs = {
+    1: "Tap the vendor who invited you. That's it for now.",
+    2: "Select your favorites tonight. Quick account so your picks save.",
+    3: "You're in. Award your 3 points any time before close.",
+  };
+  return (
+    <div style={{
+      background:
+        'radial-gradient(ellipse at top right, rgba(255,26,140,0.85), transparent 60%),' +
+        'linear-gradient(135deg, #1a1a1a 0%, #C8102E 100%)',
+      padding: '36px 24px 28px',
+      textAlign: 'center',
+      color: '#fff',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.9)', textTransform: 'uppercase', fontWeight: 800, marginBottom: '8px' }}>
+        Welcome in
+      </div>
+      <h1 style={{ fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
+        You're at {event.title || 'Trade Night'}.
+      </h1>
+      <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
+        {subs[step]}
+      </p>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '5px', background: 'linear-gradient(90deg, #FF1A8C, #fff, #ffd13f)' }} />
+    </div>
+  );
+}
+
+function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
+  const [query, setQuery] = useState('');
+  const filtered = vendors.filter(v =>
+    (v.name || '').toLowerCase().includes(query.toLowerCase()) ||
+    (v.ig_handle || '').toLowerCase().includes(query.toLowerCase())
+  );
+  return (
+    <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
+      <div style={{ padding: '24px 24px 0' }}>
+        <button
+          onClick={onPickNone}
+          style={{
+            width: '100%', background: '#fff', border: '1.5px solid #d1d5db',
+            borderRadius: '12px', padding: '14px 16px',
+            fontSize: '14px', fontWeight: 700, color: '#1a1a1a',
+            cursor: 'pointer', marginBottom: '14px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}
+        >
+          <span>No vendor invited me — I'm just walking in</span>
+          <span style={{ color: '#888', fontSize: '18px' }}>→</span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', color: '#888', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 12px' }}>
+          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+          <span style={{ padding: '0 12px' }}>or — find your vendor</span>
+          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+        </div>
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#888' }}>🔎</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search vendor name or handle..."
+            style={{
+              width: '100%', background: '#fff', border: '1.5px solid #e5e7eb',
+              borderRadius: '12px', padding: '14px 16px 14px 42px',
+              fontSize: '14px', color: '#1a1a1a',
+            }}
+          />
+        </div>
+        <div style={{ background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '12px', maxHeight: '230px', overflowY: 'auto', marginTop: '6px' }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '14px 16px', color: '#888', fontSize: '13px', fontStyle: 'italic' }}>
+              No matches. Use the "No vendor invited me" button above if you don't see them.
+            </div>
+          )}
+          {filtered.map(v => (
+            <div
+              key={v.id}
+              onClick={() => onPickVendor(v)}
+              style={{
+                padding: '12px 16px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #f3f4f6',
+                fontSize: '14px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+            >
+              <span style={{ fontWeight: 700, color: '#1a1a1a' }}>{v.name}</span>
+              <span style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</span>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: '12px', color: '#888', margin: '12px 0 24px', lineHeight: 1.5 }}>
+          Picking your inviter <strong style={{ color: '#525252' }}>boosts their guest count</strong>. Vendor with the most invites wins incentives.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CheckinStep2({ pickedInviter, onCreate, authError }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const chipLabel = pickedInviter?.id
+    ? `✓ Invited by ${pickedInviter.name}`
+    : '✓ Walked in on my own';
+  return (
+    <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        background: '#fef3c7', color: '#92400e',
+        border: '1px solid #d97706',
+        padding: '5px 12px', borderRadius: '999px',
+        fontSize: '11px', fontWeight: 800,
+        margin: '18px 24px 0',
+      }}>{chipLabel}</div>
+
+      <div style={{ padding: '22px 24px 0' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1a1a1a', margin: '6px 0 6px' }}>
+          Select your favorites tonight.
+        </h2>
+        <p style={{ fontSize: '12px', color: '#888', margin: '0 0 12px', lineHeight: 1.5 }}>
+          Three vendors. You'll award them points toward <strong style={{ color: '#525252' }}>Favorite Vendor of the Night</strong>. Quick account first so your picks save to your name and you can come back to change them any time before close.
+        </p>
+
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          background: '#ecfdf5', color: '#047857',
+          border: '1px solid #a7f3d0',
+          padding: '5px 12px', borderRadius: '999px',
+          fontSize: '11px', fontWeight: 800,
+          marginBottom: '14px',
+        }}>🔒 No spam, ever. Promise.</div>
+
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+            Email
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@email.com"
+            autoComplete="email"
+            style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+          />
+        </div>
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+            Password
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="new-password"
+            style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+          />
+        </div>
+
+        {authError && (
+          <div style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', margin: '0 0 8px' }}>
+            {authError}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={() => onCreate(email, password)}
+        disabled={!email || password.length < 6}
+        style={{
+          width: 'calc(100% - 48px)', margin: '18px 24px 0',
+          background: !email || password.length < 6
+            ? '#f3f4f6'
+            : 'linear-gradient(135deg, #C8102E 0%, #FF1A8C 100%)',
+          color: !email || password.length < 6 ? '#9ca3af' : '#fff',
+          fontSize: '16px', fontWeight: 800,
+          border: 'none', borderRadius: '14px',
+          padding: '16px',
+          cursor: !email || password.length < 6 ? 'not-allowed' : 'pointer',
+          boxShadow: !email || password.length < 6 ? 'none' : '0 12px 28px rgba(200,16,46,0.3)',
+          letterSpacing: '0.04em',
+        }}
+      >Unlock my 3 votes →</button>
+      <p style={{ fontSize: '11px', color: '#888', textAlign: 'center', margin: '8px 24px 60px', fontStyle: 'italic' }}>
+        Password must be 6+ characters.
+      </p>
+    </div>
+  );
+}
+
+function CheckinStep3({ vendors, votes, onToggleVote, event }) {
+  const endTime = event.end_time ? event.end_time.slice(0, 5) : '10:00 PM';
+  return (
+    <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        background: '#ecfdf5', color: '#16a34a',
+        border: '1px solid #bbf7d0',
+        padding: '5px 12px', borderRadius: '999px',
+        fontSize: '11px', fontWeight: 800,
+        margin: '18px 24px 0',
+      }}>★ You're in · saved to your account</div>
+
+      <div style={{ padding: '22px 24px 0' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#1a1a1a', margin: '6px 0 6px' }}>
+          Award your 3 points.
+        </h2>
+        <p style={{ fontSize: '12px', color: '#888', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Tap up to 3 vendors. Tap again to remove. Each tap = 1 point toward their <strong style={{ color: '#525252' }}>Favorite Vendor of the Night</strong> total. <strong style={{ color: '#1a1a1a' }}>Your picks save automatically.</strong> Come back any time. <strong style={{ color: '#C8102E' }}>Locks at {endTime}.</strong>
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '0 24px 100px' }}>
+        {vendors.map(v => {
+          const isVoted = votes.has(v.id);
+          return (
+            <div
+              key={v.id}
+              onClick={() => onToggleVote(v.id)}
+              style={{
+                background: isVoted ? '#fef3c7' : '#fff',
+                border: isVoted ? '1.5px solid #d97706' : '1.5px solid #e5e7eb',
+                borderRadius: '14px',
+                padding: '14px',
+                position: 'relative',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: isVoted ? '0 4px 16px rgba(217,119,6,0.18)' : '0 1px 3px rgba(0,0,0,0.04)',
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: '10px', right: '10px',
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: isVoted ? '#d97706' : '#f3f4f6',
+                color: isVoted ? '#fff' : '#999',
+                fontSize: '13px', fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{isVoted ? '★' : ''}</div>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px' }}>
+                {v.name}
+              </div>
+              <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        position: 'sticky', bottom: 0,
+        background: 'rgba(255,255,255,0.97)',
+        backdropFilter: 'blur(10px)',
+        borderTop: '1px solid #e5e7eb',
+        padding: '14px 20px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a' }}>
+          <span style={{ color: '#d97706', fontSize: '20px' }}>{votes.size}</span> / 3 chosen
+        </div>
+        <div style={{ fontSize: '12px', color: '#888' }}>
+          Saves as you go · Locks at <strong style={{ color: '#C8102E' }}>{endTime}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Vendor Day "About" / educational page ───────────────
 // /vendor-day/about — what these events ARE, why they exist, how vendors
 // get involved. Linked from the home banner during cold periods (more than
@@ -13691,6 +14721,10 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Instagram Contacts', to: '/staff/instagram' },
             { label: 'Analytics', to: '/staff/analytics' },
             { label: 'Business Hours', to: '/#visit-us' },
+            // Trade Night preview — flips the entire site into event-day
+            // mode (for everyone) so staff can run a real end-to-end test.
+            // Auto-expires after 30 min, all data tagged preview=true.
+            { label: '🧪 Trade Night Preview', to: '/staff/preview' },
             ...(remindersIn === 'staff' ? [reminderItem] : []),
             ...authTail('staff'),
           ]
@@ -15608,6 +16642,7 @@ function App() {
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
     }}>
       <ScrollToTop />
+      <GlobalPreviewBanner isAdmin={isAdmin} />
 
       {/* Nav - hidden until scroll on home, always visible on other pages */}
       <nav ref={navRef} style={{
@@ -15974,6 +17009,8 @@ function App() {
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
         <Route path="/vendor-day" element={<VendorDayPage isMobile={isMobile} />} />
         <Route path="/vendor-day/about" element={<VendorDayAboutPage isMobile={isMobile} />} />
+        <Route path="/checkin" element={<GuestCheckinPage isMobile={isMobile} />} />
+        <Route path="/staff/preview" element={<StaffPreviewPage isMobile={isMobile} />} />
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />

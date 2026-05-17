@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TC HB — Event Day Mockup (Light)</title>
+<style>
+  :root {
+    --tc-red: #C8102E;
+    --tc-red-dark: #9b0a22;
+    --pink: #FF1A8C;
+    --cyan: #0891b2;
+    --gold: #d97706;
+    --gold-bg: #fef3c7;
+    --green: #16a34a;
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --line: #e5e7eb;
+    --line-strong: #d1d5db;
+    --text: #1a1a1a;
+    --text-soft: #525252;
+    --text-muted: #888;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ececec; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); }
+
+  /* ── Toggle bar (mockup only) ── */
+  .mockup-bar {
+    position: sticky; top: 0; z-index: 999;
+    background: #1a1a1a; color: #aaa;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .mockup-bar strong { color: #fff; }
+  .mockup-bar .group { display: flex; gap: 6px; align-items: center; }
+  .mockup-bar .group .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #777; margin-right: 4px; }
+  .mockup-bar button {
+    background: transparent; color: #aaa;
+    border: 1px solid #444; border-radius: 999px;
+    padding: 5px 12px; font-size: 11px; font-weight: 700;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .mockup-bar button.active { background: var(--tc-red); color: #fff; border-color: var(--tc-red); }
+
+  /* ── Device frames ── */
+  .device {
+    margin: 24px auto;
+    background: var(--bg);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.18);
+    border: 1px solid #ddd;
+  }
+  .device.mobile { max-width: 420px; min-height: 800px; }
+  .device.desktop { max-width: 1240px; min-height: 760px; border-radius: 16px; }
+
+  /* ── SITE HEADER (persistent) ────────────────────── */
+  .site-header {
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .desktop .site-header { padding: 14px 40px; }
+  .site-header .brand { display: flex; align-items: center; gap: 8px; }
+  .site-header .brand .logo {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(180deg, #C8102E 50%, #fff 50%);
+    border: 2px solid #1a1a1a;
+    position: relative;
+  }
+  .site-header .brand .logo::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 8px; height: 8px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff; border: 2px solid #1a1a1a;
+  }
+  .site-header .brand .name { font-size: 14px; font-weight: 900; letter-spacing: -0.01em; }
+  .desktop .site-header .brand .name { font-size: 16px; }
+  .site-header nav {
+    display: flex; gap: 18px;
+    font-size: 13px; color: var(--text-soft); font-weight: 600;
+  }
+  .mobile .site-header nav { display: none; }
+  .site-header nav a { color: var(--text-soft); text-decoration: none; }
+  .site-header nav a.active { color: var(--tc-red); }
+  .site-header .right { display: flex; align-items: center; gap: 10px; }
+  .ig-btn {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800;
+    text-decoration: none;
+  }
+  .menu-btn {
+    width: 32px; height: 32px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    gap: 4px; cursor: pointer;
+  }
+  .desktop .menu-btn { display: none; }
+  .menu-btn span { width: 18px; height: 2px; background: var(--text); border-radius: 2px; }
+
+  /* ── HERO (home takeover) ────────────────────────── */
+  .hero {
+    position: relative;
+    background:
+      radial-gradient(ellipse at top right, rgba(200,16,46,0.92), transparent 55%),
+      radial-gradient(ellipse at bottom left, rgba(255,26,140,0.85), transparent 60%),
+      linear-gradient(135deg, #1a1a1a 0%, #2a0a0a 40%, var(--tc-red) 100%);
+    overflow: hidden;
+    color: #fff;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -60px; right: -60px;
+    width: 280px; height: 280px; border-radius: 50%;
+    background: radial-gradient(circle, transparent 35%, rgba(255,255,255,0.18) 36%, rgba(255,255,255,0.22) 38%, transparent 40%);
+  }
+  .mobile .hero { padding: 22px; }
+  .desktop .hero { padding: 56px 56px 64px; display: flex; align-items: center; justify-content: space-between; gap: 40px; }
+
+  .pill-live {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: #fff;
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    backdrop-filter: blur(4px);
+    width: fit-content;
+  }
+  .pill-live .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: pulse 1.5s ease-in-out infinite; box-shadow: 0 0 8px #fff; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  .hero h1 { font-weight: 900; letter-spacing: -0.02em; line-height: 0.98; margin: 14px 0 12px; color: #fff; }
+  .mobile .hero h1 { font-size: 36px; }
+  .desktop .hero h1 { font-size: 64px; }
+  .hero h1 .stack { display: block; }
+  .hero h1 .stack:last-child { color: #ffd13f; text-shadow: 0 2px 16px rgba(0,0,0,0.3); }
+  .hero-meta { font-size: 14px; color: rgba(255,255,255,0.95); line-height: 1.5; margin-bottom: 16px; }
+  .desktop .hero-meta { font-size: 16px; }
+  .hero-meta strong { color: #fff; }
+
+  /* Hero CTA — strong "come to the event right now" ask */
+  .hero-cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-primary {
+    background: #fff; color: var(--tc-red);
+    border: none; border-radius: 12px;
+    padding: 14px 22px;
+    font-size: 14px; font-weight: 800;
+    cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.6);
+    border-radius: 12px;
+    padding: 14px 22px;
+    font-size: 14px; font-weight: 800;
+    cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+
+  .desktop .hero-left { flex: 1; max-width: 640px; }
+  .hero-right { display: none; }
+  .desktop .hero-right {
+    display: block;
+    flex: 0 0 340px;
+    background: rgba(255,255,255,0.97);
+    color: var(--text);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+  }
+  .desktop .hero-right .head { font-size: 11px; font-weight: 800; color: var(--pink); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 8px; }
+  .desktop .hero-right h3 { font-size: 22px; font-weight: 900; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .desktop .hero-right p { font-size: 14px; color: var(--text-soft); line-height: 1.5; margin: 0 0 14px; }
+  .desktop .hero-right p strong { color: var(--text); }
+  .desktop .hero-right .addr { font-size: 13px; color: var(--text-soft); border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+  .desktop .hero-right .addr strong { color: var(--text); display: block; }
+
+  /* ── Section heading ─────────────────────────────── */
+  .section { padding: 20px 20px 0; }
+  .desktop .section { padding: 28px 56px 0; }
+  .section h2 {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--tc-red);
+    margin: 8px 0 14px;
+  }
+  .desktop .section h2 { font-size: 12px; margin: 0 0 18px; }
+
+  /* ── Vendor grid ─────────────────────────────────── */
+  .vendor-grid { display: grid; gap: 10px; padding: 0 20px 20px; }
+  .mobile .vendor-grid { grid-template-columns: 1fr 1fr; }
+  .desktop .vendor-grid { padding: 0 56px 24px; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .vendor-card {
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .vendor-card .v-name { font-size: 14px; font-weight: 800; color: var(--text); margin: 0 0 4px; }
+  .desktop .vendor-card .v-name { font-size: 15px; }
+  .vendor-card .v-handle { font-size: 11px; color: var(--text-muted); }
+
+  /* ── Address / footer block ──────────────────────── */
+  .info-block {
+    background: #1a1a1a; color: #fff;
+    padding: 24px 20px;
+    margin-top: 8px;
+  }
+  .desktop .info-block { padding: 36px 56px; display: flex; gap: 40px; align-items: flex-start; }
+  .info-block .info-col { margin-bottom: 16px; }
+  .desktop .info-block .info-col { flex: 1; margin-bottom: 0; }
+  .info-block h4 {
+    font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    color: #ffd13f; margin: 0 0 10px;
+  }
+  .info-block .v { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.9); }
+  .info-block .v strong { color: #fff; }
+  .info-block a { color: #fff; text-decoration: underline; }
+
+  /* ── Site footer (real footer) ───────────────────── */
+  .site-footer {
+    background: #0a0a0d; color: #888;
+    padding: 18px 20px; font-size: 11px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  .desktop .site-footer { padding: 22px 56px; font-size: 12px; }
+  .site-footer a { color: #aaa; text-decoration: none; }
+
+  /* ── DOOR CHECK-IN VIEW (3-step cascade) ─────────── */
+  .checkin { padding: 0 0 60px; background: var(--bg); }
+  .door-step { display: none; animation: fadeSlide 0.35s ease-out; }
+  .door-step.active { display: block; }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  /* Continuation chip — sits at top of step 2/3, shows step 1 picked */
+  .pick-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--gold-bg); color: #92400e;
+    border: 1px solid var(--gold);
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    margin: 18px 24px 0;
+    letter-spacing: 0.04em;
+  }
+  /* Persistent badge in step 3 — "you're logged in / saved" */
+  .member-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #ecfdf5; color: var(--green);
+    border: 1px solid #bbf7d0;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    margin: 18px 24px 0;
+    letter-spacing: 0.04em;
+  }
+  .saved-note {
+    font-size: 11px; color: var(--text-muted);
+    text-align: center;
+    margin: 8px 24px 14px;
+    font-style: italic;
+  }
+  /* Vote grid inside step 3 */
+  .vote-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px; padding: 0 24px 100px;
+  }
+  .vote-grid .vendor-card { cursor: pointer; transition: all 0.15s ease; }
+  .vote-grid .vendor-card:active { transform: scale(0.97); }
+  .vote-grid .vendor-card.voted {
+    border-color: var(--gold);
+    background: var(--gold-bg);
+    box-shadow: 0 4px 16px rgba(217,119,6,0.18);
+  }
+  .vote-grid .vendor-card .v-badge {
+    position: absolute; top: 10px; right: 10px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #f3f4f6; color: #999;
+    font-size: 13px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .vote-grid .vendor-card.voted .v-badge {
+    background: var(--gold); color: #fff;
+  }
+  .checkin-header {
+    background:
+      radial-gradient(ellipse at top right, rgba(255,26,140,0.85), transparent 60%),
+      linear-gradient(135deg, #1a1a1a 0%, var(--tc-red) 100%);
+    padding: 36px 24px 28px;
+    text-align: center; color: #fff;
+    position: relative; overflow: hidden;
+  }
+  .checkin-header::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 5px; background: linear-gradient(90deg, var(--pink), #fff, #ffd13f); }
+  .checkin-header .welcome { font-size: 11px; letter-spacing: 0.2em; color: rgba(255,255,255,0.9); text-transform: uppercase; font-weight: 800; margin-bottom: 8px; }
+  .checkin-header h1 { font-size: 28px; font-weight: 900; margin: 0; letter-spacing: -0.02em; color: #fff; }
+  .checkin-header p { margin: 8px 0 0; font-size: 13px; color: rgba(255,255,255,0.9); }
+
+  .step-block { padding: 22px 24px 0; }
+  .step-num {
+    display: inline-block;
+    background: var(--tc-red); color: #fff;
+    width: 22px; height: 22px; border-radius: 50%;
+    line-height: 22px; text-align: center;
+    font-size: 12px; font-weight: 800;
+    margin-right: 8px;
+  }
+  .step-head { font-size: 16px; font-weight: 800; color: var(--text); margin: 0 0 6px; display: flex; align-items: center; }
+  .step-sub { font-size: 12px; color: var(--text-muted); margin: -2px 0 12px 30px; line-height: 1.5; }
+  .step-sub strong { color: var(--text-soft); }
+
+  /* Searchable vendor picker */
+  .picker {
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .picker-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px 14px 42px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .picker-input:focus { outline: none; border-color: var(--tc-red); }
+  .picker .icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 16px;
+  }
+  .picker-options {
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    max-height: 230px; overflow-y: auto;
+    margin-top: 6px;
+  }
+  .picker-options .opt {
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .picker-options .opt:last-child { border-bottom: none; }
+  .picker-options .opt:hover { background: #f9fafb; }
+  .picker-options .opt.selected { background: #fff5f7; border-left: 3px solid var(--tc-red); }
+  .picker-options .opt .name { font-weight: 700; color: var(--text); }
+  .picker-options .opt .handle { font-size: 11px; color: var(--text-muted); }
+  .picker-options .opt.none { font-style: italic; color: var(--text-muted); }
+
+  /* Big "None" quick-path button */
+  .none-quick {
+    width: 100%;
+    background: var(--surface);
+    border: 1.5px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px; font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+    margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: all 0.15s;
+  }
+  .none-quick:hover { border-color: var(--text); }
+  .none-quick:active { transform: scale(0.99); }
+  .none-quick .arrow { color: var(--text-muted); font-size: 18px; }
+  .or-divider {
+    display: flex; align-items: center;
+    color: var(--text-muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.14em;
+    margin: 0 0 12px;
+  }
+  .or-divider::before, .or-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--line);
+  }
+  .or-divider span { padding: 0 12px; }
+
+  /* No-spam reassurance pill */
+  .no-spam {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #ecfdf5; color: #047857;
+    border: 1px solid #a7f3d0;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 0.04em;
+    margin-bottom: 10px;
+  }
+
+  /* Reward preview — shown above CTA in step 2 so user knows what they unlock */
+  .reward-preview {
+    margin: 4px 24px 4px;
+    background: var(--gold-bg);
+    border: 1.5px solid var(--gold);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 12.5px;
+    color: #92400e;
+    line-height: 1.45;
+  }
+  .reward-preview .reward-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .reward-preview strong { color: #78350f; }
+  .reward-preview .reward-sub { display: block; margin-top: 2px; opacity: 0.85; }
+
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--text-muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+  .field input { width: 100%; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--text); font-family: inherit; }
+  .field input:focus { outline: none; border-color: var(--tc-red); box-shadow: 0 0 0 4px rgba(200,16,46,0.12); }
+
+  .checkin-cta {
+    width: calc(100% - 48px);
+    margin: 18px 24px 0;
+    background: linear-gradient(135deg, var(--tc-red) 0%, var(--pink) 100%);
+    color: #fff;
+    font-size: 16px; font-weight: 800;
+    border: none; border-radius: 14px;
+    padding: 16px;
+    cursor: pointer;
+    box-shadow: 0 12px 28px rgba(200,16,46,0.3);
+    letter-spacing: 0.04em;
+  }
+
+  .reward-banner { margin: 18px 24px 0; background: var(--gold-bg); border: 1.5px solid var(--gold); border-radius: 12px; padding: 14px; text-align: center; }
+  .reward-banner .reward-num { font-size: 28px; font-weight: 900; color: var(--gold); margin-bottom: 2px; }
+  .reward-banner .reward-label { font-size: 12px; color: #92400e; font-weight: 700; }
+  .reward-banner .reward-sub { font-size: 11px; color: var(--text-soft); margin-top: 6px; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ── Address popup modal ─────────────────────────── */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 200;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 18px;
+    max-width: 380px; width: 100%;
+    padding: 26px 24px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    position: relative;
+    animation: modalIn 0.25s ease-out;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .modal-close {
+    position: absolute; top: 12px; right: 14px;
+    background: transparent; border: none;
+    font-size: 22px; color: var(--text-muted);
+    cursor: pointer; line-height: 1;
+  }
+  .modal .eyebrow {
+    font-size: 10px; font-weight: 800;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--tc-red); margin-bottom: 8px;
+  }
+  .modal h3 {
+    margin: 0 0 6px; font-size: 22px; font-weight: 900;
+    letter-spacing: -0.01em;
+  }
+  .modal .addr-line {
+    font-size: 16px; color: var(--text-soft); line-height: 1.5;
+    margin: 0 0 18px;
+  }
+  .modal .addr-line strong { color: var(--text); }
+  .modal .map-btns {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .modal .map-btn {
+    background: var(--tc-red); color: #fff;
+    text-decoration: none; text-align: center;
+    padding: 12px 10px; border-radius: 10px;
+    font-size: 13px; font-weight: 800;
+  }
+  .modal .map-btn.alt { background: #f3f4f6; color: var(--text); }
+  .modal .hours-note {
+    margin-top: 16px; padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--text-muted); text-align: center;
+  }
+  .modal .hours-note strong { color: var(--tc-red); }
+</style>
+</head>
+<body>
+
+<div class="mockup-bar">
+  <strong>EVENT DAY MOCKUP</strong>
+  <div class="group">
+    <span class="label">View</span>
+    <button id="btn-home" class="active">Home Takeover</button>
+    <button id="btn-door">Door QR Check-In</button>
+  </div>
+  <div class="group">
+    <span class="label">Device</span>
+    <button id="btn-mobile" class="active">Mobile</button>
+    <button id="btn-desktop">Desktop</button>
+  </div>
+  <span style="margin-left:auto;color:#666">Light · #C8102E</span>
+</div>
+
+<!-- ─── VIEW A: HOME TAKEOVER (full home shell + event-day overlay) ─ -->
+<div class="device mobile view active" id="view-home">
+
+  <header class="site-header">
+    <div class="brand">
+      <div class="logo"></div>
+      <div class="name">Trainer Center HB</div>
+    </div>
+    <nav>
+      <a href="#" class="active">Home</a>
+      <a href="#">Vendors</a>
+      <a href="#">Events</a>
+      <a href="#">About</a>
+      <a href="#">Member</a>
+    </nav>
+    <div class="right">
+      <a href="https://www.instagram.com/trainercenter.pokemon/" class="ig-btn">IG</a>
+      <div class="menu-btn"><span></span><span></span><span></span></div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="hero-left">
+      <div class="pill-live"><span class="dot"></span> LIVE NOW · Fri May 29</div>
+      <h1>
+        <span class="stack">BEACH CITY</span>
+        <span class="stack">TRADE NIGHT</span>
+      </h1>
+      <div class="hero-meta">
+        <strong>12 - 10 PM tonight</strong> · 4911 Warner Ave #210, HB<br>
+        Free for guests. Vintage, modern, slabs &amp; sealed.
+      </div>
+      <div class="hero-cta-row">
+        <a href="#" class="btn-primary" data-open-address>Come down now →</a>
+        <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener" class="btn-secondary">More info on IG</a>
+      </div>
+    </div>
+
+    <div class="hero-right">
+      <div class="head">Happening right now</div>
+      <h3>Beach City Trade Night.</h3>
+      <p><strong>Open until 10 PM tonight.</strong> 32 vendors. Free for guests. Vintage, modern, slabs &amp; sealed all under one roof.</p>
+      <a href="#" class="btn-primary" data-open-address style="width:100%;justify-content:center;margin-bottom:8px">Come down now →</a>
+      <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener" style="display:block;text-align:center;font-size:13px;font-weight:700;color:var(--tc-red);text-decoration:none;margin-bottom:10px">More info on IG →</a>
+      <div class="addr">
+        <strong>4911 Warner Ave #210</strong>
+        Huntington Beach, CA
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Tonight's vendors · 32 confirmed</h2>
+  </div>
+
+  <div class="vendor-grid" id="vendor-grid-home"></div>
+
+  <div class="info-block">
+    <div class="info-col">
+      <h4>Where</h4>
+      <div class="v">
+        <strong>Trainer Center HB</strong>
+        4911 Warner Ave #210<br>
+        Huntington Beach, CA<br>
+        <a href="#">Get directions →</a>
+      </div>
+    </div>
+    <div class="info-col">
+      <h4>Tonight's hours</h4>
+      <div class="v">
+        <strong>12 - 10 PM</strong><br>
+        Free for guests<br>
+        Doors close at 10 sharp
+      </div>
+    </div>
+    <div class="info-col">
+      <h4>Find more info</h4>
+      <div class="v">
+        Live updates, vendor highlights, photos:<br>
+        <a href="https://www.instagram.com/trainercenter.pokemon/"><strong>@trainercenter.pokemon</strong></a><br><br>
+        <a href="#">Become a member</a><br>
+        <a href="#">Vendor application</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div>© 2026 Trainer Center HB</div>
+    <div><a href="#">Privacy</a> · <a href="#">Terms</a> · <a href="#">Contact</a></div>
+  </footer>
+</div>
+
+<!-- ─── Address popup modal ─────────────────────────────────────── -->
+<div class="modal-backdrop" id="addr-modal">
+  <div class="modal">
+    <button class="modal-close" id="addr-close">×</button>
+    <div class="eyebrow">We're open right now</div>
+    <h3>Come on down.</h3>
+    <p class="addr-line">
+      <strong>4911 Warner Ave #210</strong><br>
+      Huntington Beach, CA 92647
+    </p>
+    <div class="map-btns">
+      <a href="https://maps.apple.com/?q=4911+Warner+Ave+%23210,+Huntington+Beach,+CA+92647" target="_blank" rel="noopener" class="map-btn">Apple Maps</a>
+      <a href="https://www.google.com/maps/dir/?api=1&destination=4911+Warner+Ave+%23210,+Huntington+Beach,+CA+92647" target="_blank" rel="noopener" class="map-btn alt">Google Maps</a>
+    </div>
+    <div class="hours-note">Open until <strong>10 PM</strong> tonight · Free for guests</div>
+  </div>
+</div>
+
+<!-- ─── VIEW B: DOOR QR CHECK-IN (3-step cascade) ─────────────── -->
+<div class="device mobile view" id="view-door">
+  <div class="checkin">
+    <div class="checkin-header">
+      <div class="welcome">Welcome in</div>
+      <h1>You're at Trade Night.</h1>
+      <p id="header-sub">Tap the vendor who invited you. That's it for now.</p>
+    </div>
+
+    <!-- STEP 1 — single ask: who invited you -->
+    <div class="door-step active" id="door-s1">
+      <div class="step-block" style="padding-top:24px">
+        <button class="none-quick" id="none-quick">
+          <span>No vendor invited me — I'm just walking in</span>
+          <span class="arrow">→</span>
+        </button>
+        <div class="or-divider"><span>or — find your vendor</span></div>
+        <div class="picker">
+          <span class="icon">🔎</span>
+          <input class="picker-input" id="picker-input" placeholder="Search vendor name or handle...">
+        </div>
+        <div class="picker-options" id="picker-options"></div>
+        <div class="step-sub" style="margin: 12px 0 0 0">
+          Picking your inviter <strong>boosts their guest count</strong>. Vendor with the most invites wins incentives.
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 — purpose-framed: "select your favorites" leads to login -->
+    <div class="door-step" id="door-s2">
+      <div class="pick-chip" id="pick-chip">✓ Picked</div>
+      <div class="step-block">
+        <div class="step-head" style="margin:6pt 0 6pt">Select your favorites tonight.</div>
+        <div class="step-sub" style="margin:0 0 14px 0">
+          Three vendors. You'll award them points toward <strong>Favorite Vendor of the Night</strong>. Quick account first so your picks save to your name and you can come back to change them any time before 10 PM.
+        </div>
+        <div class="no-spam">🔒 No spam, ever. Promise.</div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" placeholder="you@email.com" id="signup-email">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" placeholder="••••••••" id="signup-pass">
+        </div>
+      </div>
+      <button class="checkin-cta" id="cta-create">Unlock my 3 votes →</button>
+      <p class="saved-note">Returning? <a href="#" style="color:var(--tc-red);font-weight:700">Sign in instead</a></p>
+    </div>
+
+    <!-- STEP 3 — voting screen, persisted -->
+    <div class="door-step" id="door-s3">
+      <div class="member-chip">★ You're in · saved to your account</div>
+      <div class="step-block">
+        <div class="step-head" style="margin:6pt 0 6pt">Award your 3 points.</div>
+        <div class="step-sub" style="margin:0 0 14px 0">
+          Tap up to 3 vendors. Tap again to remove. Each tap = 1 point toward their <strong>Favorite Vendor of the Night</strong> total. <strong>Your picks save automatically</strong> — come back any time tonight to change them. <strong style="color:var(--tc-red)">Locks at 10 PM.</strong>
+        </div>
+      </div>
+      <div class="vote-grid" id="vote-grid"></div>
+
+      <div class="vote-bar" style="margin-top:0;border-radius:0">
+        <div class="count"><span class="num" id="vote-num">0</span> / 3 chosen</div>
+        <div class="lock">Saves as you go · Locks at <strong>10 PM</strong></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // View toggle
+  const btnHome = document.getElementById('btn-home');
+  const btnDoor = document.getElementById('btn-door');
+  const viewHome = document.getElementById('view-home');
+  const viewDoor = document.getElementById('view-door');
+  btnHome.addEventListener('click', () => {
+    btnHome.classList.add('active'); btnDoor.classList.remove('active');
+    viewHome.classList.add('active'); viewDoor.classList.remove('active');
+    applyDevice();
+  });
+  btnDoor.addEventListener('click', () => {
+    btnDoor.classList.add('active'); btnHome.classList.remove('active');
+    viewDoor.classList.add('active'); viewHome.classList.remove('active');
+    btnMobile.click();
+  });
+
+  // Device toggle
+  const btnMobile = document.getElementById('btn-mobile');
+  const btnDesktop = document.getElementById('btn-desktop');
+  function applyDevice() {
+    const mode = btnDesktop.classList.contains('active') ? 'desktop' : 'mobile';
+    document.querySelectorAll('.device').forEach(d => {
+      d.classList.remove('mobile', 'desktop'); d.classList.add(mode);
+    });
+  }
+  btnMobile.addEventListener('click', () => {
+    btnMobile.classList.add('active'); btnDesktop.classList.remove('active');
+    applyDevice();
+  });
+  btnDesktop.addEventListener('click', () => {
+    if (!viewHome.classList.contains('active')) return;
+    btnDesktop.classList.add('active'); btnMobile.classList.remove('active');
+    applyDevice();
+  });
+
+  // Vendor grid (display-only on home — voting requires check-in)
+  const vendors = [
+    { name: 'Pikachu Pulls', handle: '@pikapulls' },
+    { name: 'Mint 9 Slabs', handle: '@mint9slabs' },
+    { name: 'Trade Wizard', handle: '@tradewizard' },
+    { name: "Drew's Draws", handle: '@drewdraws' },
+    { name: 'Vintage Vault', handle: '@vintagevault' },
+    { name: 'Sealed Squad', handle: '@sealedsquad' },
+    { name: 'Holo Heroes', handle: '@holoheroes' },
+    { name: 'Bulk Bros', handle: '@bulkbros' },
+    { name: "Sora's Singles", handle: '@sorassingles' },
+    { name: 'Card Cave', handle: '@cardcave' },
+    { name: 'TCG Tides', handle: '@tcgtides' },
+    { name: 'Pull Rate', handle: '@pullrate' },
+  ];
+  const grid = document.getElementById('vendor-grid-home');
+  grid.innerHTML = vendors.map(v => `
+    <div class="vendor-card">
+      <div class="v-name">${v.name}</div>
+      <div class="v-handle">${v.handle}</div>
+    </div>
+  `).join('');
+
+  // ── Cascade wizard for door view ──
+  function showStep(n) {
+    document.querySelectorAll('.door-step').forEach(s => s.classList.remove('active'));
+    document.getElementById('door-s' + n).classList.add('active');
+    const subs = {
+      1: "Tap the vendor who invited you. That's it for now.",
+      2: "Select your favorites tonight. Quick account so your picks save.",
+      3: "You're in. Award your 3 points any time before 10 PM."
+    };
+    document.getElementById('header-sub').textContent = subs[n];
+  }
+
+  // Searchable picker (step 1)
+  const pickerInput = document.getElementById('picker-input');
+  const pickerOptions = document.getElementById('picker-options');
+  const pickChip = document.getElementById('pick-chip');
+  let pickedKey = null;
+
+  function renderPickerOptions(filter='') {
+    const f = filter.toLowerCase().trim();
+    const filtered = vendors.filter(v =>
+      v.name.toLowerCase().includes(f) || v.handle.toLowerCase().includes(f)
+    );
+    pickerOptions.innerHTML = filtered.map(v => `
+      <div class="opt ${pickedKey === v.handle ? 'selected' : ''}" data-key="${v.handle}">
+        <span class="name">${v.name}</span>
+        <span class="handle">${v.handle}</span>
+      </div>
+    `).join('');
+
+    pickerOptions.querySelectorAll('.opt').forEach(o => {
+      o.addEventListener('click', () => {
+        pickedKey = o.dataset.key;
+        const vendor = vendors.find(v => v.handle === pickedKey);
+        pickerInput.value = vendor.name + ' · ' + vendor.handle;
+        pickChip.innerHTML = '✓ Invited by <strong style="margin-left:4px">' + vendor.name + '</strong>';
+        renderPickerOptions(pickerInput.value);
+        // Cascade — auto-advance after a short beat so it feels natural
+        setTimeout(() => showStep(2), 400);
+      });
+    });
+  }
+  pickerInput.addEventListener('input', (e) => renderPickerOptions(e.target.value));
+  pickerInput.addEventListener('focus', () => renderPickerOptions(pickerInput.value));
+  renderPickerOptions();
+
+  // Quick "None" path — same advance, different chip label
+  document.getElementById('none-quick').addEventListener('click', () => {
+    pickedKey = '__none__';
+    pickChip.innerHTML = '✓ Walked in on my own';
+    setTimeout(() => showStep(2), 250);
+  });
+
+  // Step 2 → Step 3 (account create → voting)
+  document.getElementById('cta-create').addEventListener('click', () => {
+    // (real impl: create supabase account, persist invited_by, redirect to /vote)
+    showStep(3);
+  });
+
+  // ── Step 3: voting grid + sticky bar ──
+  const voteGrid = document.getElementById('vote-grid');
+  const voteNum = document.getElementById('vote-num');
+  const doorVoted = new Set();
+
+  function renderVoteGrid() {
+    voteGrid.innerHTML = '';
+    vendors.forEach((v, i) => {
+      const isVoted = doorVoted.has(i);
+      const card = document.createElement('div');
+      card.className = 'vendor-card' + (isVoted ? ' voted' : '');
+      card.innerHTML = `
+        <div class="v-badge">${isVoted ? '★' : ''}</div>
+        <div class="v-name">${v.name}</div>
+        <div class="v-handle">${v.handle}</div>
+      `;
+      card.addEventListener('click', () => {
+        if (doorVoted.has(i)) doorVoted.delete(i);
+        else if (doorVoted.size < 3) doorVoted.add(i);
+        renderVoteGrid();
+        voteNum.textContent = doorVoted.size;
+      });
+      voteGrid.appendChild(card);
+    });
+  }
+  renderVoteGrid();
+
+  // ── Address modal ──
+  const addrModal = document.getElementById('addr-modal');
+  document.querySelectorAll('[data-open-address]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      addrModal.classList.add('show');
+    });
+  });
+  document.getElementById('addr-close').addEventListener('click', () => {
+    addrModal.classList.remove('show');
+  });
+  addrModal.addEventListener('click', (e) => {
+    if (e.target === addrModal) addrModal.classList.remove('show');
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trainer Center HB — Vendor Card</title>
+<style>
+  @page {
+    size: letter;
+    margin: 0.7in 0.8in;
+    @bottom-right {
+      content: "pokemontrainercenter.com";
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+    @bottom-left {
+      content: "Trainer Center HB · Vendor Card";
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+    margin: 0; padding: 0;
+  }
+
+  /* ─── Cover band ─────────────────────────────────── */
+  .cover {
+    padding: 8pt 0 16pt;
+    margin-bottom: 16pt;
+    border-left: 6pt solid #16a34a;
+    padding-left: 18pt;
+  }
+  .cover .eyebrow {
+    font-size: 8.5pt;
+    letter-spacing: 0.22em;
+    color: #16a34a;
+    text-transform: uppercase;
+    font-weight: 800;
+    margin: 0 0 6pt;
+  }
+  .cover h1 {
+    margin: 0;
+    font-size: 22pt;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    color: #1a1a1a;
+  }
+  .cover .tagline {
+    margin: 8pt 0 0;
+    font-size: 11pt;
+    color: #555;
+    line-height: 1.45;
+  }
+
+  /* ─── Phase headings (large green section markers) ─ */
+  h2 {
+    font-size: 13pt;
+    font-weight: 800;
+    margin: 22pt 0 8pt;
+    padding: 0 0 4pt;
+    border-bottom: 2pt solid #16a34a;
+    color: #15803d;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  h2:first-of-type { margin-top: 6pt; }
+
+  h3 {
+    font-size: 11pt;
+    font-weight: 800;
+    margin: 12pt 0 4pt;
+    color: #1a1a1a;
+  }
+
+  /* ─── Body ───────────────────────────────────────── */
+  p { margin: 0 0 8pt; }
+  ul, ol { margin: 4pt 0 10pt 0; padding-left: 18pt; }
+  li { margin-bottom: 4pt; }
+  strong { color: #1a1a1a; }
+
+  /* ─── QR row (placeholder slots) ─────────────────── */
+  .qr-row {
+    display: flex;
+    gap: 10pt;
+    margin: 8pt 0 12pt;
+  }
+  .qr-cell {
+    flex: 1;
+    background: #f0fdf4;
+    border: 1pt solid #bbf7d0;
+    border-top: 4pt solid #16a34a;
+    padding: 10pt;
+    border-radius: 4pt;
+    text-align: center;
+    page-break-inside: avoid;
+  }
+  .qr-cell .qr-label {
+    font-size: 9pt;
+    font-weight: 800;
+    color: #15803d;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4pt;
+  }
+  .qr-cell .qr-handle {
+    font-size: 9.5pt;
+    color: #1a1a1a;
+  }
+  .qr-cell .qr-box {
+    width: 56pt;
+    height: 56pt;
+    margin: 6pt auto 4pt;
+    border: 1pt dashed #16a34a;
+    background: #fff;
+    font-size: 8pt;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .qr-cell .qr-img {
+    width: 90pt;
+    height: 90pt;
+    margin: 6pt auto 4pt;
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  /* ─── Callouts ───────────────────────────────────── */
+  .callout {
+    background: #f0fdf4;
+    border-left: 4pt solid #16a34a;
+    padding: 10pt 14pt;
+    margin: 8pt 0;
+    border-radius: 0 4pt 4pt 0;
+    page-break-inside: avoid;
+  }
+  .callout strong { color: #15803d; }
+
+  .why {
+    background: #fff;
+    color: #1a1a1a;
+    padding: 14pt 18pt 12pt;
+    border: 2pt solid #1a1a1a;
+    border-radius: 4pt;
+    margin: 6pt 0 22pt;
+    page-break-inside: avoid;
+  }
+  .why .why-title {
+    display: block;
+    font-size: 10pt;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #1a1a1a;
+    margin-bottom: 8pt;
+  }
+  .why p { margin: 0 0 6pt; }
+  .why ul { margin: 6pt 0; }
+  .why strong { color: #15803d; }
+
+  /* ─── Avoid bad page breaks ──────────────────────── */
+  h2, h3 { page-break-after: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <p class="eyebrow">Trainer Center HB · Vendor Education</p>
+  <h1>Helpful tips &amp; information.</h1>
+  <p class="tagline">A short guide for vendors. Same math whether you apply it here, to your own shop, or to your online brand. Three phases of the night plus the digital fundamentals behind event success.</p>
+</div>
+
+<div class="why">
+  <span class="why-title">How the machine works — and why we share this with you</span>
+  <p>Local shops live or die on the same digital signals. Here's the breakdown:</p>
+  <ul>
+    <li><strong>Google + Yelp activity</strong> drives the most <strong>local website traffic.</strong> When anyone searches "card shows near me," "Pokemon Huntington Beach," or similar, those platforms feed search results.</li>
+    <li><strong>Instagram followers, tags, and posts</strong> build <strong>IG presence.</strong> That's how locals discover events are happening and which vendors are showing up.</li>
+    <li>More local traffic + more IG presence = more guests at events = more buyers in front of you.</li>
+  </ul>
+  <p>This isn't a solicitation — it's how the system works for any small business in our space. Apply it here, apply it to your own store, apply it to your personal brand. Same math.</p>
+  <p><strong>Anything we can do to help you understand or improve any of this, let us know.</strong></p>
+</div>
+
+<h3>Our channels — follow, share, or scan if you'd like</h3>
+<div class="qr-row">
+  <div class="qr-cell">
+    <div class="qr-label">Instagram</div>
+    <img class="qr-img" src="qr/vendor-card-ig.png" alt="Instagram QR">
+    <div class="qr-handle">@trainercenter.pokemon</div>
+  </div>
+  <div class="qr-cell">
+    <div class="qr-label">Google</div>
+    <img class="qr-img" src="qr/vendor-card-google.png" alt="Google review QR">
+    <div class="qr-handle">Our Google</div>
+  </div>
+  <div class="qr-cell">
+    <div class="qr-label">Yelp</div>
+    <img class="qr-img" src="qr/vendor-card-yelp.png" alt="Yelp review QR">
+    <div class="qr-handle">Our Yelp</div>
+  </div>
+</div>
+<p>These are also a working example of how a small local shop shows up online in 2026. Useful reference if you're building or refining your own presence.</p>
+
+<h2 style="page-break-before:always">On Arrival (now)</h2>
+
+<h3>Friendly reminders (first-timers especially)</h3>
+<ul>
+  <li><strong>Payment QR</strong> (Venmo, Cash App, Zelle). <strong>Confirm funds received before handing over the card.</strong></li>
+  <li><strong>Your IG / website QR</strong> for guests to follow you after.</li>
+  <li><strong>Tonight is for selling and trading, not showcasing your PC.</strong> Keep buy/tradeable inventory front and center.</li>
+  <li><strong>Always start the conversation.</strong> Guests look like they're searching even when they're not. That's your cue.</li>
+  <li><strong>Last-minute printing?</strong> Flag staff early. We'll help if we have hands.</li>
+</ul>
+
+<h3>You're already checked in</h3>
+<p>We clicked you in at the door. Find us when you leave (any time) so we can check you out. Over time this builds a real picture of how long you stay at our events.</p>
+
+<h3>Track your own numbers (for you)</h3>
+<div class="callout">
+  <strong>We don't see your start or end numbers.</strong> Jot down (just for yourself) roughly how much cash and inventory you have now. Do the same at end of night. The difference is your <strong>net</strong>. In the post-event review later, the net is the only number we ask for, and even that is optional.
+</div>
+
+<h3>How guests work tonight (worth playing for)</h3>
+<ul>
+  <li>Guests pick the vendor who invited them at check-in.</li>
+  <li>Guests vote favorite vendor at end of night.</li>
+  <li><strong>Most invites = product / incentives.</strong></li>
+  <li><strong>Favorite vendor of the night = product / incentives.</strong></li>
+</ul>
+
+<div class="callout">
+  <strong>Send our pinned post as a DM — one tap.</strong> We have a pinned post on <strong>@trainercenter.pokemon</strong> for tonight. DM it to your collectors and friends. No writing needed. IG cares heavily about real DMs — it's the strongest engagement signal there is.
+</div>
+
+<h2 style="page-break-before:always">While You Vend</h2>
+
+<h3>Photos and posts — timing matters</h3>
+<p>Take photos and videos throughout. You can post live or save them and post later — both are fine. But posting <strong>live, in real time</strong> while you're here is a multiplier. IG's search shows your tagged post to people scrolling for "weekend shows in HB" <em>right now</em>. Real-time posts pull real-time eyes.</p>
+
+<div class="callout">
+  <strong>Aim for 3 timed posts during the night:</strong>
+  <ul style="margin-bottom:0">
+    <li><strong>Early</strong> — setup, your table, the energy starting</li>
+    <li><strong>Mid-event</strong> — a trade, a pull, the room buzzing</li>
+    <li><strong>Toward closing</strong> — the wrap, the highlight, the win of the night</li>
+  </ul>
+  Save the rest for later if you want — but those three timed in-the-moment posts are where the lift is.
+</div>
+
+<h3>Tag us every time — we'll amplify</h3>
+<ul>
+  <li><strong>Tag @trainercenter.pokemon on every post.</strong></li>
+  <li>When we see your tag, <strong>we repost it to our story</strong> (no cap on stories). That builds hype for the whole room and pulls your post into our audience.</li>
+  <li><strong>We prefer no money in the shots.</strong> Cleaner shots = we repost without hesitation = more eyes on you.</li>
+  <li><strong>If you want any of your content featured on our website,</strong> those shots <strong>cannot have money in them.</strong> So always grab a few clean takes during the night — even if most of your posts have money, keep some money-free ones tucked away. You'll submit your favorites in the post-event review (next section).</li>
+</ul>
+
+<h3>Other stuff during</h3>
+<ul>
+  <li>Anything weird (sketchy people, problem vendors, anything off) → come straight to staff. Don't handle it yourself.</li>
+  <li>Be genuine. Bring energy. Don't be fake.</li>
+</ul>
+
+<h2 style="page-break-before:always">Wrap-Up + After</h2>
+
+<h3>Before you leave: check out</h3>
+<p>Find us. We mark your time. Any time, any reason.</p>
+
+<h3>Post-event review (we're asking you to do this)</h3>
+<p>Log in at <strong>pokemontrainercenter.com/vendor</strong> tonight or this weekend and complete the review. Real five minutes. Email reminder hits if you skip, but we'd rather you do it while it's fresh.</p>
+
+<div class="callout">
+  <strong>What goes in the review:</strong>
+  <ul style="margin-bottom:0">
+    <li>Overall experience tonight</li>
+    <li>Helpful comments / feedback</li>
+    <li>Anything we should know about other vendors (great, bad, sketchy — tell us)</li>
+    <li><strong>Net (optional) — your best estimate of how much you grew or profited tonight.</strong> One number, not start/end. Only for you to see over time.</li>
+    <li><strong>Up to 3 IG photos/videos and links from tonight</strong> — these go on our website, so <strong>no money in these specific shots, period.</strong> Pick your cleanest ones.</li>
+  </ul>
+</div>
+
+<h3>The long game</h3>
+<p>We're building a high-quality vendor lineup over time. We see who shows up, who stays, how guests respond to you, and how you treat the room. That's how the lineup gets built.</p>
+
+<p><strong>No pressure tonight. Just bring your A.</strong></p>
+
+</body>
+</html>

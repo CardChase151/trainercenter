@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trainer Center HB — Social Media Playbook</title>
+<style>
+  @page {
+    size: letter;
+    margin: 0.7in 0.8in;
+    @bottom-right {
+      content: counter(page) " / " counter(pages);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+    @bottom-left {
+      content: "Trainer Center HB · Social Media Playbook";
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+    margin: 0; padding: 0;
+  }
+
+  /* ─── Cover band ─────────────────────────────────── */
+  .cover {
+    padding: 8pt 0 18pt;
+    margin-bottom: 18pt;
+    border-left: 6pt solid #C8102E;
+    padding-left: 18pt;
+  }
+  .cover .eyebrow {
+    font-size: 8.5pt;
+    letter-spacing: 0.22em;
+    color: #C8102E;
+    text-transform: uppercase;
+    font-weight: 800;
+    margin: 0 0 6pt;
+  }
+  .cover h1 {
+    margin: 0;
+    font-size: 22pt;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    color: #1a1a1a;
+  }
+  .cover .tagline {
+    margin: 8pt 0 0;
+    font-size: 11pt;
+    color: #555;
+    line-height: 1.45;
+  }
+
+  /* ─── Headings ───────────────────────────────────── */
+  h2 {
+    font-size: 14pt;
+    font-weight: 800;
+    margin: 22pt 0 8pt;
+    padding: 0 0 4pt;
+    border-bottom: 2pt solid #C8102E;
+    color: #1a1a1a;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  h2:first-of-type { margin-top: 6pt; }
+  h3 {
+    font-size: 11.5pt;
+    font-weight: 800;
+    margin: 14pt 0 6pt;
+    color: #1a1a1a;
+  }
+
+  /* ─── Body ───────────────────────────────────────── */
+  p { margin: 0 0 8pt; }
+  ul, ol { margin: 4pt 0 10pt 0; padding-left: 18pt; }
+  li { margin-bottom: 4pt; }
+  strong { color: #1a1a1a; }
+  hr { display: none; }
+
+  /* ─── Pull-quote / core idea ─────────────────────── */
+  .pullquote {
+    background: #fff5f7;
+    border-left: 4pt solid #C8102E;
+    padding: 12pt 16pt;
+    margin: 0 0 12pt;
+    font-size: 12pt;
+    font-weight: 700;
+    color: #1a1a1a;
+    line-height: 1.4;
+  }
+
+  /* ─── Goals card grid ────────────────────────────── */
+  .goals {
+    display: flex;
+    gap: 12pt;
+    margin: 10pt 0 0;
+  }
+  .goal-card {
+    flex: 1;
+    background: #fafafa;
+    border: 1pt solid #e5e7eb;
+    border-top: 4pt solid #C8102E;
+    padding: 12pt 14pt;
+    border-radius: 4pt;
+  }
+  .goal-card h4 {
+    margin: 0 0 8pt;
+    font-size: 11pt;
+    font-weight: 800;
+    color: #C8102E;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .goal-card .metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1pt dashed #e5e7eb;
+    padding: 5pt 0;
+    font-size: 10pt;
+  }
+  .goal-card .metric:last-child { border-bottom: none; }
+  .goal-card .metric .label { color: #555; }
+  .goal-card .metric .target { font-weight: 800; color: #1a1a1a; }
+  .goal-card .metric .from { color: #999; font-size: 9pt; margin-right: 4pt; }
+
+  /* ─── Rules / Checklist boxes ────────────────────── */
+  .rule {
+    background: #fafafa;
+    border-left: 3pt solid #C8102E;
+    padding: 8pt 12pt;
+    margin: 0 0 6pt;
+    font-size: 10pt;
+  }
+
+  .step-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 6pt 0 12pt;
+    counter-reset: step;
+  }
+  .step-list > li {
+    position: relative;
+    padding: 4pt 0 4pt 26pt;
+    margin: 0 0 8pt;
+    counter-increment: step;
+  }
+  .step-list > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 4pt;
+    width: 18pt;
+    height: 18pt;
+    background: #C8102E;
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 18pt;
+    font-weight: 800;
+    font-size: 9pt;
+  }
+
+  /* ─── Two-column care/don't-care ─────────────────── */
+  .care-grid {
+    display: flex;
+    gap: 12pt;
+    margin: 8pt 0 0;
+  }
+  .care-col {
+    flex: 1;
+    padding: 12pt 14pt;
+    border-radius: 4pt;
+  }
+  .care-do { background: #f0fdf4; border-left: 4pt solid #16a34a; }
+  .care-dont { background: #fff1f2; border-left: 4pt solid #C8102E; }
+  .care-col h4 {
+    margin: 0 0 8pt;
+    font-size: 10pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .care-do h4 { color: #15803d; }
+  .care-dont h4 { color: #C8102E; }
+  .care-col ul { padding-left: 16pt; margin: 0; }
+  .care-col li { font-size: 10pt; margin-bottom: 4pt; }
+
+  /* ─── Section avoid page breaks mid-step ─────────── */
+  .step-list > li, .goal-card, .pullquote, .rule, .care-col {
+    page-break-inside: avoid;
+  }
+  h2, h3 { page-break-after: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <p class="eyebrow">Internal · Trainer Center HB</p>
+  <h1>Social Media Playbook</h1>
+  <p class="tagline">Daily routine, monthly event push, and event-day activation. Instagram supports the shop, the events, and the relationships. In that order.</p>
+</div>
+
+<h2>The Core Idea</h2>
+<div class="pullquote">
+  Instagram is not how we grow. The shop, events, and real relationships are.
+</div>
+<p>We use Instagram to make sure our big monthly event pushes land well with our existing followers. That's it. We're not chasing non-followers, not gaming the algorithm, not trying to go viral. We just want our pushes to perform when we make them.</p>
+<p>The shop closes deals. Events build the community. Instagram supports both.</p>
+
+<h2>Goals</h2>
+<div class="goals">
+  <div class="goal-card">
+    <h4>May 29 Event</h4>
+    <div class="metric"><span class="label">Pinned post views</span><span class="target"><span class="from">1,400 →</span>100,000</span></div>
+    <div class="metric"><span class="label">Followers</span><span class="target"><span class="from">7,278 →</span>8,500</span></div>
+    <div class="metric"><span class="label">Vendor applications</span><span class="target"><span class="from">18 →</span>30</span></div>
+    <div class="metric"><span class="label">Confirmed vendors</span><span class="target"><span class="from">31 →</span>100</span></div>
+  </div>
+  <div class="goal-card">
+    <h4>June 26 Event</h4>
+    <div class="metric"><span class="label">Pinned post views</span><span class="target">150,000</span></div>
+    <div class="metric"><span class="label">Followers</span><span class="target">10,000</span></div>
+    <div class="metric"><span class="label">Vendor applications</span><span class="target">50</span></div>
+    <div class="metric"><span class="label">Confirmed vendors</span><span class="target">200</span></div>
+  </div>
+</div>
+
+<h2>Rules of the Road</h2>
+<p>Operational guardrails. Non-negotiable.</p>
+<div class="rule"><strong>2-hour reply rule</strong> during open hours. Replying fast isn't a hack. It's how we build real relationships. When we engage authentically with our community, Instagram's algorithm picks that up as a signal of a real, active business with real customer relationships. We play the algorithm game with relationships, not half-assed posting.</div>
+<div class="rule"><strong>No identical DM blasts.</strong> Two or three message variants minimum. IG flags copy-paste as spam and starts hiding our messages.</div>
+<div class="rule"><strong>Tag-back rule (story).</strong> Repost every tag of @trainercenter.pokemon to our story by end of day. No cap. Stories disappear in 24 hours and don't count toward the aggregator threshold. If 8 vendors tag us during event day, repost all 8. That's exactly what stories are for.</div>
+<div class="rule"><strong>Tag-back rule (feed).</strong> Be selective. A particularly great photo (a customer pull, a vendor table that looks incredible, a real community moment) is worth reposting to the feed. Not every tag is. Cap is roughly <strong>1 to 2 feed reposts per month</strong>.</div>
+<div class="rule"><strong>No cash photos.</strong> Looks tacky, off-brand, and attracts the wrong attention.</div>
+<div class="rule"><strong>Reply to story replies in DMs.</strong> Stronger relationship signal than reacting in the story.</div>
+
+<h3>Minimum baseline (when nothing big is happening)</h3>
+<p>Just enough activity so the account isn't cold when we push.</p>
+<ul>
+  <li>2 to 3 stories per week</li>
+  <li>1 feed post or Reel per week</li>
+  <li>Reply to DMs and comments as they come in</li>
+</ul>
+<p>More is fine when there's something worth posting. Forced content is worse than no content.</p>
+
+<h2>Daily Routine (staff)</h2>
+<p>Run through this list every shift.</p>
+
+<ol class="step-list">
+  <li>
+    <strong>Confirm this week's main post.</strong><br>
+    Our baseline is <strong>1 quality post per week and 2 to 3 stories per week, not daily.</strong>
+    <ul>
+      <li><strong>The weekly main post must be confirmed by Chef or Chase for quality before it goes up.</strong> Don't post the main one on your own. If the weekly post hasn't gone up yet, surface it to Chef/Chase and prioritize getting it greenlit.</li>
+      <li><strong>Stories are looser.</strong> Staff has creative and initiative freedom on stories. Show vendor tables, pulls, behind-the-scenes, repost tags. No approval needed.</li>
+    </ul>
+    Don't post the main feed post just to post. A skipped day is invisible. A bad forced post is permanent and trains the algorithm against us.
+  </li>
+  <li>
+    <strong>Respond to everyone.</strong><br>
+    Reply to every DM, comment, and tag during open hours. Target: within 2 hours.
+    If you can't answer right away, still reply: "Let me check, I'll get back to you today" so they're not left waiting.
+    <ul>
+      <li><strong>Tag leads and business inquiries in the CRM.</strong> Use the <strong>Lead</strong> tag for anything like "can you price my cards?" or "are you interested in buying this?" or anything that smells like a sale. Chef can prioritize tagged leads. We don't lose deals in the DM stream.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Process vendor applications.</strong><br>
+    Log in and check for new vendor applications. The approval email goes out <strong>automatically</strong>. Your job is the IG follow-up:
+    <ul>
+      <li>Send a quick IG DM: "Hey, you're approved! Check your email and confirm the events you want."</li>
+    </ul>
+    The IG touch is what actually closes the sign-up. Email alone gets ignored.
+  </li>
+  <li>
+    <strong>Google check (new reviews in).</strong><br>
+    Check Google and Yelp for any new reviews (good or bad). Flag any that need a response and pass them to Chef or Chase by end of day so we never leave a Google or Yelp review hanging.
+  </li>
+  <li>
+    <strong>Google reviews (passive ask).</strong><br>
+    Two passive channels do the work:
+    <ul>
+      <li>QR sign at the counter. When closing a sale, point to it: "Could you do a quick favor? Scan this. Leaves us a Google review. Takes 10 seconds."</li>
+      <li>QR card in every package. Every sold item goes home with a 4×6 QR card in the bag. The card is the ask. We never miss a buyer.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>End-of-day handoff (60 seconds).</strong><br>
+    Before you leave, send two quick texts:
+    <ul>
+      <li><strong>Text Chef</strong> any pricing IG messages still waiting on a response. Include the user's @ handle so he can jump right in.</li>
+      <li><strong>Text Chase</strong> anything tech-support or website-related (CRM issues, broken pages, login problems).</li>
+    </ul>
+    No one starts the next shift cold or waiting on us.
+  </li>
+</ol>
+
+<h2>One-Time Projects (sequential)</h2>
+<p>These are <strong>not daily routines</strong>. They are finite projects that run in order. Project 1 has to be complete before Project 2 starts.</p>
+
+<h3>Project 1 — Follower Sweep (active now)</h3>
+<p>Comb through all 7,000+ followers once and tag every one in the CRM. This is pure data prep. It does <strong>nothing</strong> for IG metrics directly, but it's the foundation everything else builds on.</p>
+<ul>
+  <li>Tool: <strong>pokemontrainercenter.com/staff</strong></li>
+  <li>Sort and tag followers daily as time permits during shifts.</li>
+  <li>Categories: <strong>Vendor</strong> (if you're confident they are), <strong>Influencer</strong> (if they're a Pokémon influencer), <strong>Member</strong> (everyone else).</li>
+  <li><em>This is not overthinking. If it takes you more than 3 seconds to decide, just mark Member. You'll know who's a Vendor or Influencer from follower count and recent posts. All others are Members.</em></li>
+  <li>No DMs going out during this phase. This is internal categorization only.</li>
+  <li>Project complete when every follower has been reviewed and tagged.</li>
+  <li>Estimated timeline: 4 to 6 weeks at a steady pace.</li>
+</ul>
+
+<h3>Project 2 — Vendor DM Push (only after Project 1 is complete)</h3>
+<p>Once the sweep is done, we have a clean list of identified vendors. Now and only now we DM them.</p>
+<ul>
+  <li>Pace: <strong>20 to 30 DMs per day</strong>, <span style="color:#C8102E;text-decoration:underline;font-weight:700">spread across 6 to 8 hours. Never burst-send. IG will flag the account as spam and hide our outgoing messages.</span></li>
+  <li>To <strong>identified vendors only</strong>. Don't message Members or Influencers, or obvious recent connections we've already been making. You're not a robot. We're just being thorough.</li>
+  <li>Use 2 to 3 message variants minimum. Vary opening lines. Reference something from their profile when possible.</li>
+  <li><strong>Mark each contact as "messaged" in the CRM</strong> as you go so we don't repeat or step on each other.</li>
+  <li>Future events draw from the tagged + messaged vendor list. No re-DMing the same people for routine outreach.</li>
+</ul>
+
+<h2>Monthly Event Push</h2>
+<p>This is the part that actually moves the needle. Everything daily exists so this push lands.</p>
+
+<h3>Two weeks before the event</h3>
+<ul>
+  <li>
+    <strong>Post the main event Reel — Friday morning.</strong>
+    This is the <strong>static info push</strong>, not a creative narrative reel. Save-it-for-later content.
+    <ul>
+      <li><strong>Shows:</strong> event name, date, time, address, what's there (vintage / modern / slabs / sealed), free for guests, vendor CTA.</li>
+      <li><strong>Format:</strong> <strong>8-second looping reel</strong> with a moving themed background. Always between 7 and 10 seconds. Music loops cleanly so it replays seamlessly on IG's autoloop.</li>
+      <li><strong>Designed to be SAVED.</strong> The viewer bookmarks or screenshots it to reference later.</li>
+    </ul>
+  </li>
+  <li>Add the Event Reminder feature so followers get notifications.</li>
+  <li>Tag location: Huntington Beach.</li>
+  <li>
+    <strong>Vendor push.</strong>
+    Ask vendors to like, comment, repost the main push, and personally DM <strong>5 to 10 of their collectors, trading group, or friends</strong> about the upcoming event. (30 vendors × 10 DMs = 300 outbound touches we didn't make ourselves.)
+  </li>
+  <li>
+    <strong>Creative warmup reels.</strong>
+    Through the same window, we share share-worthy content (chef dialog, behind-the-scenes, vendor spotlights). These are the road signs that lead viewers to the main info push.
+    <ul>
+      <li>Hook in the first 3 seconds.</li>
+      <li>15 to 30 seconds.</li>
+      <li>Feels intentional, not generic. Random meme templates don't move our audience.</li>
+      <li>Would someone send this to a friend? If not, rework it before posting.</li>
+      <li>Vendors share these to their own networks during the push window.</li>
+    </ul>
+  </li>
+</ul>
+<div class="rule" style="background:#fff5f7"><strong>Why Friday, not mid-week.</strong> Our two best-performing event Reels (Feb 14 and Mar 14) were both Friday posts. Pokémon TCG collectors plan their weekends on Fridays. When Chef boosts the post, Friday timing also keeps the ad cost efficient. Trust our data over generic posting benchmarks.</div>
+
+<h3>A few days before</h3>
+<ul>
+  <li>Second vendor push, this time with an urgency angle.</li>
+  <li>Stories reinforcing the event (countdown, behind-the-scenes prep).</li>
+</ul>
+
+<h3>Boost timing (for Chef)</h3>
+<p>Staff doesn't run boosts. This is the game plan Chef is running in the background. Knowing it helps you see what's happening when the event push goes live.</p>
+<ul>
+  <li>What we're looking for: <strong>organic momentum first</strong>, then boost the winners. We don't boost day one. We let the post show real engagement first.</li>
+  <li>After 24 to 48 hours, if engagement is strong, the post gets boosted. The boost rides on top of organic traction, not in place of it.</li>
+  <li>Hard end date: the day of the event. No spend after.</li>
+  <li>One strong creative running 7 to 14 days beats fragmented rotations for our local audience.</li>
+  <li><strong>When you see the boost go live, your job is to keep responding fast.</strong> The boost brings traffic. Fast replies on incoming comments and DMs is what makes the boost actually pay off.</li>
+</ul>
+
+<h2>Event Day</h2>
+
+<h3>Morning / setup</h3>
+<ul>
+  <li>Repost the event Reel to story.</li>
+  <li>Day-of reminder post in feed.</li>
+</ul>
+
+<h3>Vendor activation (at check-in)</h3>
+<p>When each vendor checks in, make sure they leave doing these two things. This is the multiplier during the event.</p>
+
+<ol class="step-list">
+  <li><strong>Make your own post.</strong> Phone-shot photo or short video of their table or a trade in progress.</li>
+  <li><strong>Tag @trainercenter.pokemon.</strong> That's how we see it, repost it, and the algorithm spreads it to both audiences.</li>
+</ol>
+
+<h3>Educate every vendor at check-in (30-second briefing)</h3>
+<p>Take half a minute with each vendor to make sure they understand the game. This is what makes them invested instead of passive.</p>
+<ul>
+  <li><strong>Our website ads + our IG boosts work for YOUR benefit.</strong> More guests at the event = more sales for them. We're doing this for them as much as for us.</li>
+  <li><strong>"Who invited you?"</strong> Every vendor picks at check-in. The vendor with the most invites wins product or other incentives. Worth playing for.</li>
+  <li><strong>"Favorite vendor of the night?"</strong> At end of night, vendors vote. Be genuine, not fake. Bring energy and fun. We're tracking who's actually showing up for the community.</li>
+  <li><strong>"Anything weird, come to staff."</strong> Suspicious activity, problem people, bad vendor behavior, anything off. Don't try to handle it yourself.</li>
+  <li><strong>"You'll get to review the event over the weekend."</strong> Feedback form lives on the site. Encourage them to use it. Real input shapes the next event.</li>
+</ul>
+
+<h3>Throughout the day</h3>
+<ul>
+  <li>Vendors post and tag @trainercenter.pokemon as the night unfolds.</li>
+  <li>Repost every vendor tag to our story (no limit on stories). Hold the bar on feed reposts per the tag-back rules at the top.</li>
+</ul>
+
+<h3>Systems running during the event</h3>
+<ul>
+  <li><strong>QR check-in at the door</strong> captures name, contact, and "how did you hear about us."</li>
+  <li><strong>Google review QR at the entrance</strong> for both guests AND vendors. Reviews drive new foot traffic. Vendors leaving reviews is gold.</li>
+  <li><strong>End-of-night vendor vote</strong> for favorite vendor of the night.</li>
+  <li><strong>Vendor-invited-by tracking</strong> tied to the check-in question.</li>
+  <li>Track which vendors actually drive attendance. Note it in the system.</li>
+  <li>Day-before, event-day, and day-after sales snapshots so we know what the event was worth.</li>
+</ul>
+
+<h2>In-Shop and Event Conversion</h2>
+<p>This is where most followers actually come from. Online supports, the shop converts.</p>
+<ul>
+  <li>"Follow @trainercenter.pokemon" sign at checkout.</li>
+  <li>QR code at the counter for reviews.</li>
+  <li>QR card in every package.</li>
+  <li>QR check-in at events.</li>
+  <li>Sales snapshots day-before, event-day, day-after.</li>
+  <li>Track which vendors drive real attendance, not just IG noise.</li>
+</ul>
+
+<h2>What We Care / Don't Care About</h2>
+<div class="care-grid">
+  <div class="care-col care-do">
+    <h4>What we DO care about</h4>
+    <ul>
+      <li>The big push landing well.</li>
+      <li>Existing followers showing up to events.</li>
+      <li>The shop, events, and relationships growing the business.</li>
+      <li>Instagram supporting that, not driving it.</li>
+    </ul>
+  </div>
+  <div class="care-col care-dont">
+    <h4>What we DON'T care about</h4>
+    <ul>
+      <li>Daily posting for the sake of daily posting.</li>
+      <li>Reaching non-followers through algorithm tricks.</li>
+      <li>Vanity follower count.</li>
+      <li>Posting at perfectly precise times.</li>
+      <li>Story view counts on regular days.</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

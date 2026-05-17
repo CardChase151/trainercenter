@@ -21,7 +21,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL  = Deno.env.get('SUPABASE_URL') || ''
 const SERVICE_ROLE  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
-const FROM_ADDRESS  = 'Trainer Center HB <noreply@mysendz.com>'
+// Display name is intentionally quoted (RFC 5322 quoted-string form). Zoho
+// strips unquoted display names with spaces; Gmail/Outlook accept either.
+const FROM_ADDRESS  = '"Trainer Center HB" <noreply@mysendz.com>'
 const SITE_URL      = 'https://pokemontrainercenter.com'
 const CHEF_BCC      = 'chef@trainercenter.com'
 
