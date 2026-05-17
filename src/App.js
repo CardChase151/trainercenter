@@ -3531,7 +3531,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       // Load approved vendors for this event
       const { data: apps } = await supabase
         .from('vendor_applications')
-        .select('vendor_id, vendors(id, name, ig_handle)')
+        .select('vendor_id, vendors(id, name, ig_handle, avatar_url)')
         .eq('event_id', event.id)
         .eq('status', 'approved');
       const vs = (apps || [])
@@ -6303,7 +6303,7 @@ function GuestCheckinPage({ isMobile }) {
       if (ev) {
         const { data: apps } = await supabase
           .from('vendor_applications')
-          .select('vendor_id, vendors(id, name, ig_handle)')
+          .select('vendor_id, vendors(id, name, ig_handle, avatar_url)')
           .eq('event_id', ev.id)
           .eq('status', 'approved');
         if (!cancelled) {
@@ -6478,6 +6478,36 @@ function GuestCheckinPage({ isMobile }) {
   );
 }
 
+// Small circular avatar for vendor rows / cards. Falls back to a colored
+// initials disc when no avatar_url is set.
+function VendorAvatar({ vendor, size = 32 }) {
+  const name = vendor?.name || '';
+  const initial = name.charAt(0).toUpperCase() || '?';
+  if (vendor?.avatar_url) {
+    return (
+      <img
+        src={vendor.avatar_url}
+        alt=""
+        style={{
+          width: size, height: size, borderRadius: '50%',
+          objectFit: 'cover', flexShrink: 0,
+          border: '1.5px solid #e5e7eb',
+          background: '#f3f4f6',
+        }}
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: '#fef3c7', color: '#92400e',
+      border: '1.5px solid #e5e7eb',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontWeight: 800, fontSize: Math.round(size * 0.42),
+    }}>{initial}</div>
+  );
+}
+
 function CheckinShell({ children, isPreview }) {
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', paddingTop: '60px' }}>
@@ -6587,15 +6617,18 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
               key={v.id}
               onClick={() => onPickVendor(v)}
               style={{
-                padding: '12px 16px',
+                padding: '10px 16px',
                 cursor: 'pointer',
                 borderBottom: '1px solid #f3f4f6',
                 fontSize: '14px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                display: 'flex', alignItems: 'center', gap: '12px',
               }}
             >
-              <span style={{ fontWeight: 700, color: '#1a1a1a' }}>{v.name}</span>
-              <span style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</span>
+              <VendorAvatar vendor={v} size={32} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: '#1a1a1a' }}>{v.name}</div>
+                <div style={{ fontSize: '11px', color: '#888' }}>{v.ig_handle || ''}</div>
+              </div>
             </div>
           ))}
         </div>
