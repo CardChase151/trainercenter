@@ -6478,36 +6478,6 @@ function GuestCheckinPage({ isMobile }) {
   );
 }
 
-// Small circular avatar for vendor rows / cards. Falls back to a colored
-// initials disc when no avatar_url is set.
-function VendorAvatar({ vendor, size = 32 }) {
-  const name = vendor?.name || '';
-  const initial = name.charAt(0).toUpperCase() || '?';
-  if (vendor?.avatar_url) {
-    return (
-      <img
-        src={vendor.avatar_url}
-        alt=""
-        style={{
-          width: size, height: size, borderRadius: '50%',
-          objectFit: 'cover', flexShrink: 0,
-          border: '1.5px solid #e5e7eb',
-          background: '#f3f4f6',
-        }}
-      />
-    );
-  }
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: '#fef3c7', color: '#92400e',
-      border: '1.5px solid #e5e7eb',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 800, fontSize: Math.round(size * 0.42),
-    }}>{initial}</div>
-  );
-}
-
 function CheckinShell({ children, isPreview }) {
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', paddingTop: '60px' }}>
