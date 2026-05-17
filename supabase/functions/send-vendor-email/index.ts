@@ -21,8 +21,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 //   - Local dev:       ~/Apps/trainercenter/.env (gitignored)
 // See ~/Apps/trainercenter/vendor-emails/README.md for the full workflow.
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
-const FROM_ADDRESS = 'Trainer Center HB <noreply@mysendz.com>'
-const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'Sethmcparty@gmail.com']
+// Display name is intentionally quoted (RFC 5322 quoted-string form). Zoho
+// strips unquoted display names with spaces; Gmail/Outlook accept either.
+const FROM_ADDRESS = '"Trainer Center HB" <noreply@mysendz.com>'
+const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'Sethmcparty@gmail.com', 'chase@cardchase.org']
 const SITE_URL = 'https://pokemontrainercenter.com'
 
 const corsHeaders = {
@@ -160,7 +162,30 @@ Deno.serve(async (req: Request) => {
         `<p>While you wait, drop by Trainer Center HB or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`
       await sendResendEmail([v.email], subject, wrapHtml(body), `Welcome to Trainer Center HB vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
-      return json({ ok: true, sent: ['vendor'] })
+
+      // Staff notification: new partner application landed. Previously this
+      // flow only emailed the vendor, leaving Chef + Chase blind to new
+      // signups until they noticed the row in /staff/vendors. Now every
+      // partner application pings the whole staff list.
+      const staffSubject = `New partner application: ${v.name}`
+      const staffBody =
+        `<p><strong>${v.name}</strong> just applied to become a Trainer Center HB vendor partner.</p>` +
+        `<p style="font-size:13px;color:#444">${v.email}${v.phone ? ' · ' + v.phone : ''}<br/>` +
+        `${v.specialty ? 'Specialty: ' + v.specialty + '<br/>' : ''}` +
+        `${v.ig_handle ? 'IG: @' + v.ig_handle + '<br/>' : ''}` +
+        `${v.tiktok_handle ? 'TikTok: @' + v.tiktok_handle + '<br/>' : ''}` +
+        `${v.fb_handle ? 'FB: ' + v.fb_handle + '<br/>' : ''}` +
+        `${v.experience_level ? 'Experience: ' + String(v.experience_level).replace(/_/g, ' ') + '<br/>' : ''}` +
+        `${v.heard_from ? 'Heard from: ' + String(v.heard_from).replace(/_/g, ' ') + '<br/>' : ''}` +
+        `${v.referred_by_name ? 'Referred by: <strong>' + v.referred_by_name + '</strong>' + (v.referred_by_handle ? ' (@' + v.referred_by_handle + ')' : '') + (v.referred_by_contact ? ' · ' + v.referred_by_contact : '') + '<br/>' : ''}` +
+        `</p>` +
+        (v.bio ? `<p>${v.bio}</p>` : '') +
+        (v.applicant_questions ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:11px;font-weight:800;color:#92400e;letter-spacing:0.06em">QUESTIONS FOR CHEF</p><p style="margin:0;font-size:14px;color:#1f2937;line-height:1.5;white-space:pre-wrap">${v.applicant_questions}</p></td></tr></table>` : '') +
+        `<p style="margin-top:24px"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Review in admin</a></p>`
+      const staffText = `${staffSubject}\n\nName: ${v.name}\nEmail: ${v.email}\n${v.phone ? `Phone: ${v.phone}\n` : ''}${v.ig_handle ? `IG: @${v.ig_handle}\n` : ''}${v.specialty ? `Specialty: ${v.specialty}\n` : ''}${v.experience_level ? `Experience: ${String(v.experience_level).replace(/_/g, ' ')}\n` : ''}${v.referred_by_name ? `Referred by: ${v.referred_by_name}\n` : ''}\nReview: ${SITE_URL}/staff/vendors`
+      await sendResendEmail(STAFF_EMAILS, staffSubject, wrapHtml(staffBody), staffText)
+
+      return json({ ok: true, sent: ['vendor', 'staff'] })
     }
 
     if (type === 'vendor_profile_approved') {
