@@ -6164,6 +6164,7 @@ function StaffPreviewPage({ isMobile }) {
               boxShadow: busy ? 'none' : '0 8px 20px rgba(200,16,46,0.3)',
             }}
           ><FlaskConical size={16} strokeWidth={2.5} style={{ marginRight: '8px', verticalAlign: '-3px' }} />Start preview now</button>
+
         </>
       )}
 
@@ -6343,10 +6344,28 @@ function GuestCheckinPage({ isMobile }) {
     return () => { cancelled = true; };
   }, [eventIdParam, tokenParam, keyParam, isPreview, activePreview?.event_id]);
 
-  // Auto-advance from step 1 once an inviter is picked
+  // Shared check-in writer (used by both shortcut path and post-signup path)
+  async function writeCheckin(profileId, inviter) {
+    return await supabase.from('guest_checkins').upsert({
+      event_id: event.id,
+      profile_id: profileId,
+      invited_by_vendor_id: inviter?.id || null,
+      preview: isPreview,
+    }, { onConflict: 'event_id,profile_id,preview' });
+  }
+
+  // Auto-advance from step 1. If already logged in, skip step 2 (no need to
+  // ask for password again) — write the check-in and jump straight to voting.
   const advanceFromStep1 = (inviter) => {
     setPickedInviter(inviter);
-    setTimeout(() => setStep(2), 350);
+    setTimeout(async () => {
+      if (session) {
+        await writeCheckin(session.user.id, inviter);
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    }, 350);
   };
 
   // Step 2 — create account / sign in, then write check-in
@@ -6369,12 +6388,7 @@ function GuestCheckinPage({ isMobile }) {
       setSession(s);
 
       // Record the check-in
-      const { error: ciErr } = await supabase.from('guest_checkins').upsert({
-        event_id: event.id,
-        profile_id: s.user.id,
-        invited_by_vendor_id: pickedInviter?.id || null,
-        preview: isPreview,
-      }, { onConflict: 'event_id,profile_id,preview' });
+      const { error: ciErr } = await writeCheckin(s.user.id, pickedInviter);
       if (ciErr) console.warn('check-in upsert error', ciErr);
 
       // Hand off to the home page — they're logged in + checked in, so
@@ -6615,7 +6629,7 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
           Select your favorites tonight.
         </h2>
         <p style={{ fontSize: '12px', color: '#888', margin: '0 0 12px', lineHeight: 1.5 }}>
-          Three vendors. You'll award them points toward <strong style={{ color: '#525252' }}>Favorite Vendor of the Night</strong>. Quick account first so your picks save to your name and you can come back to change them any time before close.
+          Three vendors. You'll award them points toward <strong style={{ color: '#525252' }}>Favorite Vendor of the Night</strong>. <strong style={{ color: '#525252' }}>Sign in if you already have an account, or we'll create one</strong> so your picks save to your name.
         </p>
 
         <div style={{
@@ -6679,7 +6693,7 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
         }}
       >Unlock my 3 votes →</button>
       <p style={{ fontSize: '11px', color: '#888', textAlign: 'center', margin: '8px 24px 60px', fontStyle: 'italic' }}>
-        Password must be 6+ characters.
+        We'll sign you in if you have an account, or create one. Password 6+ characters.
       </p>
     </div>
   );
