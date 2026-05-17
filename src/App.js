@@ -6466,7 +6466,7 @@ function GuestCheckinPage({ isMobile }) {
 
 function CheckinShell({ children, isPreview }) {
   return (
-    <div style={{ background: '#fafafa', minHeight: '100vh' }}>
+    <div style={{ background: '#fafafa', minHeight: '100vh', paddingTop: '60px' }}>
       {isPreview && (
         <div style={{
           background: '#fbbf24', color: '#1a1a1a',
