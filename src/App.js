@@ -5966,7 +5966,8 @@ function StaffPreviewPage({ isMobile }) {
   }
 
   return (
-    <div style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '24px 16px' : '48px 24px' }}>
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '720px', margin: '0 auto 64px' }}>
       <h1 style={{ fontSize: '24px', fontWeight: 900, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
         <FlaskConical size={26} strokeWidth={2.5} />
         Trade Night Preview
@@ -6034,7 +6035,8 @@ function StaffPreviewPage({ isMobile }) {
           <li>Preview auto-exits in 30 minutes (or click "Exit preview").</li>
         </ul>
       </div>
-    </div>
+      </div>
+    </PageWrapper>
   );
 }
 
