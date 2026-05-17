@@ -16427,7 +16427,11 @@ function StaffPrintablesPage({ isMobile, staff }) {
             return (
               <div key={item.key} style={{
                 backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
-                padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px',
+                padding: '16px',
+                display: 'flex', flexDirection: 'column', gap: '12px',
+                // Fill the grid row so every card is the same height and
+                // the action buttons line up across the row.
+                height: '100%',
               }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <IconForKind kind={item.kind} accent={item.accent} />
@@ -16448,24 +16452,25 @@ function StaffPrintablesPage({ isMobile, staff }) {
                   </div>
                 </div>
 
-                {/* Preview thumbnail. For QRs the file IS the image, so we
-                    fall back to it when no explicit thumb is set. For PDFs
-                    a separate `thumb` is required (the browser can't render
-                    a PDF as an <img> tag). */}
+                {/* Preview thumbnail — fixed-height frame so every card has
+                    the same visual footprint. PDFs render large, QRs stay
+                    centered at their natural size; either way the frame
+                    height is identical, so the action buttons line up. */}
                 {(item.thumb || isImage) && (
                   <div style={{
                     backgroundColor: '#f9fafb', border: '1px solid #f3f4f6',
                     borderRadius: '10px',
-                    padding: isImage ? '12px' : '10px',
+                    padding: '12px',
                     display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    minHeight: '160px',
+                    height: '220px',
+                    flexShrink: 0,
                   }}>
                     <img
                       src={item.thumb || item.file}
                       alt={item.title}
                       style={{
-                        width: isImage ? '120px' : '100%',
-                        maxHeight: isImage ? '120px' : '200px',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
                         objectFit: 'contain',
                         display: 'block',
                         borderRadius: isImage ? '0' : '6px',
@@ -16475,7 +16480,9 @@ function StaffPrintablesPage({ isMobile, staff }) {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                {/* marginTop:auto pushes the button row to the bottom of
+                    the card so every card's buttons align at the same Y. */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                   <button
                     type="button"
                     disabled={busy === item.key}
@@ -16510,11 +16517,6 @@ function StaffPrintablesPage({ isMobile, staff }) {
           })}
         </div>
 
-        <p style={{
-          fontSize: '0.75rem', color: '#888', marginTop: '20px', lineHeight: 1.5,
-        }}>
-          Need a new item here? Drop the file into <code style={{ fontFamily: 'ui-monospace, monospace' }}>public/printables/</code> and add it to the <code style={{ fontFamily: 'ui-monospace, monospace' }}>PRINTABLES</code> array in <code style={{ fontFamily: 'ui-monospace, monospace' }}>src/App.js</code>.
-        </p>
       </div>
 
       {/* Hidden iframe used by the Print buttons. Re-targeted per click. */}
