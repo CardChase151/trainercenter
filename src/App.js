@@ -8092,7 +8092,7 @@ function VendorApplyPage({ isMobile }) {
                 marginBottom: '4px',
               }}>Already a partner?</div>
               <div style={{ fontSize: '13px', lineHeight: 1.55, color: '#1a1a1a' }}>
-                Don't create a new account. Tap <strong>Log in</strong> at the top of the popup instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Text Chef at (714) 951-9100.
+                Don't create a new account. Tap <strong>Log in</strong> at the top of the popup instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Email <a href="mailto:chef@trainercenter.com" style={{ color: '#C8102E', fontWeight: '700' }}>chef@trainercenter.com</a> or call the shop at (714) 951-9100.
               </div>
             </div>
           </div>
@@ -8382,7 +8382,7 @@ function VendorDashboardPage({ isMobile }) {
           }}>
             <div style={{ fontSize: '18px', lineHeight: 1, paddingTop: '1px' }}>⚠️</div>
             <div style={{ fontSize: '13px', lineHeight: 1.5, color: '#1a1a1a' }}>
-              <strong>Already a partner?</strong> Use <strong>Log In</strong> below — don't create a new account. Multiple accounts confuse approvals and we can't merge them later. If you forgot which email you used, reply to any of our emails or text Chef at (714) 951-9100.
+              <strong>Already a partner?</strong> Use <strong>Log In</strong> below — don't create a new account. Multiple accounts confuse approvals and we can't merge them later. If you forgot which email you used, reply to any of our emails or call the shop at (714) 951-9100.
             </div>
           </div>
 
