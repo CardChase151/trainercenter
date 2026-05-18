@@ -12079,7 +12079,7 @@ function EmailProgressDots({ emails = [], eventId, eventLabel }) {
   );
 }
 
-function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent }) {
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent, onOpenNotes }) {
   const v = vendor;
   // Desktop: split the body in half (identity left, campaign right). Mobile
   // collapses to a single column so nothing gets squeezed.
@@ -12140,11 +12140,26 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
           </div>
         </div>
 
-        {actions && (
+        {(actions || onOpenNotes) && (
           <div
             onClick={e => e.stopPropagation()}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}
           >
+            {onOpenNotes && (
+              <button
+                type="button"
+                onClick={() => onOpenNotes(vendor)}
+                style={{
+                  fontSize: '0.78rem', background: '#fff', color: '#374151',
+                  border: '1px solid #d1d5db', padding: '6px 12px',
+                  borderRadius: '6px', fontWeight: '700', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <FileEdit size={12} /> Notes
+              </button>
+            )}
             {actions}
           </div>
         )}
@@ -14212,6 +14227,284 @@ function StaffAnalyticsPage({ isMobile }) {
   );
 }
 
+// ─── Per-vendor staff notes modal ─────────────────────────
+// Any admin can read every note for the vendor; only the author of each
+// note can edit or delete that note (RLS enforces this — UI hides buttons
+// for notes you don't own). Notes are vendor-scoped (not event-scoped),
+// so they're the right place to capture "this vendor sometimes flakes",
+// "always pays in cash", "knows Mike from Beach Cities", etc.
+function VendorNotesModal({ vendor, currentUserId, profilesById, onClose }) {
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [newBody, setNewBody] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editBody, setEditBody] = useState('');
+
+  const fetchNotes = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('vendor_notes')
+      .select('id, vendor_id, author_user_id, body, created_at, updated_at')
+      .eq('vendor_id', vendor.id)
+      .order('created_at', { ascending: false });
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    setNotes(data || []);
+  }, [vendor.id]);
+
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+
+  const authorName = (userId) => {
+    if (!userId) return 'Unknown';
+    const p = (profilesById || {})[userId];
+    return p?.name || p?.email || 'Staff';
+  };
+  const fmtDateTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  const addNote = async () => {
+    const body = newBody.trim();
+    if (!body) return;
+    setSaving(true);
+    setErrorMsg('');
+    const { error } = await supabase
+      .from('vendor_notes')
+      .insert({ vendor_id: vendor.id, author_user_id: currentUserId, body });
+    setSaving(false);
+    if (error) { setErrorMsg(error.message); return; }
+    setNewBody('');
+    fetchNotes();
+  };
+
+  const startEdit = (note) => { setEditingId(note.id); setEditBody(note.body); };
+  const cancelEdit = () => { setEditingId(null); setEditBody(''); };
+  const saveEdit = async (note) => {
+    const body = editBody.trim();
+    if (!body) return;
+    setSaving(true);
+    setErrorMsg('');
+    const { error } = await supabase
+      .from('vendor_notes')
+      .update({ body })
+      .eq('id', note.id);
+    setSaving(false);
+    if (error) { setErrorMsg(error.message); return; }
+    cancelEdit();
+    fetchNotes();
+  };
+  const deleteNote = async (note) => {
+    if (!window.confirm('Delete this note? Other staff will lose access to it.')) return;
+    setErrorMsg('');
+    const { error } = await supabase
+      .from('vendor_notes')
+      .delete()
+      .eq('id', note.id);
+    if (error) { setErrorMsg(error.message); return; }
+    fetchNotes();
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          padding: '24px 26px', maxWidth: '560px', width: '100%',
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+          <div>
+            <div style={{
+              fontSize: '0.7rem', fontWeight: '800',
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: '#374151',
+            }}>
+              Staff notes
+            </div>
+            <h2 style={{ margin: '4px 0 0', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+              {vendor.name || '(no name)'}
+            </h2>
+            <div style={{ fontSize: '0.78rem', color: '#888', marginTop: '2px' }}>
+              Everyone sees these. Only the author can edit or delete their own.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', fontSize: '20px',
+              color: '#999', cursor: 'pointer', padding: '0 4px',
+              lineHeight: 1, fontFamily: 'inherit',
+            }}
+            aria-label="Close"
+          >×</button>
+        </div>
+
+        {/* Add new note */}
+        <div style={{
+          backgroundColor: '#f9fafb', border: '1px solid #e5e7eb',
+          borderRadius: '10px', padding: '12px 14px', marginTop: '14px',
+        }}>
+          <textarea
+            value={newBody}
+            onChange={e => setNewBody(e.target.value)}
+            placeholder="Add a note about this vendor…"
+            rows={3}
+            disabled={saving}
+            style={{
+              width: '100%', padding: '8px 10px', boxSizing: 'border-box',
+              border: '1px solid #d1d5db', borderRadius: '6px',
+              fontSize: '0.9rem', fontFamily: 'inherit', lineHeight: 1.5,
+              resize: 'vertical',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+            <button
+              type="button"
+              onClick={addNote}
+              disabled={saving || !newBody.trim()}
+              style={{
+                backgroundColor: saving || !newBody.trim() ? '#d1d5db' : '#1a1a1a',
+                color: '#fff', border: 'none', borderRadius: '6px',
+                padding: '8px 18px', fontSize: '0.85rem', fontWeight: '700',
+                cursor: saving || !newBody.trim() ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {saving ? 'Saving…' : 'Add note'}
+            </button>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '12px 0 0' }}>{errorMsg}</p>
+        )}
+
+        {/* Notes feed */}
+        <div style={{ marginTop: '18px' }}>
+          {loading ? (
+            <p style={{ fontSize: '0.85rem', color: '#888', textAlign: 'center', padding: '16px 0' }}>Loading…</p>
+          ) : notes.length === 0 ? (
+            <p style={{ fontSize: '0.85rem', color: '#888', textAlign: 'center', padding: '20px 0' }}>
+              No notes yet. Add the first one above.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {notes.map(note => {
+                const isOwn = note.author_user_id === currentUserId;
+                const edited = note.updated_at && note.updated_at !== note.created_at;
+                const isEditing = editingId === note.id;
+                return (
+                  <div key={note.id} style={{
+                    backgroundColor: '#fff', border: '1px solid #eee',
+                    borderRadius: '10px', padding: '12px 14px',
+                  }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      gap: '8px', marginBottom: '6px',
+                    }}>
+                      <div style={{ fontSize: '0.78rem', color: '#374151' }}>
+                        <strong>{authorName(note.author_user_id)}</strong>
+                        <span style={{ color: '#888' }}> · {fmtDateTime(note.created_at)}</span>
+                        {edited && <span style={{ color: '#888', fontStyle: 'italic' }}> · edited</span>}
+                      </div>
+                      {isOwn && !isEditing && (
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(note)}
+                            style={{
+                              background: 'none', border: 'none',
+                              color: '#374151', fontSize: '0.75rem', fontWeight: '700',
+                              cursor: 'pointer', padding: '2px 6px',
+                              fontFamily: 'inherit', textDecoration: 'underline',
+                            }}
+                          >Edit</button>
+                          <button
+                            type="button"
+                            onClick={() => deleteNote(note)}
+                            style={{
+                              background: 'none', border: 'none',
+                              color: '#C8102E', fontSize: '0.75rem', fontWeight: '700',
+                              cursor: 'pointer', padding: '2px 6px',
+                              fontFamily: 'inherit', textDecoration: 'underline',
+                            }}
+                          >Delete</button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <>
+                        <textarea
+                          value={editBody}
+                          onChange={e => setEditBody(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          style={{
+                            width: '100%', padding: '8px 10px', boxSizing: 'border-box',
+                            border: '1px solid #d1d5db', borderRadius: '6px',
+                            fontSize: '0.9rem', fontFamily: 'inherit', lineHeight: 1.5,
+                            resize: 'vertical',
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            style={{
+                              background: 'none', border: '1px solid #d1d5db',
+                              borderRadius: '6px', padding: '6px 14px',
+                              fontSize: '0.8rem', fontWeight: '700',
+                              color: '#374151', cursor: 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >Cancel</button>
+                          <button
+                            type="button"
+                            onClick={() => saveEdit(note)}
+                            disabled={saving || !editBody.trim()}
+                            style={{
+                              backgroundColor: saving || !editBody.trim() ? '#d1d5db' : '#1a1a1a',
+                              color: '#fff', border: 'none', borderRadius: '6px',
+                              padding: '6px 14px', fontSize: '0.8rem', fontWeight: '700',
+                              cursor: saving || !editBody.trim() ? 'not-allowed' : 'pointer',
+                              fontFamily: 'inherit',
+                            }}
+                          >Save</button>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{
+                        fontSize: '0.9rem', color: '#1f2937', lineHeight: 1.55,
+                        whiteSpace: 'pre-wrap',
+                      }}>
+                        {note.body}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -14222,6 +14515,7 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [voteCounts, setVoteCounts] = useState({}); // { event_id: [{category, vendor_id, vendor_name, vote_count}] }
   const [profilesById, setProfilesById] = useState({}); // staff lookup for approver-name display
   const [emailLog, setEmailLog] = useState({}); // { vendor_id: [{event_id, step_key, sent_at}, ...] }
+  const [notesVendor, setNotesVendor] = useState(null); // open VendorNotesModal for this vendor
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   // Vendor detail modal — clicking any vendor card opens this with full info.
@@ -14462,6 +14756,7 @@ function StaffVendorsPage({ isMobile, staff }) {
               vendors={allVendors.filter(v => v.status === 'pending')}
               onStatusChange={setVendorStatus}
               onOpenDetail={setDetailVendor}
+              onOpenNotes={setNotesVendor}
               isMobile={isMobile}
             />
           )}
@@ -14475,7 +14770,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} onOpenNotes={setNotesVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -14489,6 +14784,15 @@ function StaffVendorsPage({ isMobile, staff }) {
           vendor={detailVendor}
           profilesById={profilesById}
           onClose={() => setDetailVendor(null)}
+        />
+      )}
+
+      {notesVendor && (
+        <VendorNotesModal
+          vendor={notesVendor}
+          currentUserId={staff?.id}
+          profilesById={profilesById}
+          onClose={() => setNotesVendor(null)}
         />
       )}
 
@@ -15546,7 +15850,7 @@ function ApplicationStatusBadge({ status }) {
 // ─── Newly applying vendors (vendors.status === 'pending') ─
 // Brand-new signups awaiting partner approval. Distinct from "Pending requests"
 // which are already-approved vendors applying to a specific event date.
-function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMobile }) {
+function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpenNotes, isMobile }) {
   const [search, setSearch] = useState('');
   const fmtDate = (iso) => {
     if (!iso) return '';
@@ -15584,6 +15888,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
           vendor={v}
           isMobile={isMobile}
           onClick={() => onOpenDetail && onOpenDetail(v)}
+          onOpenNotes={onOpenNotes}
           statusBadge={
             <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
               Applied {fmtDate(v.created_at)}
@@ -15616,7 +15921,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, isMob
   );
 }
 
-function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, isMobile }) {
+function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, onOpenNotes, isMobile }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
 
@@ -15739,6 +16044,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
             eventLabel={nextEventLabel}
             nextEvent={vendorNextEvent[v.id] || null}
             onClick={() => onOpenDetail && onOpenDetail(v)}
+            onOpenNotes={onOpenNotes}
             statusBadge={badgeFor(v.status)}
             decisionLine={decisionFor(v)}
             actions={
