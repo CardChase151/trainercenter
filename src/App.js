@@ -2416,16 +2416,21 @@ function VisitUsSection({ isMobile }) {
           )}
 
           {/* Contact */}
-          <CardHeader icon={<Mail size={20} color="#C8102E" />} title="Contact" onEdit={isAdmin ? () => setEditPanel('contact') : null} />
+          <CardHeader icon={<IgIcon size={20} />} title="Contact" onEdit={isAdmin ? () => setEditPanel('contact') : null} />
+          {igUrl && (
+            <p style={{ fontSize: '0.82rem', color: '#666', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+              <strong style={{ color: '#1a1a1a' }}>DM us on Instagram</strong> — we reply there fastest.
+            </p>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {s.email && (
-              <a href={`mailto:${s.email}`} style={contactLinkStyle}>
-                <Mail size={16} /> {s.email}
-              </a>
-            )}
             {igUrl && (
               <a href={igUrl} target="_blank" rel="noopener noreferrer" style={contactLinkStyle}>
                 <IgIcon size={16} /> @{s.ig_handle}
+              </a>
+            )}
+            {s.email && (
+              <a href={`mailto:${s.email}`} style={{ ...contactLinkStyle, fontSize: '0.78rem', color: '#999', fontWeight: '500' }}>
+                {s.email}
               </a>
             )}
           </div>
@@ -2896,10 +2901,15 @@ function Footer() {
       <p style={{ fontSize: '0.75rem', margin: '0 0 12px 0' }}>
         Pokemon cards, collectibles, and community events
       </p>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' }}>
-        <a href="tel:+17149519100" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600' }}>(714) 951-9100</a>
-        <a href="mailto:Trainercenter.pokemon@gmail.com" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={13} /> Trainercenter.pokemon@gmail.com</a>
-        <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{ color: '#ccc', textDecoration: 'none', fontSize: '0.75rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><IgIcon size={13} /> @trainercenter.pokemon</a>
+      <div style={{ marginBottom: '8px', fontSize: '0.72rem', color: '#ccc' }}>
+        Questions? <strong style={{ color: '#fff' }}>DM us on Instagram</strong> — we reply there fastest.
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{ color: '#fff', textDecoration: 'none', fontSize: '0.8rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}><IgIcon size={13} /> @trainercenter.pokemon</a>
+        <a href="tel:+17149519100" style={{ color: '#fff', textDecoration: 'none', fontSize: '0.8rem', fontWeight: '700' }}>(714) 951-9100</a>
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <a href="mailto:Trainercenter.pokemon@gmail.com" style={{ color: '#888', textDecoration: 'none', fontSize: '0.68rem', fontWeight: '500' }}>Trainercenter.pokemon@gmail.com</a>
       </div>
       <a
         href="https://appcatalyst.org"
@@ -3976,24 +3986,27 @@ function ConsultationPage({ isMobile }) {
             borderRadius: '10px',
             padding: '20px',
           }}>
-            <p style={{ fontSize: '0.95rem', color: '#C8102E', fontWeight: '700', margin: '0 0 12px 0', textAlign: 'center' }}>
-              Contact Chef to schedule your consultation
+            <p style={{ fontSize: '0.95rem', color: '#C8102E', fontWeight: '700', margin: '0 0 4px 0', textAlign: 'center' }}>
+              Get in touch
+            </p>
+            <p style={{ fontSize: '0.78rem', color: '#666', margin: '0 0 12px 0', textAlign: 'center' }}>
+              DM us on Instagram — we reply there fastest.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+              <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{
+                fontSize: '1rem', fontWeight: '700', color: '#C8102E', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center'
+              }}>
+                <IgIcon size={15} /> @trainercenter.pokemon
+              </a>
               <a href="tel:+17149519100" style={{
                 fontSize: '1rem', fontWeight: '700', color: '#C8102E', textDecoration: 'none'
               }}>
                 (714) 951-9100
               </a>
               <a href="mailto:Trainercenter.pokemon@gmail.com" style={{
-                fontSize: '0.9rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center'
+                fontSize: '0.75rem', fontWeight: '500', color: '#999', textDecoration: 'none', marginTop: '4px',
               }}>
-                <Mail size={15} /> Trainercenter.pokemon@gmail.com
-              </a>
-              <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{
-                fontSize: '0.9rem', fontWeight: '600', color: '#C8102E', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center'
-              }}>
-                <IgIcon size={15} /> @trainercenter.pokemon
+                Trainercenter.pokemon@gmail.com
               </a>
             </div>
           </div>
@@ -9673,8 +9686,9 @@ function EventInfoModal({ event, dateStr, onClose }) {
             Need a second table?
           </div>
           <div style={{ fontSize: '0.88rem', color: '#78350f', lineHeight: 1.55 }}>
-            Call the shop at <a href="tel:+17149519100" style={{ color: '#78350f', fontWeight: '700' }}>(714) 951-9100</a> or email{' '}
-            <a href="mailto:chef@trainercenter.com" style={{ color: '#78350f', fontWeight: '700' }}>chef@trainercenter.com</a> to request one. Subject to space.
+            DM us on Instagram{' '}
+            <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{ color: '#78350f', fontWeight: '700' }}>@trainercenter.pokemon</a>{' '}
+            or call the shop at <a href="tel:+17149519100" style={{ color: '#78350f', fontWeight: '700' }}>(714) 951-9100</a> to request one. Subject to space.
           </div>
         </div>
 
