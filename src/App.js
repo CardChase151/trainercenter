@@ -12996,63 +12996,82 @@ function StaffCommsPage({ isMobile, staff }) {
 }
 
 // ─── Drip Schedule View ──────────────────────────────────
-// Read-only display of the vendor-event-drip cron's 13 templated emails.
-// Mirrored from supabase/functions/vendor-event-drip/index.ts via
-// src/lib/dripSchedule.js. No edit, no send — just "here's what would land in
-// vendor inboxes if a Vendor Day is on the calendar."
+// Read-only display of every automatic email TC sends. Two flavors:
+//   1. Event drip — vendor-event-drip cron, 13 emails across signup + lineup tracks
+//   2. Lifecycle — send-vendor-email transactional emails (signup, application,
+//      approval, cancellation)
+// Source of truth lives in supabase/functions/{vendor-event-drip,send-vendor-email}/index.ts;
+// templates mirrored to src/lib/dripSchedule.js for display only.
 function DripScheduleView({ isMobile }) {
+  const sections = [
+    { id: 'signup-track', label: 'Signup track', kind: 'track', color: '#0891b2', audience: DRIP_SIGNUP_AUDIENCE, steps: DRIP_SIGNUP_STEPS, blurb: 'Daily cron, 8 AM PT. Pushes approved vendors who haven\'t signed up yet for an upcoming Vendor Day.' },
+    { id: 'lineup-track', label: 'Lineup track', kind: 'track', color: '#16a34a', audience: DRIP_LINEUP_AUDIENCE, steps: DRIP_LINEUP_STEPS, blurb: 'Daily cron, 8 AM PT. Hypes + handles logistics for vendors already approved for the event.' },
+    ...DRIP_LIFECYCLE_GROUPS.map(g => ({
+      id: g.trigger.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      label: g.triggerLabel,
+      kind: 'lifecycle',
+      group: g,
+    })),
+  ];
+
+  const [selectedId, setSelectedId] = useState(sections[0].id);
+  const selected = sections.find(s => s.id === selectedId) || sections[0];
+
   return (
     <div>
+      {/* Filter pill strip */}
       <div style={{
-        backgroundColor: '#fffbeb', border: '1px solid #fde68a',
-        borderRadius: '10px', padding: '14px 16px', marginBottom: '18px',
-        fontSize: '0.88rem', color: '#78350f', lineHeight: '1.5',
+        display: 'flex', flexWrap: 'wrap', gap: '8px',
+        marginBottom: '18px',
       }}>
-        These emails go out automatically when a Vendor Day is on the calendar.
-        If no event is scheduled, nothing sends. Cron runs daily at 8 AM PT.
+        {sections.map(s => {
+          const active = s.id === selectedId;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setSelectedId(s.id)}
+              style={{
+                padding: '8px 14px',
+                fontSize: '0.82rem',
+                fontWeight: '700',
+                backgroundColor: active ? '#1a1a1a' : '#fff',
+                color: active ? '#fff' : '#374151',
+                border: `1px solid ${active ? '#1a1a1a' : '#e5e7eb'}`,
+                borderRadius: '999px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {s.label}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{
-        marginBottom: '8px',
-        fontSize: '0.75rem', fontWeight: '800', letterSpacing: '0.06em',
-        textTransform: 'uppercase', color: '#666',
-      }}>
-        Event drip — fires when a Vendor Day is on the calendar
-      </div>
+      {/* Selected section context */}
+      {selected.kind === 'track' && (
+        <>
+          <div style={{
+            backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+            borderRadius: '10px', padding: '12px 14px', marginBottom: '16px',
+            fontSize: '0.85rem', color: '#78350f', lineHeight: '1.5',
+          }}>
+            {selected.blurb} If no event is scheduled, nothing sends.
+          </div>
+          <DripTrackColumn
+            title={selected.label}
+            color={selected.color}
+            audience={selected.audience}
+            steps={selected.steps}
+          />
+        </>
+      )}
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-        gap: '18px',
-        marginBottom: '32px',
-      }}>
-        <DripTrackColumn
-          title="Signup track"
-          color="#0891b2"
-          audience={DRIP_SIGNUP_AUDIENCE}
-          steps={DRIP_SIGNUP_STEPS}
-        />
-        <DripTrackColumn
-          title="Lineup track"
-          color="#16a34a"
-          audience={DRIP_LINEUP_AUDIENCE}
-          steps={DRIP_LINEUP_STEPS}
-        />
-      </div>
-
-      <div style={{
-        marginBottom: '8px',
-        fontSize: '0.75rem', fontWeight: '800', letterSpacing: '0.06em',
-        textTransform: 'uppercase', color: '#666',
-      }}>
-        Account &amp; application emails — fires when someone takes an action
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {DRIP_LIFECYCLE_GROUPS.map(group => (
-          <LifecycleGroupCard key={group.trigger} group={group} isMobile={isMobile} />
-        ))}
-      </div>
+      {selected.kind === 'lifecycle' && (
+        <LifecycleGroupCard group={selected.group} isMobile={isMobile} />
+      )}
     </div>
   );
 }
