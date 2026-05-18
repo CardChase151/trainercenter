@@ -3,6 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
+import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE } from './lib/dripSchedule';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -12563,7 +12564,8 @@ function StaffAddContactModal({ onClose, onAdded, isMobile }) {
 // can't smuggle in arbitrary recipient lists.
 function StaffCommsPage({ isMobile, staff }) {
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'contacts' ? 'contacts' : 'vendors';
+  const tabParam = searchParams.get('tab');
+  const initialTab = tabParam === 'contacts' ? 'contacts' : tabParam === 'schedule' ? 'schedule' : 'vendors';
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -12792,8 +12794,15 @@ function StaffCommsPage({ isMobile, staff }) {
         }}>
           {tabBtn('vendors', 'To Vendors')}
           {tabBtn('contacts', 'To Contacts')}
+          {tabBtn('schedule', 'Drip Schedule')}
         </div>
 
+        {tab === 'schedule' && (
+          <DripScheduleView isMobile={isMobile} />
+        )}
+
+        {tab !== 'schedule' && (
+        <>
         {/* Audience picker per tab */}
         <div style={{
           backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
@@ -12979,8 +12988,102 @@ function StaffCommsPage({ isMobile, staff }) {
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
     </PageWrapper>
+  );
+}
+
+// ─── Drip Schedule View ──────────────────────────────────
+// Read-only display of the vendor-event-drip cron's 13 templated emails.
+// Mirrored from supabase/functions/vendor-event-drip/index.ts via
+// src/lib/dripSchedule.js. No edit, no send — just "here's what would land in
+// vendor inboxes if a Vendor Day is on the calendar."
+function DripScheduleView({ isMobile }) {
+  return (
+    <div>
+      <div style={{
+        backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+        borderRadius: '10px', padding: '14px 16px', marginBottom: '18px',
+        fontSize: '0.88rem', color: '#78350f', lineHeight: '1.5',
+      }}>
+        These emails go out automatically when a Vendor Day is on the calendar.
+        If no event is scheduled, nothing sends. Cron runs daily at 8 AM PT.
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: '18px',
+      }}>
+        <DripTrackColumn
+          title="Signup track"
+          color="#0891b2"
+          audience={DRIP_SIGNUP_AUDIENCE}
+          steps={DRIP_SIGNUP_STEPS}
+        />
+        <DripTrackColumn
+          title="Lineup track"
+          color="#16a34a"
+          audience={DRIP_LINEUP_AUDIENCE}
+          steps={DRIP_LINEUP_STEPS}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DripTrackColumn({ title, color, audience, steps }) {
+  return (
+    <div>
+      <div style={{
+        backgroundColor: '#fff', border: '1px solid #eee',
+        borderLeft: `4px solid ${color}`,
+        borderRadius: '10px', padding: '14px 16px', marginBottom: '12px',
+      }}>
+        <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>{title}</div>
+        <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px', lineHeight: '1.45' }}>{audience}</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {steps.map(step => (
+          <DripStepCard key={step.key} step={step} color={color} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DripStepCard({ step, color }) {
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee',
+      borderRadius: '12px', padding: '14px 16px',
+    }}>
+      <div style={{
+        display: 'inline-block',
+        backgroundColor: color, color: '#fff',
+        fontSize: '0.72rem', fontWeight: '800',
+        padding: '3px 10px', borderRadius: '999px',
+        marginBottom: '8px', letterSpacing: '0.02em',
+      }}>
+        {step.daysLabel}
+      </div>
+      <div style={{
+        fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
+        marginBottom: '10px', lineHeight: '1.35',
+      }}>
+        {step.subject}
+      </div>
+      <div
+        style={{
+          backgroundColor: '#fafafa', border: '1px solid #f0f0f0',
+          borderRadius: '8px', padding: '12px 14px',
+          fontSize: '0.85rem', color: '#374151', lineHeight: '1.5',
+        }}
+        dangerouslySetInnerHTML={{ __html: step.html }}
+      />
+    </div>
   );
 }
 
