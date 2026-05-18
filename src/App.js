@@ -12183,7 +12183,7 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
                 style={{
                   fontSize: '0.78rem', fontWeight: '800',
                   color: ratingMeta ? ratingColor : '#6b7280',
-                  background: ratingBg,
+                  backgroundColor: ratingBg,
                   border: `1px solid ${ratingMeta ? ratingColor : '#d1d5db'}`,
                   padding: '6px 10px', borderRadius: '6px',
                   cursor: 'pointer', fontFamily: 'inherit',
@@ -15162,7 +15162,7 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, is
                 style={{
                   fontSize: '0.78rem', fontWeight: '800',
                   color: ratingMeta ? ratingColor : '#6b7280',
-                  background: ratingBg,
+                  backgroundColor: ratingBg,
                   border: `1px solid ${ratingMeta ? ratingColor : '#d1d5db'}`,
                   padding: '6px 10px', borderRadius: '6px',
                   cursor: 'pointer', fontFamily: 'inherit',
