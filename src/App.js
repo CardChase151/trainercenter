@@ -9221,6 +9221,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   const [showApply, setShowApply] = useState(false); // open the apply modal
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCancel, setShowCancel] = useState(false); // post-approval cancel modal
+  const [showInfo, setShowInfo] = useState(false);     // "Cost & info" modal
   const [optingOut, setOptingOut] = useState(false);
 
   const eventDate = new Date(event.event_date + 'T12:00:00');
@@ -9360,8 +9361,8 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       actionEl = (
         <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic', maxWidth: '240px', textAlign: 'right' }}>
           {vendorStatus === 'suspended'
-            ? 'Account suspended — contact Chef.'
-            : "Profile pending Chef's review. You'll be able to apply once approved."}
+            ? 'Account suspended — contact Trainer Center HB.'
+            : "Profile pending review. You'll be able to apply once approved."}
         </span>
       );
     } else {
@@ -9392,7 +9393,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       );
     }
   } else if (application.status === 'pending') {
-    actionEl = statusPill('#fef3c7', '#92400e', <Clock size={14} />, "Pending Chef's approval");
+    actionEl = statusPill('#fef3c7', '#92400e', <Clock size={14} />, "Pending review");
   } else if (application.status === 'declined') {
     actionEl = statusPill('#fee2e2', '#991b1b', <AlertCircle size={14} />, 'Not approved this time');
   } else if (application.status === 'cancelled') {
@@ -9516,6 +9517,21 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
             <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
               {dateStr}
             </div>
+            {!event.cancelled && (
+              <button
+                type="button"
+                onClick={() => setShowInfo(true)}
+                style={{
+                  background: 'none', border: 'none',
+                  color: '#C8102E', fontSize: '0.78rem', fontWeight: '700',
+                  cursor: 'pointer', padding: '4px 0 0',
+                  fontFamily: 'inherit', textDecoration: 'underline',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                }}
+              >
+                <HelpCircle size={12} /> Cost &amp; info
+              </button>
+            )}
           </div>
         </div>
         <div style={{
@@ -9554,7 +9570,153 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           onSubmit={cancelApproval}
         />
       )}
+      {showInfo && (
+        <EventInfoModal
+          event={event}
+          dateStr={dateStr}
+          onClose={() => setShowInfo(false)}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Per-event "Cost & info" modal ────────────────────────
+// Surfaced from each event card on /vendors/events. Most vendors ask the
+// same questions every cycle (cost, table size, what to bring, can I get
+// a second table); this is the one-stop answer page. Pulls event.vendor_note
+// if staff added a per-event note in the calendar editor.
+function EventInfoModal({ event, dateStr, onClose }) {
+  const vendorNote = (event.vendor_note || '').trim();
+  const startEnd = (() => {
+    const s = event.vendor_start_time || event.start_time;
+    const e = event.vendor_end_time || event.end_time;
+    if (!s && !e) return '';
+    return `${formatTime12h(s)} – ${formatTime12h(e)}`;
+  })();
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '16px',
+    }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          padding: '24px 26px', maxWidth: '520px', width: '100%',
+          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+          <div>
+            <div style={{
+              fontSize: '0.7rem', fontWeight: '800',
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: '#C8102E',
+            }}>
+              Cost &amp; info
+            </div>
+            <h2 style={{ margin: '4px 0 0', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+              {event.title || "TC's Beach City Trade Night"}
+            </h2>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+              {dateStr}{startEnd ? ` · ${startEnd}` : ''}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', fontSize: '20px',
+              color: '#999', cursor: 'pointer', padding: '0 4px',
+              lineHeight: 1, fontFamily: 'inherit',
+            }}
+            aria-label="Close"
+          >×</button>
+        </div>
+
+        <div style={{
+          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+          borderRadius: '10px', padding: '12px 14px',
+          margin: '16px 0', display: 'flex', alignItems: 'baseline', gap: '8px',
+        }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#15803d', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Cost</span>
+          <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>Free</span>
+          <span style={{ fontSize: '0.8rem', color: '#15803d', marginLeft: 'auto' }}>You keep 100% of what you sell.</span>
+        </div>
+
+        <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#374151', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' }}>
+          What we provide
+        </div>
+        <ul style={{ margin: '0 0 18px', paddingLeft: '20px', color: '#374151', lineHeight: 1.7, fontSize: '0.92rem' }}>
+          <li><strong>6-foot table</strong> per vendor</li>
+          <li><strong>Black tablecloth</strong> (free)</li>
+          <li>The shop space and the foot traffic</li>
+        </ul>
+
+        <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#374151', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' }}>
+          What to bring
+        </div>
+        <ul style={{ margin: '0 0 18px', paddingLeft: '20px', color: '#374151', lineHeight: 1.7, fontSize: '0.92rem' }}>
+          <li>The inventory you want to sell — singles, slabs, sealed, whatever you specialize in</li>
+          <li><strong>Cash on hand</strong> for exchanges</li>
+          <li><strong>Your own social-media QR code</strong> (highly recommended) — let customers follow you on the spot. Trainer Center HB will also post photos from the event and tag your business.</li>
+        </ul>
+
+        <div style={{
+          backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+          borderRadius: '10px', padding: '12px 14px', margin: '0 0 18px',
+        }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#92400e', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '4px' }}>
+            Need a second table?
+          </div>
+          <div style={{ fontSize: '0.88rem', color: '#78350f', lineHeight: 1.55 }}>
+            Call the shop at <a href="tel:+17149519100" style={{ color: '#78350f', fontWeight: '700' }}>(714) 951-9100</a> or email{' '}
+            <a href="mailto:chef@trainercenter.com" style={{ color: '#78350f', fontWeight: '700' }}>chef@trainercenter.com</a> to request one. Subject to space.
+          </div>
+        </div>
+
+        <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#374151', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' }}>
+          Location
+        </div>
+        <p style={{ margin: '0 0 18px', color: '#374151', lineHeight: 1.55, fontSize: '0.92rem' }}>
+          4911 Warner Ave #210<br />
+          Huntington Beach, CA 92649<br />
+          <span style={{ fontSize: '0.82rem', color: '#888' }}>Park anywhere in the lot. Arrive ~30 min early to set up.</span>
+        </p>
+
+        {vendorNote && (
+          <div style={{
+            backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderLeft: '4px solid #c2410c',
+            borderRadius: '8px', padding: '12px 14px', margin: '0 0 18px',
+          }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#9a3412', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '4px' }}>
+              Note from Trainer Center HB
+            </div>
+            <div style={{ fontSize: '0.9rem', color: '#1f2937', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+              {vendorNote}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              backgroundColor: '#1a1a1a', color: '#fff',
+              border: 'none', borderRadius: '8px', padding: '10px 22px',
+              fontSize: '0.9rem', fontWeight: '800',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
