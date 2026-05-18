@@ -14777,7 +14777,20 @@ function StaffVendorsPage({ isMobile, staff }) {
             broadcast surfaces (vendors + marketing contacts) live in one
             place. The button here just deep-links into the page on the
             Vendors tab so the muscle memory still works. */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', maxWidth: '1100px', margin: '0 auto 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', maxWidth: '1100px', margin: '0 auto 12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setTab('roster')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              backgroundColor: tab === 'roster' ? '#C8102E' : '#1a1a1a',
+              color: '#fff', border: 'none',
+              padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
+              fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <CalendarIcon size={14} /> View Events
+          </button>
           <Link to="/staff/comms?tab=vendors" style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
             backgroundColor: '#1a1a1a', color: '#fff',
@@ -14795,9 +14808,6 @@ function StaffVendorsPage({ isMobile, staff }) {
           </button>
           <button onClick={() => setTab('pending')} style={tabBtnStyle(tab === 'pending')}>
             Pending requests ({pending.length})
-          </button>
-          <button onClick={() => setTab('roster')} style={tabBtnStyle(tab === 'roster')}>
-            Event roster
           </button>
           <button onClick={() => setTab('vendors')} style={tabBtnStyle(tab === 'vendors')}>
             All vendors ({allVendors.length})
