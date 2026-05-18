@@ -3,7 +3,7 @@ import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams,
 import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
-import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE } from './lib/dripSchedule';
+import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -13013,9 +13013,18 @@ function DripScheduleView({ isMobile }) {
       </div>
 
       <div style={{
+        marginBottom: '8px',
+        fontSize: '0.75rem', fontWeight: '800', letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: '#666',
+      }}>
+        Event drip — fires when a Vendor Day is on the calendar
+      </div>
+
+      <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
         gap: '18px',
+        marginBottom: '32px',
       }}>
         <DripTrackColumn
           title="Signup track"
@@ -13029,6 +13038,20 @@ function DripScheduleView({ isMobile }) {
           audience={DRIP_LINEUP_AUDIENCE}
           steps={DRIP_LINEUP_STEPS}
         />
+      </div>
+
+      <div style={{
+        marginBottom: '8px',
+        fontSize: '0.75rem', fontWeight: '800', letterSpacing: '0.06em',
+        textTransform: 'uppercase', color: '#666',
+      }}>
+        Account &amp; application emails — fires when someone takes an action
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        {DRIP_LIFECYCLE_GROUPS.map(group => (
+          <LifecycleGroupCard key={group.trigger} group={group} isMobile={isMobile} />
+        ))}
       </div>
     </div>
   );
@@ -13083,6 +13106,70 @@ function DripStepCard({ step, color }) {
         }}
         dangerouslySetInnerHTML={{ __html: step.html }}
       />
+    </div>
+  );
+}
+
+function LifecycleGroupCard({ group, isMobile }) {
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee',
+      borderRadius: '14px', padding: isMobile ? '14px 16px' : '18px 20px',
+    }}>
+      <div style={{ marginBottom: '14px' }}>
+        <div style={{
+          display: 'inline-block',
+          backgroundColor: '#1a1a1a', color: '#fff',
+          fontSize: '0.7rem', fontWeight: '800',
+          padding: '3px 10px', borderRadius: '999px',
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+          marginBottom: '8px',
+        }}>
+          Trigger
+        </div>
+        <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '4px' }}>
+          {group.trigger}
+        </div>
+        <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: '1.45' }}>
+          {group.description}
+        </div>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile || group.emails.length === 1 ? '1fr' : '1fr 1fr',
+        gap: '12px',
+      }}>
+        {group.emails.map(email => (
+          <div key={email.key} style={{
+            backgroundColor: '#fafafa', border: '1px solid #f0f0f0',
+            borderRadius: '10px', padding: '12px 14px',
+          }}>
+            <div style={{
+              display: 'inline-block',
+              backgroundColor: email.audienceColor, color: '#fff',
+              fontSize: '0.7rem', fontWeight: '800',
+              padding: '3px 10px', borderRadius: '999px',
+              marginBottom: '8px', letterSpacing: '0.02em',
+            }}>
+              {email.audienceLabel}
+            </div>
+            <div style={{
+              fontSize: '0.9rem', fontWeight: '800', color: '#1a1a1a',
+              marginBottom: '10px', lineHeight: '1.35',
+            }}>
+              {email.subject}
+            </div>
+            <div
+              style={{
+                backgroundColor: '#fff', border: '1px solid #eee',
+                borderRadius: '8px', padding: '12px 14px',
+                fontSize: '0.82rem', color: '#374151', lineHeight: '1.5',
+              }}
+              dangerouslySetInnerHTML={{ __html: email.html }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
