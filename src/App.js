@@ -11858,6 +11858,19 @@ function VendorDetailModal({ vendor, profilesById, onClose }) {
           )}
           <div style={{ minWidth: 0, paddingRight: '40px' }}>
             <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1a1a1a' }}>{v.name || '(no name)'}</div>
+            {/* Person behind the business. When v.name is the business
+                name (different from first+last), show the human name as
+                a subline so Chef knows who he's talking to. */}
+            {(() => {
+              const personFull = [v.first_name, v.last_name].filter(Boolean).join(' ').trim();
+              if (!personFull) return null;
+              if (personFull === (v.name || '').trim()) return null;
+              return (
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                  {personFull}
+                </div>
+              );
+            })()}
             <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               <span style={{
                 fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px',
