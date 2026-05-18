@@ -63,103 +63,167 @@ function activeStep(steps: Step[], daysUntil: number) {
   return steps.find(s => daysUntil >= s.from && daysUntil <= s.to) || null
 }
 
-// Per-step copy. Each tone escalates as the event approaches.
+// Per-step copy. Voice is Trainer Center HB (not "Chef"). Events default to
+// "TC's Beach City Trade Night" when an admin hasn't set a custom title.
+// Signup track: announcement → final-week → last-chance escalation.
+// Lineup track: congrats + logistics at T-21, IG promotion mandate at T-14,
+// pre-event checklist at T-3, day-of warmth at T-0.
 function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendorName: string, vendorTimes: string) {
   const eventLine = vendorTimes ? `${eventTitle} · ${dateStr} · ${vendorTimes}` : `${eventTitle} · ${dateStr}`
   const dashboard = `${SITE_URL}/vendors/dashboard`
+  const events    = `${SITE_URL}/vendors/events`
 
-  // Track A — signup push
+  // ─── Track A — signup push (approved partners NOT yet applied) ─────
   if (stepKey === 'signup.t21') {
     return {
-      subject: `Save the date — ${eventTitle} on ${dateStr}`,
-      html: `<p>Hi ${vendorName},</p><p>Heads up: <strong>${eventLine}</strong>. You're an approved partner — claim your table whenever you're ready.</p><p>Apply takes about 30 seconds.</p>`,
-      text: `Heads up: ${eventLine}. You're an approved partner — claim your table whenever you're ready.\n\nApply: ${dashboard}`,
+      subject: `Did you hear? ${eventTitle} on ${dateStr}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>Big announcement:</strong> we have an upcoming <strong>${eventLine}</strong>.</p>` +
+        `<p>If you'd like to vend, click below to apply. Two clicks and you're on the list for review.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Mark not interested</a> on your dashboard so we stop reminding you.</p>`,
+      text: `Did you hear? We have an upcoming ${eventLine}.\n\nIf you'd like to vend, apply here: ${events}\n\nNot interested in this date? You can mark that on your dashboard so we stop reminding you.`,
     }
   }
   if (stepKey === 'signup.t14') {
     return {
-      subject: `2 weeks out — claim your spot for ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is two weeks away and the lineup is starting to fill in. Want a table?</p>`,
-      text: `${eventLine} is two weeks away and the lineup is starting to fill in. Want a table?\n\nApply: ${dashboard}`,
+      subject: `Final reviews this week and next — ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p>Heads up: Trainer Center HB is doing <strong>final reviews this week and next</strong> for <strong>${eventLine}</strong>.</p>` +
+        `<p>If you're interested in vending, don't forget to apply.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
+      text: `Trainer Center HB is doing final reviews this week and next for ${eventLine}.\n\nIf you're interested in vending, don't forget to apply: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
     }
   }
   if (stepKey === 'signup.t7') {
     return {
-      subject: `One week to apply — ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is <strong>one week from today</strong>. Spots are limited — apply now if you're in.</p>`,
-      text: `${eventLine} is one week from today. Spots are limited — apply now if you're in.\n\nApply: ${dashboard}`,
+      subject: `Final week — ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p>We're in the <strong>final week</strong> before <strong>${eventLine}</strong>.</p>` +
+        `<p>We've always appreciated you and would love to have you at this one. If you're in, apply now.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
+      text: `We're in the final week before ${eventLine}.\n\nWe've always appreciated you and would love to have you at this one. If you're in, apply now: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
     }
   }
   if (stepKey === 'signup.t3') {
     return {
-      subject: `3 days left — ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p><strong>${eventLine}</strong> is in 3 days. Spots fill up fast in the final week.</p><p>Want in?</p>`,
-      text: `${eventLine} is in 3 days. Spots fill up fast in the final week. Want in?\n\nApply: ${dashboard}`,
+      subject: `Last chance — ${eventTitle} in 3 days`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>Last chance.</strong> There's still room available for <strong>${eventLine}</strong>.</p>` +
+        `<p>If you want a table, today's the day to claim it.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply now</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
+      text: `Last chance. There's still room available for ${eventLine}.\n\nIf you want a table, today's the day to claim it: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
     }
   }
   if (stepKey === 'signup.t2') {
     return {
-      subject: `2 days — last 48 hours to get on the list`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is in 2 days. After tomorrow it's going to be hard to slot you in.</p>`,
-      text: `${eventLine} is in 2 days. After tomorrow it's going to be hard to slot you in.\n\nApply: ${dashboard}`,
+      subject: `Only 48 hours left — ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p>Only <strong>48 hours left</strong> to get on the list for <strong>${eventLine}</strong>.</p>` +
+        `<p>After tomorrow, it's going to be hard to slot you in.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Get on the list</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
+      text: `Only 48 hours left to get on the list for ${eventLine}.\n\nAfter tomorrow, it's going to be hard to slot you in: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
     }
   }
   if (stepKey === 'signup.t1') {
     return {
-      subject: `Tomorrow — last chance for ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is <strong>tomorrow</strong>. This is the final window to get on the lineup.</p><p>One tap and you're in.</p>`,
-      text: `${eventLine} is tomorrow. This is the final window to get on the lineup. One tap and you're in.\n\nApply: ${dashboard}`,
+      subject: `Last chance to send in your application — ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>${eventLine}</strong> is <strong>tomorrow</strong>. This is your last chance to send in your application.</p>` +
+        `<p>One tap and you're in.</p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply now</a></p>` +
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
+      text: `${eventLine} is tomorrow. Last chance to send in your application: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
     }
   }
 
-  // Track B — lineup hype + logistics
+  // ─── Track B — lineup hype + logistics (approved FOR this event) ───
+  const cantMakeIt = `<p style="margin-top:24px;font-size:13px;color:#666">Plans changed? <a href="${dashboard}" style="color:#666">Let us know</a> so we can plan ahead.</p>`
+  const cantMakeItText = `\n\nPlans changed? Let us know on your dashboard so we can plan ahead: ${dashboard}`
+
   if (stepKey === 'lineup.t21') {
     return {
-      subject: `You're in — ${eventTitle} on ${dateStr}`,
-      html: `<p>Hi ${vendorName},</p><p>You're approved for <strong>${eventLine}</strong>. Three weeks out — let's make it big.</p>`,
-      text: `You're approved for ${eventLine}. Three weeks out — let's make it big.\n\nDashboard: ${dashboard}`,
+      subject: `Congratulations — you're approved for ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>Congratulations.</strong> Trainer Center HB has approved you for <strong>${eventLine}</strong>. We appreciate the partnership and look forward to vending with you.</p>` +
+        `<p style="margin:18px 0 8px;font-weight:700">Logistics:</p>` +
+        `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li>We provide a <strong>6-foot table</strong></li><li>We provide a <strong>black table cloth</strong> (free)</li><li>Just bring the product you want to sell</li><li>Have cash on hand for exchanges</li></ul>` +
+        `<p>Next week we'll post for the event officially and kick off the 2-week promotion sprint.</p>` +
+        cantMakeIt,
+      text: `Congratulations. Trainer Center HB has approved you for ${eventLine}. We appreciate the partnership and look forward to vending with you.\n\nLogistics:\n- We provide a 6-foot table\n- We provide a black table cloth (free)\n- Just bring the product you want to sell\n- Have cash on hand for exchanges\n\nNext week we'll post for the event officially and kick off the 2-week promotion sprint.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t14') {
     return {
-      subject: `2 weeks out — start telling your community`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is two weeks out. Now's a good time to start telling your community you'll be there.</p>`,
-      text: `${eventLine} is two weeks out. Now's a good time to start telling your community you'll be there.\n\nDashboard: ${dashboard}`,
+      subject: `Critical — promote ${eventTitle} on Instagram`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p>Two weeks out from <strong>${eventLine}</strong>. Trainer Center HB has posted on Instagram. Now we need you.</p>` +
+        `<p><strong>This is part of the arrangement for a free table.</strong> Find our pinned post on <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a> and:</p>` +
+        `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li><strong>Send it as a DM</strong> to 5–10 people who'd be interested</li><li><strong>Repost it</strong> to your own IG (story or grid)</li><li><strong>Like, comment, and save</strong> the post on our page</li><li>Tap the <strong>reminder bell</strong> on the post so IG pushes it to you and your audience</li></ul>` +
+        `<p>Why this matters for <em>you</em>: less engagement on our post means fewer customers walking in your direction. <strong>Fewer customers means less money for you.</strong></p>` +
+        `<p>This is your day. Your sales. Your relationships. We're giving you the table — help us pack the room.</p>` +
+        cantMakeIt,
+      text: `Two weeks out from ${eventLine}. Trainer Center HB has posted on Instagram. Now we need you.\n\nThis is part of the arrangement for a free table. Find our pinned post on @trainercenter.pokemon and:\n- Send it as a DM to 5–10 people\n- Repost it to your own IG\n- Like, comment, and save the post\n- Tap the reminder bell\n\nWhy this matters for YOU: less engagement on our post means fewer customers walking in your direction. Fewer customers means less money for you.\n\nThis is your day. Your sales. Your relationships.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t7') {
     return {
-      subject: `One week — post on IG and tag @trainercenter.pokemon`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is one week from today.</p><p>Big ask: <strong>post about it on IG and tag <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a></strong>. We'll repost the best ones.</p>`,
-      text: `${eventLine} is one week from today.\n\nBig ask: post about it on IG and tag @trainercenter.pokemon. We'll repost the best ones.\n\nDashboard: ${dashboard}`,
+      subject: `One week to ${eventTitle} — have you promoted yet?`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>${eventLine}</strong> is one week from today.</p>` +
+        `<p>If you haven't yet engaged with our pinned post on <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a>, today's the day. Repost, DM 5–10 people, like, comment, save.</p>` +
+        `<p>If you already did — bonus push: do it again. The closer we get, the more traction matters.</p>` +
+        cantMakeIt,
+      text: `${eventLine} is one week from today.\n\nIf you haven't yet engaged with our pinned post on @trainercenter.pokemon, today's the day. Repost, DM 5–10 people, like, comment, save.\n\nIf you already did — bonus push: do it again.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t3') {
     return {
-      subject: `3 days out — big push, post + tag us`,
-      html: `<p>Hi ${vendorName},</p><p><strong>${eventLine}</strong> is in 3 days. This is the push window.</p><ul><li>Post on your IG today</li><li>Tag <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a></li><li>Story it. Reels are best.</li></ul><p>You bring traffic, we bring traffic, everyone wins.</p>`,
-      text: `${eventLine} is in 3 days. This is the push window.\n\n- Post on your IG today\n- Tag @trainercenter.pokemon\n- Story it. Reels are best.\n\nYou bring traffic, we bring traffic, everyone wins.\n\nDashboard: ${dashboard}`,
+      subject: `3 days out — your ${eventTitle} checklist`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>${eventLine}</strong> is in 3 days. Here's your prep checklist.</p>` +
+        `<p style="margin:18px 0 8px;font-weight:700">Before event day:</p>` +
+        `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li><strong>Make your own IG QR code</strong> so customers can follow you on the spot</li><li>One last Instagram push — repost, DM, comment on our pinned post</li><li>Have <strong>cash on hand</strong> for exchanges</li><li>Pack the product you want to sell + your QR sign</li></ul>` +
+        `<p style="margin:18px 0 8px;font-weight:700">During the event:</p>` +
+        `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li><strong>Take photos and videos</strong> we can post on the Trainer Center HB website — tag you and your business</li><li><strong>Keep cash out of frame</strong> in those photos — focus on the products, the relationships, the families and youth having fun</li><li>Your own personal content can include whatever you want, this is just for the public-facing recap on our site</li></ul>` +
+        `<p>This is the push window. Let's pack the room.</p>` +
+        cantMakeIt,
+      text: `${eventLine} is in 3 days. Here's your prep checklist.\n\nBefore event day:\n- Make your own IG QR code so customers can follow you on the spot\n- One last Instagram push — repost, DM, comment on our pinned post\n- Have cash on hand for exchanges\n- Pack the product you want to sell + your QR sign\n\nDuring the event:\n- Take photos and videos we can post on the Trainer Center HB website — tag you and your business\n- Keep cash out of frame in those photos — focus on the products, the relationships, the families and youth having fun\n- Your own personal content can include whatever you want; this is just for the public-facing recap on our site\n\nThis is the push window.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t2') {
     return {
-      subject: `2 days out — quick logistics for ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p>${eventLine} is in 2 days. Confirmed time slot${vendorTimes ? `: <strong>${vendorTimes}</strong>` : ''}.</p><p>Bring your singles, slabs, sealed product — whatever you specialize in. Tables and chairs provided.</p>`,
-      text: `${eventLine} is in 2 days. Confirmed time slot${vendorTimes ? `: ${vendorTimes}` : ''}.\n\nBring your singles, slabs, sealed product — whatever you specialize in. Tables and chairs provided.\n\nDashboard: ${dashboard}`,
+      subject: `2 days out — logistics for ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>${eventLine}</strong> is in 2 days.</p>` +
+        `<p>${vendorTimes ? `Your confirmed time slot: <strong>${vendorTimes}</strong>.` : 'Confirmed for the event.'} 6-foot table and black cloth provided. Just bring your product, your QR code, and cash for exchanges.</p>` +
+        `<p>Address: 4911 Warner Ave #210, Huntington Beach, CA 92649.</p>` +
+        cantMakeIt,
+      text: `${eventLine} is in 2 days.\n\n${vendorTimes ? `Your confirmed time slot: ${vendorTimes}. ` : ''}6-foot table and black cloth provided. Just bring your product, your QR code, and cash for exchanges.\n\nAddress: 4911 Warner Ave #210, Huntington Beach, CA 92649.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t1') {
     return {
       subject: `Tomorrow! ${eventTitle}`,
-      html: `<p>Hi ${vendorName},</p><p><strong>${eventLine}</strong> is tomorrow.</p><p>Final reminders:</p><ul><li>Arrive ~30 min early to set up</li><li>4911 Warner Ave #210, Huntington Beach</li><li>Park anywhere in the lot</li></ul><p>If you haven't posted on IG yet, today's the day. Tag us.</p>`,
-      text: `${eventLine} is tomorrow.\n\nFinal reminders:\n- Arrive ~30 min early to set up\n- 4911 Warner Ave #210, Huntington Beach\n- Park anywhere in the lot\n\nIf you haven't posted on IG yet, today's the day. Tag us.\n\nDashboard: ${dashboard}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>${eventLine}</strong> is tomorrow.</p>` +
+        `<p>Final reminders:</p>` +
+        `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li><strong>Arrive 30 minutes early</strong> to set up</li><li>4911 Warner Ave #210, Huntington Beach, CA 92649</li><li>Park anywhere in the lot</li><li>One last IG push — repost or story our pinned post if you haven't yet</li><li>Don't forget your IG QR code and cash for exchanges</li></ul>` +
+        cantMakeIt,
+      text: `${eventLine} is tomorrow.\n\nFinal reminders:\n- Arrive 30 minutes early to set up\n- 4911 Warner Ave #210, Huntington Beach, CA 92649\n- Park anywhere in the lot\n- One last IG push — repost or story our pinned post if you haven't yet\n- Don't forget your IG QR code and cash for exchanges` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t0') {
     return {
-      subject: `See you there! ${eventTitle} today`,
-      html: `<p>Hi ${vendorName},</p><p><strong>Today's the day.</strong> ${eventLine}.</p><p>See you at the shop. Drive safe, bring water.</p>`,
-      text: `Today's the day. ${eventLine}.\n\nSee you at the shop. Drive safe, bring water.\n\nDashboard: ${dashboard}`,
+      subject: `Today's the day — ${eventTitle}`,
+      html: `<p>Hi ${vendorName},</p>` +
+        `<p><strong>Today's the day.</strong> ${eventLine}.</p>` +
+        `<p>See you at the shop. Drive safe, bring water, take photos for the recap.</p>`,
+      text: `Today's the day. ${eventLine}.\n\nSee you at the shop. Drive safe, bring water, take photos for the recap.`,
     }
   }
   return null
@@ -258,7 +322,7 @@ Deno.serve(async (req) => {
     const daysUntil = Math.round((evDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     const dateStr = formatEventDate(ev.event_date)
     const vendorTimes = vendorTimeLine(ev)
-    const eventTitle = ev.title || 'Vendor Day'
+    const eventTitle = ev.title || "TC's Beach City Trade Night"
     const apps = ev.vendor_applications || []
     const appliedSet = new Set(apps.map((a: any) => a.vendor_id))
     const approvedForEventSet = new Set(apps.filter((a: any) => a.status === 'approved').map((a: any) => a.vendor_id))

@@ -165,8 +165,8 @@ Deno.serve(async (req: Request) => {
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
       const subject = 'Welcome to Trainer Center HB vendors'
       const body = `<p>Hi ${v.name},</p>` +
-        `<p>Your vendor profile is in. Chef will personally review it before approving you. Once approved, you can apply for any upcoming Vendor Day in two clicks from your dashboard.</p>` +
-        `<p><strong>Vendor Day cadence:</strong> last Friday of every month at the shop.</p>` +
+        `<p>Your vendor profile is in. The Trainer Center HB team will personally review it before approving you. Once approved, you can apply for any upcoming TC's Beach City Trade Night in two clicks from your dashboard.</p>` +
+        `<p><strong>Cadence:</strong> last Friday of every month at the shop.</p>` +
         `<p>While you wait, drop by Trainer Center HB or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`
       await sendResendEmail([v.email], subject, wrapHtml(body), `Welcome to Trainer Center HB vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
@@ -207,26 +207,26 @@ Deno.serve(async (req: Request) => {
         `<p style="margin:0 0 24px">You're now a recognized Trainer Center HB vendor partner. Welcome.</p>` +
         `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:18px 22px;border-radius:6px">` +
         `  <p style="margin:0 0 8px;font-size:13px;font-weight:800;color:#92400e;letter-spacing:0.04em">⚠  YOU'RE NOT DONE YET</p>` +
-        `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">Being approved as a partner does <strong>not</strong> put you on a Vendor Day automatically. You still need to pick which dates you want to be at.</p>` +
+        `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">Being approved as a partner does <strong>not</strong> put you on a TC's Beach City Trade Night automatically. You still need to pick which dates you want to be at.</p>` +
         `</td></tr></table>` +
-        `<p style="margin:0 0 12px;font-weight:700">Each Vendor Day requires a quick per-event sign-up:</p>` +
+        `<p style="margin:0 0 12px;font-weight:700">Each TC's Beach City Trade Night requires a quick per-event sign-up:</p>` +
         `<ol style="margin:0 0 24px;padding-left:20px;color:#444;font-size:14px;line-height:1.7">` +
         `  <li>Open your dashboard</li>` +
-        `  <li>Pick the Vendor Days you want</li>` +
-        `  <li>Chef confirms each one within a day or two</li>` +
+        `  <li>Pick the dates you want</li>` +
+        `  <li>Trainer Center HB confirms each one within a day or two</li>` +
         `</ol>` +
-        `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your Vendor Days  →</a></p>` +
-        `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Vendor Days happen the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
+        `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your dates  →</a></p>` +
+        `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">TC's Beach City Trade Night happens the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
       const text = `Action required: You're a Trainer Center HB vendor — pick your dates\n\n` +
         `Hi ${v.name},\n\n` +
         `You're now a recognized Trainer Center HB vendor partner. Welcome.\n\n` +
-        `YOU'RE NOT DONE YET — being approved as a partner does NOT put you on a Vendor Day automatically. You still need to pick which dates you want to be at.\n\n` +
-        `Each Vendor Day requires a quick per-event sign-up:\n` +
+        `YOU'RE NOT DONE YET — being approved as a partner does NOT put you on a TC's Beach City Trade Night automatically. You still need to pick which dates you want to be at.\n\n` +
+        `Each event requires a quick per-event sign-up:\n` +
         `  1. Open your dashboard\n` +
-        `  2. Pick the Vendor Days you want\n` +
-        `  3. Chef confirms each one within a day or two\n\n` +
-        `Pick your Vendor Days: ${SITE_URL}/vendors/dashboard\n\n` +
-        `Vendor Days happen the last Friday of every month at the shop.`
+        `  2. Pick the dates you want\n` +
+        `  3. Trainer Center HB confirms each one within a day or two\n\n` +
+        `Pick your dates: ${SITE_URL}/vendors/dashboard\n\n` +
+        `TC's Beach City Trade Night happens the last Friday of every month at the shop.`
       await sendResendEmail([v.email], subject, wrapHtml(body), text)
       return json({ ok: true, sent: ['vendor'] })
     }
@@ -258,8 +258,8 @@ Deno.serve(async (req: Request) => {
       const appliedSet = new Set((existingApps || []).map(a => a.vendor_id))
       const targets = (approvedVendors || []).filter(v => !appliedSet.has(v.id))
 
-      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'the next Vendor Day'
-      const eventTitle = ev.title || 'Vendor Day'
+      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : "the next TC's Beach City Trade Night"
+      const eventTitle = ev.title || "TC's Beach City Trade Night"
       const vendorTimes = vendorTimeLine(ev)
       // Detect "tomorrow" for urgency framing in subject
       const today = new Date(); today.setHours(0,0,0,0)
@@ -292,13 +292,13 @@ Deno.serve(async (req: Request) => {
           `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">If you want a spot, you need to apply from your dashboard. Two clicks.</p>` +
           `</td></tr></table>` +
           `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
-          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Your dashboard also has every future Vendor Day — pick any one. Vendor Days happen the last Friday of every month at the shop.</p>`
+          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Your dashboard also has every future TC's Beach City Trade Night — pick any one. They happen the last Friday of every month at the shop.</p>`
         const text = `Action required: Apply for ${dateStr} — ${eventTitle}\n\n` +
           `Hi ${v.name},\n\n` +
           `You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.\n\n` +
           `${urgencyLabel}: ${dateStr} — ${eventTitle}\n\n` +
           `If you want a spot, you need to apply from your dashboard:\n${SITE_URL}/vendors/dashboard\n\n` +
-          `Can't make this date? The dashboard also lists every future Vendor Day. Vendor Days happen the last Friday of every month at the shop.`
+          `Can't make this date? The dashboard also lists every future TC's Beach City Trade Night. They happen the last Friday of every month at the shop.`
         try {
           await sendResendEmail([v.email], subject, wrapHtml(body), text)
           sentTo.push(v.email)
@@ -325,7 +325,7 @@ Deno.serve(async (req: Request) => {
         .eq('status', 'approved')
       if (aErr) return json({ error: aErr.message }, 500)
 
-      const eventTitle = ev.title || 'Vendor Day'
+      const eventTitle = ev.title || "TC's Beach City Trade Night"
       const eventDateStr = ev.event_date ? formatEventDate(ev.event_date) : 'today'
       const window = vendorTimeLine(ev) || ''
       const chefNote = (ev.vendor_note || '').trim()
@@ -358,7 +358,7 @@ Deno.serve(async (req: Request) => {
           (personalWindow ? `  <tr><td style="padding:14px 18px;border-bottom:1px solid #f3f4f6;background:#f0fdf4"><span style="font-size:12px;font-weight:700;color:#15803d;letter-spacing:0.04em;text-transform:uppercase">Your slot</span><br/><span style="font-size:15px;color:#15803d;font-weight:700">${personalWindow}</span></td></tr>` : '') +
           `  <tr><td style="padding:14px 18px"><span style="font-size:12px;font-weight:700;color:#666;letter-spacing:0.04em;text-transform:uppercase">Address</span><br/><span style="font-size:15px;color:#1a1a1a;font-weight:600">4911 Warner Ave #210<br/>Huntington Beach, CA 92649</span></td></tr>` +
           `</table>` +
-          (chefNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px"><tr><td style="background:#fff7ed;border-left:4px solid #c2410c;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#9a3412;letter-spacing:0.04em;text-transform:uppercase">Note from Chef</p><p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5;white-space:pre-wrap">${chefNote.replace(/</g,'&lt;')}</p></td></tr></table>` : '') +
+          (chefNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px"><tr><td style="background:#fff7ed;border-left:4px solid #c2410c;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#9a3412;letter-spacing:0.04em;text-transform:uppercase">Note from Trainer Center HB</p><p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5;white-space:pre-wrap">${chefNote.replace(/</g,'&lt;')}</p></td></tr></table>` : '') +
           `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#444">When you arrive, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table. Those go on our public Vendors page.</p>` +
           `<p style="margin:24px 0 8px;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Open dashboard</a></p>` +
           `<table width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:14px 18px;border-radius:6px">` +
@@ -374,7 +374,7 @@ Deno.serve(async (req: Request) => {
           (window ? `Event window: ${window}\n` : '') +
           (personalWindow ? `Your slot: ${personalWindow}\n` : '') +
           `Address: 4911 Warner Ave #210, Huntington Beach, CA 92649\n\n` +
-          (chefNote ? `Note from Chef: ${chefNote}\n\n` : '') +
+          (chefNote ? `Note from Trainer Center HB: ${chefNote}\n\n` : '') +
           `When you arrive, log in and tap Check in on your dashboard.\n\n` +
           `Dashboard: ${SITE_URL}/vendors/dashboard\n` +
           `Promote your table — share the public lineup with your community: ${lineupUrl}\n`
@@ -468,11 +468,11 @@ Deno.serve(async (req: Request) => {
       if (mErr || !m) return json({ error: mErr?.message || 'member not found' }, 404)
       const subject = 'Welcome to the Trainer Center HB community'
       const body = `<p>Hi ${m.first_name || 'there'},</p>` +
-        `<p>You're in! You can vote for your favorite vendors at any future Vendor Day. Voting opens at the shop on event day — just tap <strong>Review Vendors</strong> on the Vendors page when you're here.</p>` +
-        `<p><strong>Vendor Day cadence:</strong> last Friday of every month.</p>` +
+        `<p>You're in! You can vote for your favorite vendors at any future TC's Beach City Trade Night. Voting opens at the shop on event day — just tap <strong>Review Vendors</strong> on the Vendors page when you're here.</p>` +
+        `<p><strong>Cadence:</strong> last Friday of every month.</p>` +
         `<p>We'll send you a reminder a few days before the next one. No spam, no list-selling — just shop news.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors" style="display:inline-block;background:#16a34a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">See Vendors page</a></p>`
-      await sendResendEmail([m.email], subject, wrapHtml(body), `Welcome to Trainer Center HB, ${m.first_name || ''}!\n\nVendor Day = last Friday of every month. Vote at the shop on event day.\n\n${SITE_URL}/vendors`)
+      await sendResendEmail([m.email], subject, wrapHtml(body), `Welcome to Trainer Center HB, ${m.first_name || ''}!\n\nTC's Beach City Trade Night = last Friday of every month. Vote at the shop on event day.\n\n${SITE_URL}/vendors`)
       return json({ ok: true, sent: ['member'] })
     }
 
@@ -482,12 +482,12 @@ Deno.serve(async (req: Request) => {
       if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
       const v = app.vendor
       const e = app.event
-      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'an upcoming Vendor Day'
-      const eventTitle = e?.title || 'Vendor Day'
+      const dateStr = e?.event_date ? formatEventDate(e.event_date) : "an upcoming TC's Beach City Trade Night"
+      const eventTitle = e?.title || "TC's Beach City Trade Night"
 
       if (type === 'application_received') {
         const vendorSubject = `Got your application for ${dateStr}`
-        const vendorBody = `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Chef will confirm your spot soon.</p>`
+        const vendorBody = `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Trainer Center HB will confirm your spot soon.</p>`
         await sendResendEmail([v.email], vendorSubject,
           wrapHtml(vendorBody + `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`),
           `${vendorSubject}\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
@@ -513,7 +513,7 @@ Deno.serve(async (req: Request) => {
         const vendorTimes = vendorTimeLine(e || {})
         const vendorNote = e?.vendor_note || ''
         const body = `<p>Hi ${v.name},</p>` +
-          `<p>Chef approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>${vendorTimes ? ` from <strong>${vendorTimes}</strong>` : ''}.</p>` +
+          `<p>Trainer Center HB approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>${vendorTimes ? ` from <strong>${vendorTimes}</strong>` : ''}.</p>` +
           (vendorNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:11px;font-weight:800;color:#166534;letter-spacing:0.06em">FROM CHEF</p><p style="margin:0;font-size:14px;color:#166534;line-height:1.5">${vendorNote}</p></td></tr></table>` : '') +
           `<p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>` +
           (app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : '') +
@@ -524,14 +524,14 @@ Deno.serve(async (req: Request) => {
           `</td></tr></table>` +
           `<p style="margin-top:8px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
         const text = `Approved for ${eventTitle} on ${dateStr}${vendorTimes ? ` from ${vendorTimes}` : ''}.\n\n` +
-          (vendorNote ? `From Chef: ${vendorNote}\n\n` : '') +
+          (vendorNote ? `From Trainer Center HB: ${vendorNote}\n\n` : '') +
           `Promote your table — your logo and socials are live on the public lineup page. Share with your community:\n${lineupUrl}\n\n` +
           `Dashboard: ${SITE_URL}/vendors/dashboard`
         await sendResendEmail([v.email], subject, wrapHtml(body), text)
       } else if (status === 'declined') {
-        const subject = `About your Vendor Day application`
-        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future Vendor Days. We appreciate your interest in Trainer Center HB.</p>`
-        await sendResendEmail([v.email], subject, wrapHtml(body), `About your Vendor Day application: not approved this time.`)
+        const subject = `About your TC's Beach City Trade Night application`
+        const body = `<p>Hi ${v.name},</p><p>Thanks for applying for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. We aren't able to accommodate you this time.</p>${app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #999;padding:10px 14px">${app.decision_note}</p>` : ''}<p>You're welcome to apply for future dates. We appreciate your interest in Trainer Center HB.</p>`
+        await sendResendEmail([v.email], subject, wrapHtml(body), `About your TC's Beach City Trade Night application: not approved this time.`)
       } else {
         return json({ ok: true, skipped: 'not a notify-worthy status' })
       }
@@ -550,8 +550,8 @@ Deno.serve(async (req: Request) => {
       const { data: ev, error: eErr } = await supabase.from('events').select('id, title, event_date').eq('id', payload.event_id).single()
       if (eErr || !ev) return json({ error: eErr?.message || 'event not found' }, 404)
 
-      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'an upcoming Vendor Day'
-      const eventTitle = ev.title || 'Vendor Day'
+      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : "an upcoming TC's Beach City Trade Night"
+      const eventTitle = ev.title || "TC's Beach City Trade Night"
       const reason = (payload.reason || '').trim()
       const isCancel = payload.optout_kind === 'vendor_cancelled'
 
@@ -584,8 +584,8 @@ Deno.serve(async (req: Request) => {
       const { data: apps, error: aErr } = await supabase.from('vendor_applications').select('*, vendor:vendors(*)').eq('event_id', payload.event_id).in('status', ['approved', 'pending'])
       if (aErr) return json({ error: aErr.message }, 500)
 
-      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'a Vendor Day'
-      const eventTitle = ev.title || 'Vendor Day'
+      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : "a TC's Beach City Trade Night"
+      const eventTitle = ev.title || "TC's Beach City Trade Night"
       const reason = payload.reason || ev.cancellation_reason || ''
 
       const sentTo: string[] = []
@@ -596,7 +596,7 @@ Deno.serve(async (req: Request) => {
         const body = `<p>Hi ${v.name},</p>` +
           `<p>We had to cancel <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. ${a.status === 'approved' ? 'You had been approved as a vendor for this date — apologies for the change.' : 'Your application is no longer needed for this date.'}</p>` +
           (reason ? `<p style="font-size:14px;background:#fef2f2;border-left:3px solid #dc2626;padding:10px 14px">${reason}</p>` : '') +
-          `<p>The next Vendor Day is on the calendar. We'll see you there.</p>` +
+          `<p>The next TC's Beach City Trade Night is on the calendar. We'll see you there.</p>` +
           `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">See upcoming dates</a></p>`
         await sendResendEmail([v.email], subject, wrapHtml(body), `${subject}\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
         sentTo.push(v.email)
@@ -688,8 +688,8 @@ Deno.serve(async (req: Request) => {
         if (ev) {
           const dateStr = ev.event_date ? formatEventDate(ev.event_date) : ''
           const timeLine = vendorTimeLine(ev)
-          eventBanner = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0"><tr><td style="background:#fff7ed;border-left:4px solid #ea580c;padding:14px 18px;border-radius:6px"><p style="margin:0;font-size:13px;font-weight:700;color:#9a3412">${ev.title || 'Vendor Day'}</p><p style="margin:4px 0 0;font-size:13px;color:#9a3412">${dateStr}${timeLine ? ` · ${timeLine}` : ''}</p></td></tr></table>`
-          eventTextBanner = `\n\n${ev.title || 'Vendor Day'} · ${dateStr}${timeLine ? ` · ${timeLine}` : ''}\n`
+          eventBanner = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0"><tr><td style="background:#fff7ed;border-left:4px solid #ea580c;padding:14px 18px;border-radius:6px"><p style="margin:0;font-size:13px;font-weight:700;color:#9a3412">${ev.title || "TC's Beach City Trade Night"}</p><p style="margin:4px 0 0;font-size:13px;color:#9a3412">${dateStr}${timeLine ? ` · ${timeLine}` : ''}</p></td></tr></table>`
+          eventTextBanner = `\n\n${ev.title || "TC's Beach City Trade Night"} · ${dateStr}${timeLine ? ` · ${timeLine}` : ''}\n`
         }
       }
 
