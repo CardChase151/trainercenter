@@ -10361,6 +10361,18 @@ const VENDOR_EXPERIENCE_LABELS = {
   '10_to_50': '10 to 50 shows',
   '50_plus':  '50 plus shows',
 };
+
+// Staff-curated experience rating (separate from vendor self-report).
+// Five tiers, cool → hot color progression that reads as "more experienced
+// = more prestigious." Order matters — dropdown renders in this order.
+const STAFF_RATINGS = [
+  { key: 'beginner',     label: 'Beginner',     color: '#9ca3af' }, // gray
+  { key: 'novice',       label: 'Novice',       color: '#3b82f6' }, // blue
+  { key: 'intermediate', label: 'Intermediate', color: '#16a34a' }, // green
+  { key: 'advanced',     label: 'Advanced',     color: '#ea580c' }, // amber/orange
+  { key: 'expert',       label: 'Expert',       color: '#7c3aed' }, // purple
+];
+const STAFF_RATING_BY_KEY = STAFF_RATINGS.reduce((acc, r) => { acc[r.key] = r; return acc; }, {});
 function vendorMatchesQuery(vendor, query) {
   if (!query) return true;
   if (!vendor) return false;
@@ -12079,7 +12091,10 @@ function EmailProgressDots({ emails = [], eventId, eventLabel }) {
   );
 }
 
-function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent, onOpenNotes }) {
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent, onOpenNotes, onRatingChange }) {
+  const ratingMeta = STAFF_RATING_BY_KEY[vendor.staff_experience_rating];
+  const ratingColor = ratingMeta?.color || '#d1d5db';
+  const ratingBg = ratingMeta ? `${ratingMeta.color}15` : '#fff';
   const v = vendor;
   // Desktop: split the body in half (identity left, campaign right). Mobile
   // collapses to a single column so nothing gets squeezed.
@@ -12140,7 +12155,7 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
           </div>
         </div>
 
-        {(actions || onOpenNotes) && (
+        {(actions || onOpenNotes || onRatingChange) && (
           <div
             onClick={e => e.stopPropagation()}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}
@@ -12159,6 +12174,31 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
               >
                 <FileEdit size={12} /> Notes
               </button>
+            )}
+            {onRatingChange && (
+              <select
+                value={vendor.staff_experience_rating || ''}
+                onChange={e => onRatingChange(vendor.id, e.target.value || null)}
+                title="Staff experience rating"
+                style={{
+                  fontSize: '0.78rem', fontWeight: '800',
+                  color: ratingMeta ? ratingColor : '#6b7280',
+                  background: ratingBg,
+                  border: `1px solid ${ratingMeta ? ratingColor : '#d1d5db'}`,
+                  padding: '6px 10px', borderRadius: '6px',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23${(ratingMeta ? ratingColor : '#6b7280').replace('#', '')}' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                  paddingRight: '24px',
+                }}
+              >
+                <option value="">Rate…</option>
+                {STAFF_RATINGS.map(r => (
+                  <option key={r.key} value={r.key}>{r.label}</option>
+                ))}
+              </select>
             )}
             {actions}
           </div>
@@ -14616,6 +14656,29 @@ function StaffVendorsPage({ isMobile, staff }) {
     refresh();
   };
 
+  // Staff-curated experience rating. Optimistic local update so the
+  // dropdown reflects the change immediately; on DB error we revert.
+  const setVendorRating = async (vendorId, rating) => {
+    const prevValue = allVendors.find(v => v.id === vendorId)?.staff_experience_rating;
+    setAllVendors(prev => prev.map(v => v.id === vendorId ? { ...v, staff_experience_rating: rating } : v));
+    // Also update the joined vendor on any pending application rows so the
+    // pending tab reflects the change without a refetch.
+    setPending(prev => prev.map(p => p.vendor && p.vendor.id === vendorId
+      ? { ...p, vendor: { ...p.vendor, staff_experience_rating: rating } }
+      : p));
+    const { error } = await supabase
+      .from('vendors')
+      .update({ staff_experience_rating: rating })
+      .eq('id', vendorId);
+    if (error) {
+      alert('Could not save rating: ' + error.message);
+      setAllVendors(prev => prev.map(v => v.id === vendorId ? { ...v, staff_experience_rating: prevValue } : v));
+      setPending(prev => prev.map(p => p.vendor && p.vendor.id === vendorId
+        ? { ...p, vendor: { ...p.vendor, staff_experience_rating: prevValue } }
+        : p));
+    }
+  };
+
   const setVendorStatus = async (vendorId, status) => {
     // Capture the previous status so we only fire the partnership-approved
     // email on a real pending → approved transition.
@@ -14757,12 +14820,13 @@ function StaffVendorsPage({ isMobile, staff }) {
               onStatusChange={setVendorStatus}
               onOpenDetail={setDetailVendor}
               onOpenNotes={setNotesVendor}
+              onRatingChange={setVendorRating}
               isMobile={isMobile}
             />
           )}
 
           {!loading && tab === 'pending' && (
-            <PendingApplicationsList items={pending} onDecide={decideApplication} isMobile={isMobile} />
+            <PendingApplicationsList items={pending} onDecide={decideApplication} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'roster' && (
@@ -14770,7 +14834,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} onOpenNotes={setNotesVendor} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -14947,7 +15011,7 @@ const voteTH = { textAlign: 'left', padding: '6px 8px', fontSize: '0.75rem', fon
 const voteTD = { padding: '8px', verticalAlign: 'top' };
 
 // ─── Pending applications tab ─────────────────────────────
-function PendingApplicationsList({ items, onDecide, isMobile }) {
+function PendingApplicationsList({ items, onDecide, onOpenNotes, onRatingChange, isMobile }) {
   const [search, setSearch] = useState('');
   if (items.length === 0) {
     return (
@@ -14987,7 +15051,7 @@ function PendingApplicationsList({ items, onDecide, isMobile }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map(app => (
-            <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} isMobile={isMobile} />
+            <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} onOpenNotes={onOpenNotes} onRatingChange={onRatingChange} isMobile={isMobile} />
           ))}
         </div>
       )}
@@ -14995,13 +15059,16 @@ function PendingApplicationsList({ items, onDecide, isMobile }) {
   );
 }
 
-function PendingApplicationCard({ app, onDecide, isMobile }) {
+function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, isMobile }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const v = app.vendor || {};
   const ev = app.event || {};
   const eventDate = ev.event_date ? new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '';
   const profilePending = v.status !== 'approved';
+  const ratingMeta = STAFF_RATING_BY_KEY[v.staff_experience_rating];
+  const ratingColor = ratingMeta?.color || '#d1d5db';
+  const ratingBg = ratingMeta ? `${ratingMeta.color}15` : '#fff';
 
   const handle = async (status) => {
     setBusy(true);
@@ -15015,7 +15082,7 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
       padding: isMobile ? '16px' : '20px 24px',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', minWidth: 0, flex: 1 }}>
           {/* Always render a circular slot. "N/A" placeholder for legacy vendors. */}
           <div style={{
             width: '48px', height: '48px', flexShrink: 0,
@@ -15070,6 +15137,50 @@ function PendingApplicationCard({ app, onDecide, isMobile }) {
             )}
           </div>
         </div>
+        {(onOpenNotes || onRatingChange) && v.id && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+            {onOpenNotes && (
+              <button
+                type="button"
+                onClick={() => onOpenNotes(v)}
+                style={{
+                  fontSize: '0.78rem', background: '#fff', color: '#374151',
+                  border: '1px solid #d1d5db', padding: '6px 12px',
+                  borderRadius: '6px', fontWeight: '700', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <FileEdit size={12} /> Notes
+              </button>
+            )}
+            {onRatingChange && (
+              <select
+                value={v.staff_experience_rating || ''}
+                onChange={e => onRatingChange(v.id, e.target.value || null)}
+                title="Staff experience rating"
+                style={{
+                  fontSize: '0.78rem', fontWeight: '800',
+                  color: ratingMeta ? ratingColor : '#6b7280',
+                  background: ratingBg,
+                  border: `1px solid ${ratingMeta ? ratingColor : '#d1d5db'}`,
+                  padding: '6px 10px', borderRadius: '6px',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23${(ratingMeta ? ratingColor : '#6b7280').replace('#', '')}' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                  paddingRight: '24px',
+                }}
+              >
+                <option value="">Rate…</option>
+                {STAFF_RATINGS.map(r => (
+                  <option key={r.key} value={r.key}>{r.label}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
       </div>
 
       {profilePending && (
@@ -15850,7 +15961,7 @@ function ApplicationStatusBadge({ status }) {
 // ─── Newly applying vendors (vendors.status === 'pending') ─
 // Brand-new signups awaiting partner approval. Distinct from "Pending requests"
 // which are already-approved vendors applying to a specific event date.
-function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpenNotes, isMobile }) {
+function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, isMobile }) {
   const [search, setSearch] = useState('');
   const fmtDate = (iso) => {
     if (!iso) return '';
@@ -15889,6 +16000,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpe
           isMobile={isMobile}
           onClick={() => onOpenDetail && onOpenDetail(v)}
           onOpenNotes={onOpenNotes}
+          onRatingChange={onRatingChange}
           statusBadge={
             <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
               Applied {fmtDate(v.created_at)}
@@ -15921,7 +16033,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpe
   );
 }
 
-function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, onOpenNotes, isMobile }) {
+function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, isMobile }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
 
@@ -16045,6 +16157,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
             nextEvent={vendorNextEvent[v.id] || null}
             onClick={() => onOpenDetail && onOpenDetail(v)}
             onOpenNotes={onOpenNotes}
+            onRatingChange={onRatingChange}
             statusBadge={badgeFor(v.status)}
             decisionLine={decisionFor(v)}
             actions={
