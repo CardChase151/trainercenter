@@ -9113,6 +9113,8 @@ function VendorStatusBadge({ status }) {
 function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
   const [showApply, setShowApply] = useState(false); // open the apply modal
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showCancel, setShowCancel] = useState(false); // post-approval cancel modal
+  const [optingOut, setOptingOut] = useState(false);
 
   const eventDate = new Date(event.event_date + 'T12:00:00');
   const dateStr = eventDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -9146,6 +9148,70 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       type: 'application_received',
       application_id: data.id,
       is_first_time: !!isFirstApplication,
+    });
+    return data;
+  };
+
+  // Pre-application opt-out: vendor says "not interested in this date" without
+  // ever applying. Inserts a not_interested row so the signup-track drip filter
+  // (which excludes any vendor with a row for this event) skips them. Times
+  // are placeholders to satisfy the NOT NULL constraint.
+  const markNotInterested = async () => {
+    if (!window.confirm(`Mark yourself NOT interested in ${event.title || 'this Vendor Day'} on ${dateStr}? You'll stop getting reminder emails for this date. You can still apply later if you change your mind.`)) {
+      return;
+    }
+    setOptingOut(true);
+    try {
+      const placeholderStart = event.vendor_start_time || event.start_time || '12:00:00';
+      const placeholderEnd = event.vendor_end_time || event.end_time || '17:00:00';
+      const { data, error: insertError } = await supabase
+        .from('vendor_applications')
+        .insert({
+          vendor_id: vendorId,
+          event_id: event.id,
+          status: 'not_interested',
+          requested_start_time: placeholderStart,
+          requested_end_time: placeholderEnd,
+        })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+      onApplied(data);
+      sendVendorEmail({
+        type: 'vendor_optout_notify',
+        vendor_id: vendorId,
+        event_id: event.id,
+        optout_kind: 'not_interested',
+      });
+    } catch (err) {
+      alert('Could not mark not interested: ' + (err.message || err));
+    }
+    setOptingOut(false);
+  };
+
+  // Post-approval cancellation: vendor was approved and now bails. Flips the
+  // existing row from 'approved' to 'vendor_cancelled' so the lineup-track
+  // drip filter (status = 'approved') skips them. Reason is required.
+  const cancelApproval = async (reason) => {
+    const trimmed = (reason || '').trim();
+    if (!trimmed) throw new Error('Please share a quick reason so Chef can plan around it.');
+    const { data, error: updateError } = await supabase
+      .from('vendor_applications')
+      .update({
+        status: 'vendor_cancelled',
+        vendor_note: trimmed,
+      })
+      .eq('id', application.id)
+      .select()
+      .single();
+    if (updateError) throw updateError;
+    onApplied(data);
+    sendVendorEmail({
+      type: 'vendor_optout_notify',
+      vendor_id: vendorId,
+      event_id: event.id,
+      optout_kind: 'vendor_cancelled',
+      reason: trimmed,
     });
     return data;
   };
@@ -9192,10 +9258,30 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         </span>
       );
     } else {
+      // Apply + small "not interested" link beneath. Both only meaningful for
+      // future events; past events don't reach here because the parent list
+      // hides past events from the "no application" branch.
       actionEl = (
-        <button onClick={() => setShowApply(true)} style={primaryBtnStyle('#C8102E')}>
-          <Plus size={16} /> Apply for this date
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: '6px' }}>
+          <button onClick={() => setShowApply(true)} style={primaryBtnStyle('#C8102E')}>
+            <Plus size={16} /> Apply for this date
+          </button>
+          {!isPast && (
+            <button
+              onClick={markNotInterested}
+              disabled={optingOut}
+              style={{
+                background: 'none', border: 'none',
+                color: '#888', fontSize: '0.78rem', fontWeight: '600',
+                cursor: optingOut ? 'wait' : 'pointer',
+                padding: '4px 6px', fontFamily: 'inherit',
+                textDecoration: 'underline',
+              }}
+            >
+              {optingOut ? 'Saving…' : "I'm not interested in this date"}
+            </button>
+          )}
+        </div>
       );
     }
   } else if (application.status === 'pending') {
@@ -9204,6 +9290,10 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     actionEl = statusPill('#fee2e2', '#991b1b', <AlertCircle size={14} />, 'Not approved this time');
   } else if (application.status === 'cancelled') {
     actionEl = statusPill('#f3f4f6', '#6b7280', <X size={14} />, 'Cancelled');
+  } else if (application.status === 'not_interested') {
+    actionEl = statusPill('#f3f4f6', '#6b7280', <X size={14} />, "You're not interested");
+  } else if (application.status === 'vendor_cancelled') {
+    actionEl = statusPill('#fef2f2', '#991b1b', <X size={14} />, 'You cancelled');
   } else if (application.status === 'approved') {
     if (isToday && !attendance) {
       // Event day with no check-in yet
@@ -9239,11 +9329,29 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     } else {
       // Future approved — surface the start time so the vendor knows when
       // to show up. Falls back to a generic message if no start_time set.
+      // Pair with a small "can't make it?" link so plans-changed cancels
+      // don't require an email back-and-forth.
       const startStr = formatTime12h(event.start_time);
-      actionEl = statusPill(
-        '#f0fdf4', '#15803d',
-        <CheckCircle2 size={14} />,
-        startStr ? `Approved — starts ${startStr}` : 'Approved — see you there'
+      actionEl = (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: '6px' }}>
+          {statusPill(
+            '#f0fdf4', '#15803d',
+            <CheckCircle2 size={14} />,
+            startStr ? `Approved — starts ${startStr}` : 'Approved — see you there'
+          )}
+          <button
+            onClick={() => setShowCancel(true)}
+            style={{
+              background: 'none', border: 'none',
+              color: '#888', fontSize: '0.78rem', fontWeight: '600',
+              cursor: 'pointer',
+              padding: '4px 6px', fontFamily: 'inherit',
+              textDecoration: 'underline',
+            }}
+          >
+            Can't make it? Let Chef know
+          </button>
+        </div>
       );
     }
   }
@@ -9331,7 +9439,111 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           }}
         />
       )}
+      {showCancel && (
+        <CancelApprovedModal
+          event={event}
+          dateStr={dateStr}
+          onClose={() => setShowCancel(false)}
+          onSubmit={cancelApproval}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Cancel-approved modal ────────────────────────────────
+// Vendor was approved for a Vendor Day and now needs to bail. Requires a
+// reason (per Chef + Chase's decision: opt-out is one-click, cancellation
+// needs context so the lineup change can be planned around).
+function CancelApprovedModal({ event, dateStr, onClose, onSubmit }) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!reason.trim()) {
+      setError('A quick reason is required so Chef can plan around the change.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit(reason);
+      onClose();
+    } catch (err) {
+      setError(err.message || String(err));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: '16px',
+    }}>
+      <form onSubmit={handleSubmit} style={{
+        backgroundColor: '#fff', borderRadius: '14px',
+        padding: '24px 26px', maxWidth: '480px', width: '100%',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+      }}>
+        <h2 style={{ margin: '0 0 6px', fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a' }}>
+          Can't make {event.title || 'Vendor Day'}?
+        </h2>
+        <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#666', lineHeight: '1.5' }}>
+          {dateStr}. Let Chef know what's going on so the lineup can be adjusted. You'll stop getting reminders for this date.
+        </p>
+        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
+          Reason <span style={{ color: '#C8102E' }}>*</span>
+        </label>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={4}
+          placeholder="e.g. Family emergency, double-booked, illness…"
+          autoFocus
+          style={{
+            width: '100%', padding: '10px 12px',
+            border: '1px solid #e5e7eb', borderRadius: '8px',
+            fontSize: '0.9rem', fontFamily: 'inherit', lineHeight: '1.5',
+            resize: 'vertical', boxSizing: 'border-box',
+          }}
+        />
+        {error && (
+          <p style={{ color: '#C8102E', fontSize: '0.82rem', margin: '8px 0 0' }}>{error}</p>
+        )}
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '18px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              background: 'none', border: '1px solid #e5e7eb',
+              borderRadius: '8px', padding: '10px 18px',
+              fontSize: '0.9rem', fontWeight: '700',
+              color: '#374151', cursor: submitting ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Never mind
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              background: submitting ? '#ccc' : '#C8102E', color: '#fff',
+              border: 'none', borderRadius: '8px', padding: '10px 18px',
+              fontSize: '0.9rem', fontWeight: '800',
+              cursor: submitting ? 'wait' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {submitting ? 'Sending…' : 'Cancel my spot'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

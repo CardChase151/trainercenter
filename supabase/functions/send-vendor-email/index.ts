@@ -42,7 +42,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast' | 'marketing_contacts_broadcast'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast' | 'marketing_contacts_broadcast' | 'vendor_optout_notify'
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
@@ -51,6 +51,11 @@ type Payload = {
   event_id?: string
   reason?: string
   is_first_time?: boolean
+  // 'vendor_optout_notify': flag separates pre-application opt-out from
+  // post-approval cancellation so the staff email reads at the right
+  // urgency. 'reason' carries the vendor's note (required for cancel,
+  // optional for opt-out).
+  optout_kind?: 'not_interested' | 'vendor_cancelled'
   // Fields used by 'vendor_broadcast': flexible Chef-composed comms blast
   audience?: 'all' | 'approved_all' | 'pending_all' | 'approved_not_applied' | 'applied_any' | 'approved_for_event' | 'pending_for_event'
   subject?: string
@@ -531,6 +536,45 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true, skipped: 'not a notify-worthy status' })
       }
       return json({ ok: true, sent: ['vendor'] })
+    }
+
+    if (type === 'vendor_optout_notify') {
+      // Vendor self-service opt-out or cancellation. Notifies STAFF only
+      // (Chef + Chase) so they see the lineup change without the vendor
+      // having to write a separate email.
+      if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
+      if (!payload.event_id) return json({ error: 'event_id required' }, 400)
+      if (!payload.optout_kind) return json({ error: 'optout_kind required' }, 400)
+      const { data: v, error: vErr } = await supabase.from('vendors').select('id, name, email').eq('id', payload.vendor_id).single()
+      if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
+      const { data: ev, error: eErr } = await supabase.from('events').select('id, title, event_date').eq('id', payload.event_id).single()
+      if (eErr || !ev) return json({ error: eErr?.message || 'event not found' }, 404)
+
+      const dateStr = ev.event_date ? formatEventDate(ev.event_date) : 'an upcoming Vendor Day'
+      const eventTitle = ev.title || 'Vendor Day'
+      const reason = (payload.reason || '').trim()
+      const isCancel = payload.optout_kind === 'vendor_cancelled'
+
+      const subject = isCancel
+        ? `Vendor cancelled: ${v.name} pulled out of ${dateStr}`
+        : `Not interested: ${v.name} won't vend ${dateStr}`
+      const lead = isCancel
+        ? `<p style="margin:0 0 16px"><strong>${v.name}</strong> was <strong>approved</strong> for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong> and just <strong>cancelled</strong>. The lineup is one vendor shorter.</p>`
+        : `<p style="margin:0 0 16px"><strong>${v.name}</strong> marked themselves <strong>not interested</strong> in <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>. They won't get any more drip emails about this date.</p>`
+      const body = lead +
+        (reason
+          ? `<div style="background:#f9fafb;border-left:4px solid #6b7280;padding:14px 18px;border-radius:6px;margin:0 0 16px"><p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#374151;letter-spacing:0.04em;text-transform:uppercase">Reason</p><p style="margin:0;font-size:14px;color:#1f2937;line-height:1.5;white-space:pre-wrap">${reason.replace(/</g, '&lt;')}</p></div>`
+          : '') +
+        `<p style="margin:16px 0 0;font-size:13px;color:#666">${v.email}</p>` +
+        `<p style="margin:24px 0 0"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open admin</a></p>`
+      const text = `${subject}\n\n` +
+        (isCancel
+          ? `${v.name} was approved for ${eventTitle} on ${dateStr} and just cancelled.\n\n`
+          : `${v.name} marked themselves not interested in ${eventTitle} on ${dateStr}.\n\n`) +
+        (reason ? `Reason: ${reason}\n\n` : '') +
+        `${v.email}\n\nAdmin: ${SITE_URL}/staff/vendors`
+      await sendResendEmail(STAFF_EMAILS, subject, wrapHtml(body), text)
+      return json({ ok: true, sent: ['staff'] })
     }
 
     if (type === 'event_cancelled') {
