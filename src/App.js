@@ -16846,7 +16846,10 @@ function EventTimeMapPage({ isMobile, staff }) {
   const handleDownloadChecklist = async () => {
     try {
       const jspdfMod = await import('jspdf');
-      await import('jspdf-autotable');
+      // jspdf-autotable v5 no longer patches doc.autoTable; call it as a
+      // function with doc as the first arg.
+      const autoTableMod = await import('jspdf-autotable');
+      const autoTable = autoTableMod.default || autoTableMod.autoTable || autoTableMod;
       const JsPDF = jspdfMod.jsPDF || jspdfMod.default;
       const doc = new JsPDF({ unit: 'pt', format: 'letter' });
 
@@ -16885,7 +16888,7 @@ function EventTimeMapPage({ isMobile, staff }) {
         return [' ', s.name, slot, prefilled, ''];
       });
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: margin + 72,
         margin: { left: margin, right: margin },
         head: [['✓', 'Vendor', 'Requested slot', 'Actual arrival', 'Notes']],
