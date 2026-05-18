@@ -17230,6 +17230,231 @@ function StaffPrintablesPage({ isMobile, staff }) {
   );
 }
 
+// ─── Vendor one-click respond page ────────────────────────
+// Public, token-based. Hit from drip emails:
+//   /vendors/respond?token=<vendor.response_token>&event=<event_id>&action=not_interested|cancel
+// Calls the vendor-event-respond edge function — mode=load first to fetch
+// vendor + event details for display, then mode=submit on confirm. The token
+// IS the credential — no login required.
+function VendorRespondPage({ isMobile }) {
+  const [searchParams] = useSearchParams();
+  const token  = searchParams.get('token');
+  const eventId = searchParams.get('event');
+  const action = searchParams.get('action'); // 'not_interested' | 'cancel'
+
+  // loading | invalid | preview | already_done | submitting | done | error
+  const [phase, setPhase] = useState('loading');
+  const [vendor, setVendor] = useState(null);
+  const [event, setEvent] = useState(null);
+  const [existingStatus, setExistingStatus] = useState(null);
+  const [reason, setReason] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const fnUrl = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/vendor-event-respond`;
+  const anonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+  useEffect(() => {
+    if (!token || !eventId || (action !== 'not_interested' && action !== 'cancel')) {
+      setPhase('invalid');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ mode: 'load', token, event_id: eventId, action }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) { setErrorMsg(data?.error || 'Could not load this link.'); setPhase('invalid'); return; }
+        setVendor(data.vendor);
+        setEvent(data.event);
+        setExistingStatus(data.existing_status);
+        if (action === 'not_interested' && (data.existing_status === 'not_interested' || data.existing_status === 'vendor_cancelled')) {
+          setPhase('already_done');
+        } else if (action === 'cancel' && data.existing_status === 'vendor_cancelled') {
+          setPhase('already_done');
+        } else if (action === 'cancel' && data.existing_status !== 'approved') {
+          setErrorMsg('This link is for cancelling an approved spot. You don\'t have an approved application for this event.');
+          setPhase('error');
+        } else {
+          setPhase('preview');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setErrorMsg(err.message || 'Could not reach the server.');
+        setPhase('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token, eventId, action, fnUrl, anonKey]);
+
+  const submit = async () => {
+    setErrorMsg('');
+    if (action === 'cancel' && !reason.trim()) {
+      setErrorMsg('A quick reason is required so Trainer Center HB can plan around the change.');
+      return;
+    }
+    setPhase('submitting');
+    try {
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
+          mode: 'submit',
+          token,
+          event_id: eventId,
+          action,
+          reason: action === 'cancel' ? reason.trim() : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErrorMsg(data?.error || 'Could not save.'); setPhase('error'); return; }
+      setPhase('done');
+    } catch (err) {
+      setErrorMsg(err.message || 'Could not reach the server.');
+      setPhase('error');
+    }
+  };
+
+  const dateStr = event?.event_date
+    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : '';
+  const eventTitle = event?.title || "TC's Beach City Trade Night";
+
+  const cardCss = {
+    backgroundColor: '#fff',
+    borderRadius: '16px',
+    border: '1px solid #eee',
+    padding: isMobile ? '28px 22px' : '40px',
+    maxWidth: '560px',
+    margin: '0 auto',
+  };
+  const titleCss = { fontSize: isMobile ? '1.4rem' : '1.7rem', fontWeight: 700, color: '#1a1a1a', margin: '0 0 8px 0', textAlign: 'center' };
+  const subtitleCss = { fontSize: '0.95rem', color: '#666', textAlign: 'center', margin: '0 0 24px 0' };
+  const bodyCss = { fontSize: '0.95rem', color: '#555', lineHeight: 1.65, margin: '0 0 18px 0' };
+  const primaryBtn = {
+    background: '#C8102E', color: '#fff', border: 'none',
+    padding: '14px 28px', borderRadius: '10px', fontSize: '1rem',
+    fontWeight: 800, cursor: 'pointer', letterSpacing: '0.3px', width: '100%',
+    fontFamily: 'inherit',
+  };
+  const linkCss = { color: '#C8102E', fontWeight: 600, textDecoration: 'none' };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginTop: '40px', marginBottom: '64px' }}>
+        <div style={cardCss}>
+          {phase === 'loading' && (
+            <p style={{ ...bodyCss, textAlign: 'center' }}>Loading…</p>
+          )}
+
+          {phase === 'invalid' && (
+            <>
+              <h1 style={titleCss}>Link not found</h1>
+              <p style={bodyCss}>
+                This link is invalid or expired. If you'd like to update your Trainer Center HB vendor preferences,
+                log in to your dashboard or reply to any of our emails.
+              </p>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/vendors/dashboard" style={linkCss}>Open dashboard</Link>
+              </p>
+            </>
+          )}
+
+          {phase === 'already_done' && (
+            <>
+              <h1 style={titleCss}>Already saved</h1>
+              <p style={bodyCss}>
+                {action === 'cancel'
+                  ? <>You've already cancelled your spot at <strong>{eventTitle}</strong> on <strong>{dateStr}</strong>. Trainer Center HB has been notified.</>
+                  : <>You've already marked yourself not interested in <strong>{eventTitle}</strong> on <strong>{dateStr}</strong>. You won't get more reminders for this date.</>}
+              </p>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/vendors/dashboard" style={linkCss}>Open dashboard</Link>
+              </p>
+            </>
+          )}
+
+          {phase === 'preview' && action === 'not_interested' && (
+            <>
+              <h1 style={titleCss}>Not interested in this date?</h1>
+              <p style={subtitleCss}>{vendor?.name ? `Hi ${vendor.name}` : 'Hi there'} — confirm and we'll stop reminding you about this one.</p>
+              <p style={bodyCss}>
+                You're about to mark yourself <strong>not interested</strong> in <strong>{eventTitle}</strong> on <strong>{dateStr}</strong>. You'll stop getting reminder emails for this date. You can still apply later if you change your mind.
+              </p>
+              <button onClick={submit} style={primaryBtn}>Yes, stop reminding me</button>
+            </>
+          )}
+
+          {phase === 'preview' && action === 'cancel' && (
+            <>
+              <h1 style={titleCss}>Can't make it?</h1>
+              <p style={subtitleCss}>{vendor?.name ? `Hi ${vendor.name}` : 'Hi there'} — let Trainer Center HB know what's going on.</p>
+              <p style={bodyCss}>
+                You're cancelling your approved spot at <strong>{eventTitle}</strong> on <strong>{dateStr}</strong>. The lineup will be adjusted and you'll stop getting reminders for this date.
+              </p>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
+                Reason <span style={{ color: '#C8102E' }}>*</span>
+              </label>
+              <textarea
+                value={reason}
+                onChange={e => setReason(e.target.value)}
+                rows={4}
+                placeholder="e.g. Family emergency, double-booked, illness…"
+                style={{
+                  width: '100%', padding: '10px 12px', boxSizing: 'border-box',
+                  border: '1px solid #e5e7eb', borderRadius: '8px',
+                  fontSize: '0.95rem', fontFamily: 'inherit', lineHeight: '1.5',
+                  resize: 'vertical', marginBottom: '14px',
+                }}
+              />
+              {errorMsg && <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px' }}>{errorMsg}</p>}
+              <button onClick={submit} style={primaryBtn}>Cancel my spot</button>
+            </>
+          )}
+
+          {phase === 'submitting' && (
+            <p style={{ ...bodyCss, textAlign: 'center' }}>Saving…</p>
+          )}
+
+          {phase === 'done' && (
+            <>
+              <h1 style={titleCss}>{action === 'cancel' ? 'Cancelled — got it.' : 'Got it.'}</h1>
+              <p style={bodyCss}>
+                {action === 'cancel'
+                  ? <>Your spot at <strong>{eventTitle}</strong> on <strong>{dateStr}</strong> has been cancelled. Trainer Center HB has been notified and will adjust the lineup.</>
+                  : <>You're marked not interested in <strong>{eventTitle}</strong> on <strong>{dateStr}</strong>. We'll stop reminding you about this date.</>}
+              </p>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/vendors/dashboard" style={linkCss}>Open dashboard</Link>
+              </p>
+            </>
+          )}
+
+          {phase === 'error' && (
+            <>
+              <h1 style={titleCss}>Something went wrong</h1>
+              <p style={bodyCss}>{errorMsg || 'Please try again, or open your dashboard to make the change manually.'}</p>
+              <p style={{ textAlign: 'center', margin: 0 }}>
+                <Link to="/vendors/dashboard" style={linkCss}>Open dashboard</Link>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
 function UnsubscribePage({ isMobile }) {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -18122,6 +18347,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage isMobile={isMobile} authUser={staffUser} />} />
         <Route path="/unsubscribe" element={<UnsubscribePage isMobile={isMobile} />} />
+        <Route path="/vendors/respond" element={<VendorRespondPage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
         <Route path="/reminders" element={<RemindersPage isMobile={isMobile} />} />

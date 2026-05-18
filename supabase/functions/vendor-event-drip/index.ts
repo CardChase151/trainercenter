@@ -63,15 +63,30 @@ function activeStep(steps: Step[], daysUntil: number) {
   return steps.find(s => daysUntil >= s.from && daysUntil <= s.to) || null
 }
 
+// Build the per-vendor-per-event tokenized URLs that go in drip emails.
+// - apply: signup CTA (logged-in flow, no token needed; same dashboard route)
+// - notInterested: one-click opt-out (vendor-event-respond?action=not_interested)
+// - cancel: one-click cancel-after-approval page (vendor-event-respond?action=cancel)
+//   Cancel page asks for a reason before submitting.
+function buildLinks(responseToken: string, eventId: string) {
+  const base = `${SITE_URL}/vendors/respond?token=${responseToken}&event=${eventId}`
+  return {
+    apply: `${SITE_URL}/vendors/events`,
+    notInterested: `${base}&action=not_interested`,
+    cancel: `${base}&action=cancel`,
+  }
+}
+
 // Per-step copy. Voice is Trainer Center HB (not "Chef"). Events default to
 // "TC's Beach City Trade Night" when an admin hasn't set a custom title.
 // Signup track: announcement → final-week → last-chance escalation.
 // Lineup track: congrats + logistics at T-21, IG promotion mandate at T-14,
 // pre-event checklist at T-3, day-of warmth at T-0.
-function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendorName: string, vendorTimes: string) {
+function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendorName: string, vendorTimes: string, links: { apply: string; notInterested: string; cancel: string }) {
   const eventLine = vendorTimes ? `${eventTitle} · ${dateStr} · ${vendorTimes}` : `${eventTitle} · ${dateStr}`
-  const dashboard = `${SITE_URL}/vendors/dashboard`
-  const events    = `${SITE_URL}/vendors/events`
+  const events    = links.apply
+  const optOut    = links.notInterested
+  const cancel    = links.cancel
 
   // ─── Track A — signup push (approved partners NOT yet applied) ─────
   if (stepKey === 'signup.t21') {
@@ -81,8 +96,8 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p><strong>Big announcement:</strong> we have an upcoming <strong>${eventLine}</strong>.</p>` +
         `<p>If you'd like to vend, click below to apply. Two clicks and you're on the list for review.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Mark not interested</a> on your dashboard so we stop reminding you.</p>`,
-      text: `Did you hear? We have an upcoming ${eventLine}.\n\nIf you'd like to vend, apply here: ${events}\n\nNot interested in this date? You can mark that on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Mark not interested in one click</a> and we'll stop reminding you.</p>`,
+      text: `Did you hear? We have an upcoming ${eventLine}.\n\nIf you'd like to vend, apply here: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
   if (stepKey === 'signup.t14') {
@@ -92,8 +107,8 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p>Heads up: Trainer Center HB is doing <strong>final reviews this week and next</strong> for <strong>${eventLine}</strong>.</p>` +
         `<p>If you're interested in vending, don't forget to apply.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
-      text: `Trainer Center HB is doing final reviews this week and next for ${eventLine}.\n\nIf you're interested in vending, don't forget to apply: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Let us know in one click</a> and we'll stop reminding you.</p>`,
+      text: `Trainer Center HB is doing final reviews this week and next for ${eventLine}.\n\nIf you're interested in vending, don't forget to apply: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
   if (stepKey === 'signup.t7') {
@@ -103,8 +118,8 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p>We're in the <strong>final week</strong> before <strong>${eventLine}</strong>.</p>` +
         `<p>We've always appreciated you and would love to have you at this one. If you're in, apply now.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply for this date</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
-      text: `We're in the final week before ${eventLine}.\n\nWe've always appreciated you and would love to have you at this one. If you're in, apply now: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Let us know in one click</a> and we'll stop reminding you.</p>`,
+      text: `We're in the final week before ${eventLine}.\n\nWe've always appreciated you and would love to have you at this one. If you're in, apply now: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
   if (stepKey === 'signup.t3') {
@@ -114,8 +129,8 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p><strong>Last chance.</strong> There's still room available for <strong>${eventLine}</strong>.</p>` +
         `<p>If you want a table, today's the day to claim it.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply now</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
-      text: `Last chance. There's still room available for ${eventLine}.\n\nIf you want a table, today's the day to claim it: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Let us know in one click</a> and we'll stop reminding you.</p>`,
+      text: `Last chance. There's still room available for ${eventLine}.\n\nIf you want a table, today's the day to claim it: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
   if (stepKey === 'signup.t2') {
@@ -125,8 +140,8 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p>Only <strong>48 hours left</strong> to get on the list for <strong>${eventLine}</strong>.</p>` +
         `<p>After tomorrow, it's going to be hard to slot you in.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Get on the list</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
-      text: `Only 48 hours left to get on the list for ${eventLine}.\n\nAfter tomorrow, it's going to be hard to slot you in: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Let us know in one click</a> and we'll stop reminding you.</p>`,
+      text: `Only 48 hours left to get on the list for ${eventLine}.\n\nAfter tomorrow, it's going to be hard to slot you in: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
   if (stepKey === 'signup.t1') {
@@ -136,14 +151,14 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
         `<p><strong>${eventLine}</strong> is <strong>tomorrow</strong>. This is your last chance to send in your application.</p>` +
         `<p>One tap and you're in.</p>` +
         `<p style="margin:24px 0;text-align:center"><a href="${events}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700">Apply now</a></p>` +
-        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${events}" style="color:#666">Let us know</a> so we stop reminding you.</p>`,
-      text: `${eventLine} is tomorrow. Last chance to send in your application: ${events}\n\nNot interested in this date? Let us know on your dashboard so we stop reminding you.`,
+        `<p style="margin-top:24px;font-size:13px;color:#666">Not interested in this date? <a href="${optOut}" style="color:#666">Let us know in one click</a> and we'll stop reminding you.</p>`,
+      text: `${eventLine} is tomorrow. Last chance to send in your application: ${events}\n\nNot interested in this date? One-click opt-out: ${optOut}`,
     }
   }
 
   // ─── Track B — lineup hype + logistics (approved FOR this event) ───
-  const cantMakeIt = `<p style="margin-top:24px;font-size:13px;color:#666">Plans changed? <a href="${dashboard}" style="color:#666">Let us know</a> so we can plan ahead.</p>`
-  const cantMakeItText = `\n\nPlans changed? Let us know on your dashboard so we can plan ahead: ${dashboard}`
+  const cantMakeIt = `<p style="margin-top:24px;font-size:13px;color:#666">Plans changed? <a href="${cancel}" style="color:#666">Let us know in one click</a> so we can plan ahead.</p>`
+  const cantMakeItText = `\n\nPlans changed? One-click cancel here: ${cancel}`
 
   if (stepKey === 'lineup.t21') {
     return {
@@ -334,7 +349,7 @@ Deno.serve(async (req) => {
     const signupStep = activeStep(SIGNUP_STEPS, daysUntil)
     if (signupStep) {
       const { data: approvedVendors } = await supabase
-        .from('vendors').select('id, name, email, user_id').eq('status', 'approved')
+        .from('vendors').select('id, name, email, user_id, response_token').eq('status', 'approved')
       const { data: adminProfiles } = await supabase
         .from('profiles').select('id').eq('is_admin', true)
       const adminIds = new Set((adminProfiles || []).map(p => p.id))
@@ -349,7 +364,8 @@ Deno.serve(async (req) => {
           .from('vendor_email_log')
           .insert({ vendor_id: v.id, event_id: ev.id, step_key: signupStep.key })
         if (logErr) continue // already sent
-        const c = copyForStep(signupStep.key, eventTitle, dateStr, v.name, vendorTimes)
+        const links = buildLinks(v.response_token, ev.id)
+        const c = copyForStep(signupStep.key, eventTitle, dateStr, v.name, vendorTimes, links)
         if (!c) continue
         try {
           await new Promise(r => setTimeout(r, 550)) // ~2/sec rate limit
@@ -375,7 +391,7 @@ Deno.serve(async (req) => {
     if (lineupStep && approvedForEventSet.size > 0) {
       const ids = [...approvedForEventSet]
       const { data: approvedForEvent } = await supabase
-        .from('vendors').select('id, name, email, user_id').in('id', ids)
+        .from('vendors').select('id, name, email, user_id, response_token').in('id', ids)
       const { data: adminProfilesB } = await supabase
         .from('profiles').select('id').eq('is_admin', true)
       const adminIdsB = new Set((adminProfilesB || []).map(p => p.id))
@@ -386,7 +402,8 @@ Deno.serve(async (req) => {
           .from('vendor_email_log')
           .insert({ vendor_id: v.id, event_id: ev.id, step_key: lineupStep.key })
         if (logErr) continue
-        const c = copyForStep(lineupStep.key, eventTitle, dateStr, v.name, vendorTimes)
+        const links = buildLinks(v.response_token, ev.id)
+        const c = copyForStep(lineupStep.key, eventTitle, dateStr, v.name, vendorTimes, links)
         if (!c) continue
         try {
           await new Promise(r => setTimeout(r, 550))
