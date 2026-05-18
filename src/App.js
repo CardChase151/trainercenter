@@ -8506,29 +8506,21 @@ function VendorDashboardPage({ isMobile }) {
               icon={<LogIn size={22} />}
               title="Log In"
               subtitle="Already a partner? Sign in to your dashboard."
-              to="/vendors/apply"
+              to="/vendors/apply?mode=login"
               accent="#C8102E"
               accentBg="#fff0f0"
             />
             <DashboardCard
               icon={<FileEdit size={22} />}
-              title="Apply to become a partner"
-              subtitle="New here? Start your one-time vendor application."
-              to="/vendors/apply?mode=signup"
+              title="Apply to be a vendor"
+              subtitle="See upcoming dates and start your application."
+              to="/vendors/apply"
               accent="#1a1a1a"
               accentBg="#f4f4f5"
             />
             <DashboardCard
-              icon={<Eye size={22} />}
-              title="Guest Review"
-              subtitle="Just want to vote on vendors? Sign in as guest."
-              to="/vendors/review"
-              accent="#16a34a"
-              accentBg="#f0fdf4"
-            />
-            <DashboardCard
               icon={<HelpCircle size={22} />}
-              title="What is Vendor Day?"
+              title="What is TC's Beach City Trade Night?"
               subtitle="Read what these events are and how they work."
               to="/vendor-day/about"
               accent="#0369a1"
