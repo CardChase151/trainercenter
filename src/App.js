@@ -8022,108 +8022,223 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
 }
 
 // ─── Vendor Apply Page ────────────────────────────────────
-// Email + password login or signup. After auth, user lands on /vendors/dashboard
-// where the onboarding form fires for first-time vendors.
-// Defaults to login mode (returning vendors are the majority). Pass
-// ?mode=signup to open in signup mode (used by the Apply / Sign Up card).
-// /vendors/apply is a gate. Logged-in vendors / staff bounce straight to
-// the dashboard. Logged-out visitors get the unified AuthModal opened
-// automatically with intent='vendor' (and signup mode if ?mode=signup),
-// so signup or login both happen inside the same component as every
-// other "Log in" surface — no more inline PasswordAuthCard duplication.
+// /vendors/apply — public marketing landing for prospective vendors.
+//
+// New design (May 2026): instead of throwing visitors straight into an auth
+// modal, this page softly explains what TC's Beach City Trade Night is,
+// lists the next upcoming dates, then funnels them into a two-step "create
+// account → pick dates" flow. The actual auth handoff still happens via the
+// shared AuthModal — same component used everywhere else for login/signup.
+//
+// Routing rules:
+//   - Logged-in users (any role) → bounce to /vendors/dashboard. The dashboard
+//     handles "first-time vendor onboarding form" vs "full dashboard" itself.
+//   - Logged-out users on /vendors/apply with no query string → see the
+//     marketing landing.
+//   - Logged-out users on /vendors/apply?mode=signup → marketing landing + the
+//     signup modal auto-opens on top. Preserves existing CTAs in the site
+//     (DashboardCard "Apply to become a partner", ApplyToVendBanner, etc.)
+//     that want to skip directly to signup.
 function VendorApplyPage({ isMobile }) {
   const navigate = useNavigateInternal();
   const auth = useAuth();
   const [searchParams] = useSearchParams();
-  const initialMode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
-  const isSignupMode = initialMode === 'signup';
+  const skipLandingMode = searchParams.get('mode') === 'signup' ? 'signup'
+    : searchParams.get('mode') === 'login' ? 'login'
+    : null;
   const openedRef = useRef(false);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
 
+  // Bounce signed-in users to the dashboard. The dashboard already knows how
+  // to route first-time vendors into the onboarding form.
   useEffect(() => {
     if (auth.isLoading) return;
-    // Already logged in → go straight to the dashboard. The dashboard
-    // routes the user to the right next step (onboarding form for new
-    // vendors, full dashboard for approved ones).
-    if (auth.session) {
-      navigate('/vendors/dashboard');
-      return;
-    }
-    // Logged out — pop the AuthModal once. The ref guard keeps StrictMode's
-    // double effect from opening it twice.
+    if (auth.session) navigate('/vendors/dashboard');
+  }, [auth, auth.isLoading, auth.session, navigate]);
+
+  // Auto-open the AuthModal if ?mode=signup or ?mode=login was passed in.
+  // Existing CTAs in the site rely on this shortcut.
+  useEffect(() => {
+    if (!skipLandingMode) return;
+    if (auth.isLoading || auth.session) return;
     if (openedRef.current) return;
     openedRef.current = true;
     auth.openAuthModal({
-      defaultMode: initialMode,
+      defaultMode: skipLandingMode,
       intent: 'vendor',
       onSuccess: () => navigate('/vendors/dashboard'),
     });
-  }, [auth, auth.isLoading, auth.session, initialMode, navigate]);
+  }, [skipLandingMode, auth, navigate]);
+
+  // Fetch the next few vendor events so prospective vendors see what they'd
+  // be signing up for. Public read on events is allowed.
+  useEffect(() => {
+    const today = todayISO();
+    supabase
+      .from('events')
+      .select('id, title, event_date, vendor_start_time, vendor_end_time, start_time, end_time')
+      .eq('has_vendors', true)
+      .eq('cancelled', false)
+      .gte('event_date', today)
+      .order('event_date', { ascending: true })
+      .limit(3)
+      .then(({ data, error }) => {
+        if (error) console.error('[VendorApplyPage] events fetch', error);
+        setUpcomingEvents(data || []);
+      });
+  }, []);
+
+  const openSignup = () => auth.openAuthModal({
+    defaultMode: 'signup',
+    intent: 'vendor',
+    onSuccess: () => navigate('/vendors/dashboard'),
+  });
+  const openLogin = () => auth.openAuthModal({
+    defaultMode: 'login',
+    intent: 'vendor',
+    onSuccess: () => navigate('/vendors/dashboard'),
+  });
+
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric',
+    });
+  };
+  const fmtTimes = (ev) => {
+    const s = ev.vendor_start_time || ev.start_time;
+    const e = ev.vendor_end_time || ev.end_time;
+    if (!s && !e) return '';
+    return `${formatTime12h(s)} – ${formatTime12h(e)}`;
+  };
 
   return (
     <PageWrapper isMobile={isMobile}>
-      <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '720px', margin: '0 auto', marginBottom: '64px' }}>
         <SectionHeader
-          title={isSignupMode ? 'Apply to partner with Trainer Center' : 'Vendor Login'}
-          subtitle={isSignupMode ? "Quick signup — Chef will review and approve you." : 'Log back in or create an account'}
+          title="Want to vend with Trainer Center HB?"
+          subtitle="TC's Beach City Trade Night — free table, packed shop, last Friday of every month"
         />
 
-        {/* Anti-duplicate-account banner. Returning vendors who forget which
-            email they used will sometimes try to sign up again instead of
-            logging in. Nudge them to switch tabs inside the modal. */}
-        {isSignupMode && (
-          <div style={{
-            backgroundColor: '#fef9e6',
-            borderLeft: '3px solid #d97706',
-            borderRadius: '6px',
-            padding: '14px 18px',
-            marginBottom: '18px',
-            display: 'flex',
-            gap: '12px',
-            alignItems: 'flex-start',
-          }}>
-            <div style={{ fontSize: '20px', lineHeight: 1, paddingTop: '1px' }}>⚠️</div>
-            <div style={{ flex: 1 }}>
-              <div style={{
-                fontSize: '11px',
-                fontWeight: 800,
-                color: '#92400e',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                marginBottom: '4px',
-              }}>Already a partner?</div>
-              <div style={{ fontSize: '13px', lineHeight: 1.55, color: '#1a1a1a' }}>
-                Don't create a new account. Tap <strong>Log in</strong> at the top of the popup instead. Multiple accounts confuse approvals and we can't merge them. Forgot which email you used? Email <a href="mailto:chef@trainercenter.com" style={{ color: '#C8102E', fontWeight: '700' }}>chef@trainercenter.com</a> or call the shop at (714) 951-9100.
-              </div>
+        {/* Value prop card */}
+        <div style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          border: '1px solid #eee', borderLeft: '4px solid #C8102E',
+          padding: isMobile ? '20px 22px' : '26px 30px',
+          marginBottom: '20px',
+        }}>
+          <p style={{ fontSize: '0.98rem', color: '#374151', lineHeight: 1.65, margin: 0 }}>
+            Trainer Center HB hosts a monthly trade night where local vendors set up across the shop —
+            singles, slabs, sealed product, whatever you specialize in. We provide a 6-foot table and
+            a black cloth (free). You bring your inventory.
+          </p>
+        </div>
+
+        {/* Upcoming dates */}
+        {upcomingEvents.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{
+              fontSize: '0.75rem', fontWeight: '800',
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: '#666', margin: '0 0 10px',
+            }}>
+              Upcoming dates
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {upcomingEvents.map(ev => (
+                <div key={ev.id} style={{
+                  backgroundColor: '#fff', border: '1px solid #eee',
+                  borderRadius: '12px', padding: isMobile ? '14px 16px' : '16px 22px',
+                  display: 'flex', alignItems: 'center', gap: '14px',
+                }}>
+                  <div style={{
+                    width: '44px', height: '44px', borderRadius: '10px',
+                    backgroundColor: '#fff0f0', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <CalendarIcon size={22} color="#C8102E" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>
+                      {ev.title || "TC's Beach City Trade Night"}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#666', marginTop: '2px' }}>
+                      {fmtDate(ev.event_date)}{fmtTimes(ev) ? ` · ${fmtTimes(ev)}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Fallback CTA if the user closed the modal without signing in.
-            One tap re-opens it with the same config. */}
-        {!auth.session && !auth.isLoading && (
+        {/* Two-step explainer */}
+        <div style={{
+          backgroundColor: '#f9fafb', borderRadius: '14px',
+          border: '1px solid #eee',
+          padding: isMobile ? '20px 22px' : '24px 30px',
+          marginBottom: '24px',
+        }}>
           <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #eee',
-            padding: isMobile ? '24px 20px' : '36px', textAlign: 'center',
+            fontSize: '0.75rem', fontWeight: '800',
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: '#666', margin: '0 0 12px',
           }}>
-            <p style={{ fontSize: '0.95rem', color: '#444', margin: '0 0 18px 0', lineHeight: 1.6 }}>
-              Continue the vendor signup — we'll get you set up and Chef will review.
-            </p>
+            How it works
+          </div>
+          <ol style={{ margin: 0, paddingLeft: '20px', color: '#374151', lineHeight: 1.7 }}>
+            <li style={{ marginBottom: '10px' }}>
+              <strong>Create your vendor account.</strong> One-time application — Trainer Center HB reviews and approves.
+            </li>
+            <li>
+              <strong>Pick the dates you want.</strong> Once approved, claim any upcoming date from your dashboard in two clicks. You only commit to the events you choose.
+            </li>
+          </ol>
+        </div>
+
+        {/* CTA stack */}
+        <div style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          border: '1px solid #eee',
+          padding: isMobile ? '22px 22px' : '28px 30px',
+          textAlign: 'center',
+        }}>
+          <button
+            onClick={openSignup}
+            style={{
+              backgroundColor: '#C8102E', color: '#fff', border: 'none',
+              padding: '14px 32px', borderRadius: 10,
+              fontSize: '1rem', fontWeight: 800, cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: '0 2px 8px rgba(200,16,46,0.25)',
+            }}
+          >
+            Create your vendor account
+          </button>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: '14px 0 0' }}>
+            Already a partner?{' '}
             <button
-              onClick={() => auth.openAuthModal({
-                defaultMode: initialMode,
-                intent: 'vendor',
-                onSuccess: () => navigate('/vendors/dashboard'),
-              })}
+              onClick={openLogin}
               style={{
-                backgroundColor: '#C8102E', color: '#fff', border: 'none',
-                padding: '14px 28px', borderRadius: 10,
-                fontSize: '0.95rem', fontWeight: 800, cursor: 'pointer',
+                background: 'none', border: 'none',
+                color: '#C8102E', fontWeight: '700',
+                cursor: 'pointer', fontSize: '0.85rem',
+                padding: 0, fontFamily: 'inherit',
+                textDecoration: 'underline',
               }}
             >
-              {isSignupMode ? 'Continue signup' : 'Log in'}
+              Log in
             </button>
-          </div>
-        )}
+          </p>
+        </div>
+
+        {/* Footer learn-more */}
+        <p style={{ fontSize: '0.82rem', color: '#888', textAlign: 'center', margin: '20px 0 0' }}>
+          Want more detail before signing up?{' '}
+          <Link to="/vendor-day/about" style={{ color: '#C8102E', fontWeight: '700', textDecoration: 'none' }}>
+            What is TC's Beach City Trade Night?
+          </Link>
+        </p>
       </div>
     </PageWrapper>
   );
@@ -15544,7 +15659,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
       parentColor: isVendor ? '#16a34a' : undefined,  // green when logged in as vendor
       children: [
         { label: 'Dashboard', to: isStaff ? '/staff/vendors' : '/vendors/dashboard' },
-        { label: 'Apply', to: '/vendors/apply?mode=signup' },
+        { label: 'Apply', to: '/vendors/apply' },
         { label: 'TC Beach City Trade Night', to: '/vendor-day/about' },
         { label: 'Line ups', to: '/vendor-day' },
         ...(remindersIn === 'vendor' ? [reminderItem] : []),
