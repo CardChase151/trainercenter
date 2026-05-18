@@ -6247,6 +6247,7 @@ function GuestCheckinPage({ isMobile }) {
   const [authError, setAuthError] = useState(null);
   const [session, setSession] = useState(null);
   const [votes, setVotes] = useState(new Set()); // set of vendor_id
+  const [justCheckedIn, setJustCheckedIn] = useState(false); // shows full-screen confirmation overlay
 
   // Load event + vendors + existing session/votes on mount
   useEffect(() => {
@@ -6356,13 +6357,14 @@ function GuestCheckinPage({ isMobile }) {
   }
 
   // Auto-advance from step 1. If already logged in, skip step 2 (no need to
-  // ask for password again) — write the check-in and jump straight to voting.
+  // ask for password again) — write the check-in and show the confirmation
+  // overlay (proof for door staff) before sending them on to voting.
   const advanceFromStep1 = (inviter) => {
     setPickedInviter(inviter);
     setTimeout(async () => {
       if (session) {
         await writeCheckin(session.user.id, inviter);
-        setStep(3);
+        setJustCheckedIn(true);
       } else {
         setStep(2);
       }
@@ -6392,9 +6394,9 @@ function GuestCheckinPage({ isMobile }) {
       const { error: ciErr } = await writeCheckin(s.user.id, pickedInviter);
       if (ciErr) console.warn('check-in upsert error', ciErr);
 
-      // Hand off to the home page — they're logged in + checked in, so
-      // HomePage will detect that and render the voting view inline.
-      navigate('/');
+      // Show the full-screen confirmation overlay (proof to show door staff)
+      // before handing off to the home page / voting view.
+      setJustCheckedIn(true);
     } catch (e) {
       setAuthError(e.message || 'Could not create account. Try again.');
     }
@@ -6426,6 +6428,19 @@ function GuestCheckinPage({ isMobile }) {
   }
 
   if (loading) return <CheckinShell><p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading…</p></CheckinShell>;
+
+  // Full-screen confirmation overlay — shown immediately after a successful
+  // check-in. Covers everything so door staff can verify and there's no way
+  // to miss it. User taps the button to advance to voting.
+  if (justCheckedIn) {
+    return (
+      <JustCheckedInOverlay
+        event={event}
+        inviter={pickedInviter}
+        onContinue={() => navigate('/')}
+      />
+    );
+  }
   if (tokenValid === false) {
     return (
       <CheckinShell>
@@ -6501,6 +6516,101 @@ function CheckinShell({ children, isPreview }) {
         @keyframes pulseDot { 50% { opacity: 0.4; } }
         @keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
+    </div>
+  );
+}
+
+// Full-screen "You're checked in" confirmation. Shown right after a fresh
+// check-in completes — designed so door staff can verify it's a real, current
+// check-in (live timestamp, fresh layout, big "show this at the door" copy).
+function JustCheckedInOverlay({ event, inviter, onContinue }) {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const inviterName = inviter?.id ? vendorDisplayName(inviter) : null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 2000,
+      background:
+        'radial-gradient(ellipse at top right, rgba(255,26,140,0.35), transparent 60%),' +
+        'radial-gradient(ellipse at bottom left, rgba(200,16,46,0.5), transparent 60%),' +
+        'linear-gradient(135deg, #0a0a0d 0%, #1a0a0a 50%, #2a0a0a 100%)',
+      color: '#fff',
+      display: 'flex', flexDirection: 'column',
+      padding: '32px 24px',
+      overflowY: 'auto',
+    }}>
+      {/* Top: pulsing live indicator + timestamp so this can't be confused with a stale screenshot */}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: '8px',
+        alignSelf: 'flex-start',
+        background: 'rgba(255,255,255,0.12)',
+        border: '1px solid rgba(255,255,255,0.3)',
+        padding: '6px 14px', borderRadius: '999px',
+        fontSize: '11px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase',
+      }}>
+        <span style={{
+          width: '7px', height: '7px', borderRadius: '50%',
+          background: '#4ade80', boxShadow: '0 0 8px #4ade80',
+          animation: 'pulseDot 1.5s ease-in-out infinite',
+        }} />
+        Checked in · {timeStr}
+      </div>
+
+      {/* Main: huge "You're in" + event */}
+      <div style={{ marginTop: '32px', marginBottom: 'auto' }}>
+        <Check size={48} strokeWidth={3} color="#4ade80" style={{ marginBottom: '12px' }} />
+        <h1 style={{
+          margin: '0 0 16px', fontSize: '38px', fontWeight: 900,
+          letterSpacing: '-0.02em', lineHeight: 1.0, color: '#fff',
+        }}>
+          You're checked in.
+        </h1>
+        <div style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
+          <strong style={{ color: '#fff' }}>{event?.title || 'Trade Night'}</strong>
+          {inviterName && <><br />Invited by <strong style={{ color: '#fff' }}>{inviterName}</strong></>}
+        </div>
+
+        {/* Big "show at door" instruction */}
+        <div style={{
+          marginTop: '36px',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1.5px solid rgba(255,255,255,0.25)',
+          borderRadius: '14px',
+          padding: '20px',
+        }}>
+          <div style={{
+            fontSize: '20px', fontWeight: 900, lineHeight: 1.25,
+            color: '#ffd13f', marginBottom: '8px',
+            textShadow: '0 2px 12px rgba(255,209,63,0.4)',
+          }}>
+            Show this at the front before you walk in.
+          </div>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', fontStyle: 'italic' }}>
+            Don't close yet — staff needs to see it.
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom: continue button */}
+      <button
+        onClick={onContinue}
+        style={{
+          marginTop: '36px',
+          background: 'linear-gradient(135deg, #C8102E 0%, #FF1A8C 100%)',
+          color: '#fff', border: 'none', borderRadius: '14px',
+          padding: '18px 24px',
+          fontSize: '16px', fontWeight: 800,
+          cursor: 'pointer', letterSpacing: '0.04em',
+          boxShadow: '0 12px 28px rgba(200,16,46,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        }}
+      >
+        I'm inside — award my 3 points
+        <ArrowRight size={18} />
+      </button>
+
+      <style>{`@keyframes pulseDot { 50% { opacity: 0.35; } }`}</style>
     </div>
   );
 }
@@ -6755,10 +6865,41 @@ function CheckinStep3({ vendors, votes, onToggleVote, event }) {
                 <div style={{ fontSize: '14px', fontWeight: 800, color: '#1a1a1a' }}>
                   {vendorDisplayName(v)}
                 </div>
-                <div style={{ fontSize: '11px', color: '#888' }}>
-                  {v.ig_handle ? `@${v.ig_handle.replace(/^@/, '')}` : ''}
-                  {v.specialty && (
-                    <span style={{ color: '#525252' }}>{v.ig_handle ? ' · ' : ''}{v.specialty}</span>
+                {v.specialty && (
+                  <div style={{ fontSize: '11px', color: '#525252', marginTop: '1px' }}>
+                    {v.specialty}
+                  </div>
+                )}
+                {/* Social pills — stopPropagation so tapping a link doesn't toggle the vote */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                  {v.ig_handle && (
+                    <a
+                      href={`https://instagram.com/${v.ig_handle.replace(/^@/, '')}`}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        fontSize: '10px', fontWeight: 700,
+                        background: 'linear-gradient(45deg, #f09433 0%,#dc2743 50%,#bc1888 100%)',
+                        color: '#fff', textDecoration: 'none',
+                        padding: '2px 8px', borderRadius: '999px',
+                        letterSpacing: '0.04em',
+                      }}
+                    >IG</a>
+                  )}
+                  {v.tiktok_handle && (
+                    <a
+                      href={`https://tiktok.com/@${v.tiktok_handle.replace(/^@/, '')}`}
+                      target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '3px',
+                        fontSize: '10px', fontWeight: 700,
+                        background: '#000', color: '#fff', textDecoration: 'none',
+                        padding: '2px 8px', borderRadius: '999px',
+                        letterSpacing: '0.04em',
+                      }}
+                    >TikTok</a>
                   )}
                 </div>
               </div>
