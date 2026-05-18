@@ -14784,7 +14784,7 @@ function StaffVendorsPage({ isMobile, staff }) {
             padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
             fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'none',
           }}>
-            <Mail size={14} /> Comms broadcast
+            <Mail size={14} /> Communication screen
           </Link>
         </div>
 
