@@ -17756,6 +17756,14 @@ const PRINTABLES = [
     kind: 'image',
     accent: '#7c3aed',
   },
+  {
+    key: 'tc-attendance-planning',
+    title: 'TC Attendance + Pricing Planning',
+    desc: 'Hourly attendance scenarios, vendor tiers, and our undercut pricing model. Internal reference for vendor conversations.',
+    file: '/printables/tc-attendance-planning.pdf',
+    kind: 'pdf',
+    accent: '#0d9488',
+  },
 ];
 
 function StaffPrintablesPage({ isMobile, staff }) {
