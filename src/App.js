@@ -17761,6 +17761,7 @@ const PRINTABLES = [
     title: 'TC Attendance + Pricing Planning',
     desc: 'Hourly attendance scenarios, vendor tiers, and our undercut pricing model. Internal reference for vendor conversations.',
     file: '/printables/tc-attendance-planning.pdf',
+    thumb: '/printables/thumb-tc-attendance-planning.png',
     kind: 'pdf',
     accent: '#0d9488',
   },
