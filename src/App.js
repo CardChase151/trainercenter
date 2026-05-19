@@ -12158,7 +12158,15 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
         {(actions || onOpenNotes || onRatingChange) && (
           <div
             onClick={e => e.stopPropagation()}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              flexWrap: 'wrap',
+              // On mobile, take a full-width row below the name so 4+ buttons
+              // can wrap cleanly instead of overflowing the viewport.
+              flexShrink: isMobile ? 1 : 0,
+              width: isMobile ? '100%' : 'auto',
+              justifyContent: isMobile ? 'flex-start' : 'flex-end',
+            }}
           >
             {onOpenNotes && (
               <button
@@ -12166,7 +12174,7 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
                 onClick={() => onOpenNotes(vendor)}
                 style={{
                   fontSize: '0.78rem', background: '#fff', color: '#374151',
-                  border: '1px solid #d1d5db', padding: '6px 12px',
+                  border: '1px solid #d1d5db', padding: '6px 10px',
                   borderRadius: '6px', fontWeight: '700', cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', gap: '4px',
                   fontFamily: 'inherit',
@@ -12191,7 +12199,7 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
                   backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23${(ratingMeta ? ratingColor : '#6b7280').replace('#', '')}' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
                   backgroundPosition: 'right 8px center',
-                  paddingRight: '24px',
+                  paddingRight: '22px',
                 }}
               >
                 <option value="">Rate…</option>
@@ -15148,14 +15156,20 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, is
           </div>
         </div>
         {(onOpenNotes || onRatingChange) && v.id && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            flexWrap: 'wrap',
+            flexShrink: isMobile ? 1 : 0,
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: isMobile ? 'flex-start' : 'flex-end',
+          }}>
             {onOpenNotes && (
               <button
                 type="button"
                 onClick={() => onOpenNotes(v)}
                 style={{
                   fontSize: '0.78rem', background: '#fff', color: '#374151',
-                  border: '1px solid #d1d5db', padding: '6px 12px',
+                  border: '1px solid #d1d5db', padding: '6px 10px',
                   borderRadius: '6px', fontWeight: '700', cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', gap: '4px',
                   fontFamily: 'inherit',
@@ -15180,7 +15194,7 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, is
                   backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23${(ratingMeta ? ratingColor : '#6b7280').replace('#', '')}' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")`,
                   backgroundRepeat: 'no-repeat',
                   backgroundPosition: 'right 8px center',
-                  paddingRight: '24px',
+                  paddingRight: '22px',
                 }}
               >
                 <option value="">Rate…</option>
@@ -16023,14 +16037,14 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpe
             <>
               <button onClick={() => onStatusChange(v.id, 'approved')} style={{
                 fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
-                border: 'none', padding: '6px 14px', borderRadius: '6px',
+                border: 'none', padding: '6px 12px', borderRadius: '6px',
                 fontWeight: '700', cursor: 'pointer'
               }}>Approve</button>
               <button onClick={() => {
                 if (window.confirm(`Decline ${v.name} as a vendor?`)) onStatusChange(v.id, 'suspended');
               }} style={{
                 fontSize: '0.8rem', backgroundColor: '#fff', color: '#991b1b',
-                border: '1px solid #fecaca', padding: '6px 14px', borderRadius: '6px',
+                border: '1px solid #fecaca', padding: '6px 12px', borderRadius: '6px',
                 fontWeight: '700', cursor: 'pointer'
               }}>Decline</button>
             </>
