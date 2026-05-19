@@ -18968,8 +18968,16 @@ function App() {
           display: 'flex',
           flexDirection: 'column',
           padding: '8px 0',
-          maxHeight: 'calc(100vh - 64px)',
+          // 100dvh = dynamic viewport height, excludes Safari's bottom URL
+          // bar (iOS 15.4+). Old 100vh would let the drawer extend under
+          // Safari's chrome so the last item (Log out at the bottom of the
+          // Staff section) wasn't reachable. Extra bottom padding + safe-
+          // area inset so scrolling clears the last item comfortably even
+          // when iOS bottom chrome is visible.
+          maxHeight: 'calc(100dvh - 64px)',
           overflowY: 'auto',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+          WebkitOverflowScrolling: 'touch',
         }}>
           {NAV_ITEMS.map(item => {
             // Accordion section for parents with children.
