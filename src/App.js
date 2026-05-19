@@ -9952,7 +9952,22 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           .single();
         if (updated) savedVendor = updated;
       } else {
+        // Upload failed (iOS Safari is the common culprit). Previously this
+        // was silently logged and the user got a "success" with a logo-less
+        // row. Now: surface the error and clean up so they can retry. On
+        // signup, the orphan row is rolled back; on edit, the existing
+        // row + previous logo stay intact.
         console.error('[VendorOnboarding] logo upload failed', upErr);
+        if (!isEdit) {
+          await supabase.from('vendors').delete().eq('id', savedVendor.id);
+        }
+        setSubmitting(false);
+        setError(
+          isEdit
+            ? `Could not upload your new logo: ${upErr.message || 'unknown error'}. Your previous logo is still in place — try a smaller image or different format.`
+            : `Could not upload your logo: ${upErr.message || 'unknown error'}. Please try a smaller image (or a different format like JPG) and submit again.`
+        );
+        return;
       }
     } else if (isEdit && removeExistingLogo) {
       const { data: cleared } = await supabase
