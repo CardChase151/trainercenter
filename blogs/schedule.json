@@ -1,5 +1,5 @@
 {
-  "next": 8,
+  "next": 9,
   "total": 12,
   "blogs": [
     {
@@ -48,7 +48,7 @@
       "num": 8,
       "file": "08-fake-cards.md",
       "title": "How to Tell if a Pokemon Card is Fake",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 9,

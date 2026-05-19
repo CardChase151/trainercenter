@@ -196,7 +196,7 @@ const BLOG_DATA = [
   {
     slug: 'fake-cards',
     title: 'How to Tell if a Pokemon Card is Fake',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'Fake Pokemon cards are everywhere. They show up on Amazon, at flea markets, in bulk lots on eBay, and sometimes even mixed into collections people sell locally. If you are spending money on cards, you need to know how to spot a fake.' },
       { type: 'h2', text: 'The Feel Test' },
