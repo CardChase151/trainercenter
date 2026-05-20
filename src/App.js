@@ -6000,12 +6000,13 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               }}>{(event?.title || 'Beach City Trade Night').replace(/^TC'?s\s+/i, '').replace(/!$/, '')}</div>
             </div>
 
-            {/* Hero */}
+            {/* Hero — pinned toward top so the new date block below the
+                IG handle has breathing room before the bottom band. */}
             <div style={{
               flex: 1,
               display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              textAlign: 'center', padding: '10px 0',
+              alignItems: 'center', justifyContent: 'flex-start',
+              textAlign: 'center', paddingTop: 14,
               transform: 'translateZ(30px)',
             }}>
               {/* Vendor logo with gold ring */}
@@ -6094,50 +6095,63 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   >IG @{igNorm}</a>
                 </div>
               )}
+
+              {/* Date + Time block — moved out of the bottom band so the
+                  red band can be a clean address line, and the day/time
+                  read prominently right under the vendor's IG. */}
+              {(eventDate || eventTime) && (
+                <div style={{
+                  marginTop: 16,
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', gap: 2,
+                }}>
+                  {eventDate && (
+                    <div style={{
+                      fontFamily: 'Russo One, sans-serif',
+                      fontSize: f(1.0),
+                      letterSpacing: '0.05em',
+                      color: '#1a1a1a',
+                      lineHeight: 1.05,
+                      whiteSpace: 'nowrap',
+                    }}>{eventDate}</div>
+                  )}
+                  {eventTime && (
+                    <div style={{
+                      fontSize: f(0.78),
+                      color: '#555',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                      whiteSpace: 'nowrap',
+                    }}>{eventTime}</div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Bottom event band. Each side gets two lines that never wrap
-                (whiteSpace nowrap). Compact formats keep it readable at
-                grid scale. */}
+            {/* Bottom band — just the address now. Centered, two clean
+                lines, nothing else competing for space. */}
             <div style={{
               marginTop: 18,
               background: 'linear-gradient(90deg, #C8102E 0%, #8B0A1F 100%)',
               borderRadius: 12,
-              padding: '10px 14px',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              gap: 8,
+              padding: '12px 16px',
+              textAlign: 'center',
               boxShadow: '0 6px 22px rgba(200, 16, 46, 0.30)',
               color: '#fff',
               transform: 'translateZ(10px)',
             }}>
-              <div style={{ textAlign: 'left', minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'Russo One, sans-serif',
-                  fontSize: f(0.85), letterSpacing: '0.04em',
-                  lineHeight: 1.1, whiteSpace: 'nowrap',
-                }}>{eventDate}</div>
-                {eventTime && (
-                  <div style={{
-                    fontSize: f(0.68),
-                    color: 'rgba(255,255,255,0.92)',
-                    marginTop: 4, fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                  }}>{eventTime}</div>
-                )}
-              </div>
-              <div style={{ textAlign: 'right', minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'Russo One, sans-serif',
-                  fontSize: f(0.72), letterSpacing: '0.04em',
-                  lineHeight: 1.1, whiteSpace: 'nowrap',
-                }}>4911 Warner Ave #210</div>
-                <div style={{
-                  fontSize: f(0.58), color: 'rgba(255,255,255,0.8)',
-                  marginTop: 4, fontWeight: 600,
-                  letterSpacing: '0.06em', textTransform: 'uppercase',
-                  whiteSpace: 'nowrap',
-                }}>Huntington Beach</div>
-              </div>
+              <div style={{
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: f(0.92), letterSpacing: '0.04em',
+                lineHeight: 1.1, whiteSpace: 'nowrap',
+              }}>4911 Warner Ave #210</div>
+              <div style={{
+                fontSize: f(0.62),
+                color: 'rgba(255,255,255,0.85)',
+                marginTop: 4, fontWeight: 600,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+              }}>Huntington Beach, CA</div>
             </div>
           </div>
         </div>
