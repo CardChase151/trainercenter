@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vendor Card · Holographic Foil</title>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+<!-- GSAP for timelines + CSS variable animation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --brand-red: #E63946;
+    --brand-red-deep: #C8102E;
+    --gold: #D4A437;
+    --gold-light: #F2D785;
+    --gold-pale: #FBF1D4;
+    --champagne: #F7E7CE;
+    --ink: #1a1a1a;
+    --ink-soft: #555;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 25% 20%, rgba(230, 57, 70, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 75% 80%, rgba(212, 164, 55, 0.10) 0%, transparent 50%),
+      linear-gradient(135deg, #fdfdfb 0%, #f7f2e8 100%);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  .page-header {
+    text-align: center;
+    max-width: 1100px;
+    margin: 0 auto 24px;
+  }
+  .page-header h1 {
+    font-family: 'Russo One', sans-serif;
+    font-size: 2.4rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    color: var(--ink);
+  }
+  .page-header h1 span { color: var(--brand-red); }
+  .page-header p {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    max-width: 740px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  .annotations-toggle { text-align: center; margin: 24px 0; }
+  .annotations-toggle button {
+    background: #fff;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 800;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+  .annotations-toggle button.active { background: var(--ink); color: #fff; }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+    gap: 60px;
+    max-width: 1100px;
+    margin: 30px auto 0;
+    justify-items: center;
+    /* Anchor both columns to the top of the row so the labels and
+       cards line up identically regardless of any internal heights. */
+    align-items: start;
+  }
+
+  .option-wrap { text-align: center; }
+  .option-label {
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.25em;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .option-label::before, .option-label::after {
+    content: '';
+    height: 1px;
+    width: 30px;
+    background: #ddd;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CARD — taller, 405×640. Real TCG holographic foil technique:
+       • 3D tilt (auto sine wave + mouse override)
+       • Multi-layer holo overlay parallax (color band + texture)
+       • Specular highlight follows tilt
+       • Outer aura glow
+     Inspired by pokemon-cards-css, Hearthstone card hover, Genshin
+     5-star pulls. Pure GSAP for timing, pure CSS for layering.
+     ═══════════════════════════════════════════════════════════════ */
+  .card-frame {
+    /* Perspective on the frame itself so the 3D vanishing point is
+       centered on this card, not on the body. Without this, tilted
+       cards in side-by-side columns visually drift toward body center.
+       margin auto centers the 405px frame within its grid cell. */
+    width: 405px;
+    height: 640px;
+    position: relative;
+    margin: 0 auto;
+    perspective: 1100px;
+    perspective-origin: 50% 50%;
+    transform-style: preserve-3d;
+  }
+
+  .card {
+    --rx: 0deg;
+    --ry: 0deg;
+    --rz: 0deg;
+    --posX: 50%;
+    --posY: 50%;
+    --hyp: 0;  /* 0 → 1, how far from center we are. drives glare intensity. */
+
+    width: 100%;
+    height: 100%;
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%);
+    /* Three-axis rotation. rZ adds a "held and turning" feel — slight
+       swirl that makes it look like the card is being shown off, not
+       just nodding back and forth. */
+    transform: rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
+    transform-origin: 50% 50%;  /* Ensure rotation pivots on visual center */
+    transform-style: preserve-3d;
+    box-shadow:
+      0 30px 70px rgba(0,0,0,0.18),
+      0 0 0 1px rgba(0,0,0,0.04);
+    transition: box-shadow 0.3s ease;
+    will-change: transform;
+  }
+
+  /* OUTER AURA — soft glow behind the card, pulses when animated */
+  .aura {
+    position: absolute;
+    inset: -30px;
+    border-radius: 50px;
+    background:
+      radial-gradient(ellipse at center,
+        rgba(255, 215, 100, 0.35) 0%,
+        rgba(230, 57, 70, 0.15) 35%,
+        transparent 70%);
+    filter: blur(20px);
+    z-index: -1;
+    opacity: 0;
+    transform: translateZ(-50px);
+  }
+
+  /* GOLD FOIL BORDER — conic gradient as the rim */
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 24px;
+    padding: 4px;
+    background: conic-gradient(
+      from calc(var(--ry) * 4 + 0deg),
+      var(--gold) 0%,
+      var(--gold-light) 12%,
+      #fff8e1 25%,
+      var(--gold-light) 38%,
+      var(--gold) 50%,
+      var(--gold-light) 62%,
+      #fff8e1 75%,
+      var(--gold-light) 88%,
+      var(--gold) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     LIGHT LAYERS — Atropos / vanilla-tilt pattern
+     ─────────────────────────────────────────────────────────────
+     Two fixed-angle linear-gradient highlights at opposite corners.
+     Their OPACITY changes based on which way the card is tilted, NOT
+     their position. The 3D rotation itself moves the visible light
+     across the card. This is why mature tilt libraries don't look
+     rectangular — the gradients don't slide, they fade in/out.
+     ───────────────────────────────────────────────────────────── */
+
+  /* Highlight 1: TOP-LEFT light source. Brightest when the card
+     tilts so that corner faces up. */
+  .highlight-tl {
+    position: absolute;
+    inset: 4px;
+    border-radius: 20px;
+    pointer-events: none;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 250, 220, 0.55) 0%,
+      rgba(255, 240, 180, 0.20) 25%,
+      rgba(255, 240, 180, 0.00) 55%
+    );
+    mix-blend-mode: screen;
+    opacity: 0;
+    z-index: 3;
+  }
+
+  /* Highlight 2: BOTTOM-RIGHT light source. Brightest when the
+     card tilts the other way. Two complementary highlights mean
+     the card always has *some* shine, but never both at once —
+     just like real foil under a single light. */
+  .highlight-br {
+    position: absolute;
+    inset: 4px;
+    border-radius: 20px;
+    pointer-events: none;
+    background: linear-gradient(
+      315deg,
+      rgba(255, 250, 220, 0.45) 0%,
+      rgba(255, 240, 180, 0.15) 25%,
+      rgba(255, 240, 180, 0.00) 55%
+    );
+    mix-blend-mode: screen;
+    opacity: 0;
+    z-index: 3;
+  }
+
+  /* Card content */
+  .card-content {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    padding: 26px 28px 26px;
+    display: flex;
+    flex-direction: column;
+    transform: translateZ(20px); /* lift content above the foil */
+  }
+
+  /* Top brand bar */
+  .brand-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  /* Event title — the headliner under the brand bar.
+     Pulls from event.title (e.g. "TC's Beach City Trade Night"). */
+  .event-title {
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    text-transform: uppercase;
+    text-align: left;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(212, 164, 55, 0.4);
+  }
+  .event-title .accent { color: var(--brand-red); }
+  .brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .pokeball {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: linear-gradient(to bottom, var(--brand-red) 0% 50%, #fff 50% 100%);
+    position: relative;
+    border: 2px solid var(--ink);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  .pokeball::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--ink);
+  }
+
+  .event-label {
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.64rem;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    background: var(--gold-pale);
+    padding: 5px 10px;
+    border-radius: 5px;
+    text-transform: uppercase;
+    border: 1px solid var(--gold-light);
+  }
+
+  .hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 10px 0;
+    transform: translateZ(30px);
+  }
+
+  .vendor-frame {
+    width: 192px;
+    height: 192px;
+    position: relative;
+    margin-bottom: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateZ(20px);
+  }
+  .vendor-frame .ring {
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: conic-gradient(
+      from calc(var(--ry, 0deg) * 8),
+      var(--gold),
+      var(--gold-light),
+      #fff8e1,
+      var(--gold-light),
+      var(--gold)
+    );
+  }
+  .vendor-logo {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand-red) 0%, #B91D2C 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Russo One', sans-serif;
+    font-size: 3.6rem;
+    color: #fff;
+    text-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 4px solid #fff;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .vendor-name {
+    font-family: 'Russo One', sans-serif;
+    font-size: 1.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+
+  .vendor-catch {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    font-weight: 600;
+    max-width: 300px;
+    line-height: 1.35;
+  }
+
+  .socials {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+  .social-pill {
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    color: var(--ink);
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 6px 11px;
+    border-radius: 6px;
+    letter-spacing: 0.02em;
+  }
+
+  .event-band {
+    margin-top: 18px;
+    background: linear-gradient(90deg, var(--brand-red-deep) 0%, #8B0A1F 100%);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 6px 22px rgba(200, 16, 46, 0.30);
+    color: #fff;
+    transform: translateZ(10px);
+  }
+  .event-when { text-align: left; }
+  .event-day {
+    font-family: 'Russo One', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .event-time {
+    font-size: 0.74rem;
+    color: rgba(255,255,255,0.92);
+    margin-top: 3px;
+    font-weight: 600;
+  }
+  .event-where { text-align: right; }
+  .event-loc {
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .event-sub {
+    font-size: 0.62rem;
+    color: rgba(255,255,255,0.8);
+    margin-top: 3px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Dynamic field annotation overlay */
+  .dyn { position: relative; }
+  body.show-annotations .dyn::after {
+    content: attr(data-source);
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--brand-red);
+    color: #fff;
+    font-family: monospace;
+    font-size: 0.6rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 10;
+    box-shadow: 0 2px 6px rgba(230, 57, 70, 0.4);
+  }
+  body.show-annotations .dyn {
+    outline: 1.5px dashed var(--brand-red);
+    outline-offset: 2px;
+  }
+
+  /* Hint text under cards */
+  .hint {
+    margin-top: 18px;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* Notes */
+  .notes {
+    max-width: 900px;
+    margin: 60px auto 0;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 14px;
+    padding: 26px 32px;
+    color: #444;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+  }
+  .notes h3 {
+    color: var(--ink);
+    font-family: 'Russo One', sans-serif;
+    font-size: 0.92rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    border-bottom: 2px solid var(--brand-red);
+    padding-bottom: 8px;
+    display: inline-block;
+  }
+  .notes h4 {
+    color: var(--ink);
+    font-size: 0.85rem;
+    font-weight: 800;
+    margin: 18px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .notes ul { padding-left: 22px; margin: 8px 0; }
+  .notes li { margin-bottom: 6px; }
+  .notes strong { color: var(--ink); }
+  .notes code {
+    background: #fbf1d4;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.82em;
+    color: #8B6914;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>Vendor Card · <span>Holographic Foil</span></h1>
+    <p>Now using a real TCG foil technique: parallax color band, specular highlight that tracks the tilt, and a glow aura. Hover the animated card to drive it with your mouse — release to let it idle on its own loop.</p>
+  </div>
+
+  <div class="annotations-toggle">
+    <button onclick="document.body.classList.toggle('show-annotations'); this.classList.toggle('active'); this.textContent = document.body.classList.contains('show-annotations') ? 'Hide dynamic fields' : 'Show dynamic fields';">
+      Show dynamic fields
+    </button>
+  </div>
+
+  <div class="options-grid">
+
+    <!-- ═══════════════ OPTION A — STATIC ═══════════════ -->
+    <div class="option-wrap">
+      <div class="option-label">Static</div>
+      <div class="card-frame">
+        <div class="card" id="card-static">
+          <div class="highlight-tl"></div>
+          <div class="highlight-br"></div>
+          <div class="card-content">
+            <div class="brand-bar">
+              <div class="brand-mark">
+                <div class="pokeball"></div>
+                <span class="dyn" data-source="event.venue">Trainer Center HB</span>
+              </div>
+              <div class="event-label dyn" data-source="event_series">Trade Night</div>
+            </div>
+            <div class="event-title dyn" data-source="event.title">
+              <span class="accent">TC's</span> Beach City Trade Night
+            </div>
+            <div class="hero">
+              <div class="vendor-frame">
+                <div class="ring"></div>
+                <div class="vendor-logo dyn" data-source="vendor.avatar_url">H</div>
+              </div>
+              <div class="vendor-name dyn" data-source="vendor.name">Hayden's Hoard</div>
+              <div class="vendor-catch dyn" data-source="vendor.tagline">"Where every pull tells a story"</div>
+              <div class="socials">
+                <div class="social-pill dyn" data-source="vendor.ig_handle">IG @haydenshoard</div>
+                <div class="social-pill dyn" data-source="vendor.tiktok_handle">TT @haydenshoard</div>
+              </div>
+            </div>
+            <div class="event-band">
+              <div class="event-when">
+                <div class="event-day dyn" data-source="event.event_date">SAT · MAY 24</div>
+                <div class="event-time dyn" data-source="application.requested_start/end">1 PM – 6 PM</div>
+              </div>
+              <div class="event-where">
+                <div class="event-loc dyn" data-source="event.address_street">123 Address St</div>
+                <div class="event-sub dyn" data-source="event.city">Huntington Beach, CA</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Frozen at a flattering angle. Screenshot-ready.</div>
+    </div>
+
+    <!-- ═══════════════ OPTION B — ANIMATED (HOLO PARALLAX) ═══════════════ -->
+    <div class="option-wrap">
+      <div class="option-label">Video</div>
+      <div class="card-frame">
+        <div class="aura" id="aura"></div>
+        <div class="card" id="card-animated">
+          <div class="highlight-tl"></div>
+          <div class="highlight-br"></div>
+          <div class="card-content">
+            <div class="brand-bar">
+              <div class="brand-mark">
+                <div class="pokeball"></div>
+                <span class="dyn" data-source="event.venue">Trainer Center HB</span>
+              </div>
+              <div class="event-label dyn" data-source="event_series">Trade Night</div>
+            </div>
+            <div class="event-title dyn" data-source="event.title">
+              <span class="accent">TC's</span> Beach City Trade Night
+            </div>
+            <div class="hero">
+              <div class="vendor-frame">
+                <div class="ring"></div>
+                <div class="vendor-logo dyn" data-source="vendor.avatar_url">H</div>
+              </div>
+              <div class="vendor-name dyn" data-source="vendor.name">Hayden's Hoard</div>
+              <div class="vendor-catch dyn" data-source="vendor.tagline">"Where every pull tells a story"</div>
+              <div class="socials">
+                <div class="social-pill dyn" data-source="vendor.ig_handle">IG @haydenshoard</div>
+                <div class="social-pill dyn" data-source="vendor.tiktok_handle">TT @haydenshoard</div>
+              </div>
+            </div>
+            <div class="event-band">
+              <div class="event-when">
+                <div class="event-day dyn" data-source="event.event_date">SAT · MAY 24</div>
+                <div class="event-time dyn" data-source="application.requested_start/end">1 PM – 6 PM</div>
+              </div>
+              <div class="event-where">
+                <div class="event-loc dyn" data-source="event.address_street">123 Address St</div>
+                <div class="event-sub dyn" data-source="event.city">Huntington Beach, CA</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Hover to drive with your mouse. Release for the idle loop.</div>
+    </div>
+
+  </div>
+
+  <div class="notes">
+    <h3>What this is doing under the hood</h3>
+    <p style="margin-bottom: 12px;">Researched the mature tilt-card libraries (<a href="https://atroposjs.com" target="_blank" style="color: var(--brand-red); font-weight:700;">Atropos</a>, <a href="https://github.com/micku7zu/vanilla-tilt.js" target="_blank" style="color: var(--brand-red); font-weight:700;">vanilla-tilt.js</a>, react-parallax-tilt). They all use the same pattern, and it's <em>not</em> what I was doing. Key insight:</p>
+    <div style="background: #fbf1d4; border-left: 3px solid var(--gold); padding: 12px 16px; margin: 10px 0 18px; border-radius: 4px; color: var(--ink);">
+      <strong>The highlight overlays don't move. They cross-fade.</strong> Two fixed-angle linear gradients sit at opposite corners. As the card rotates in 3D, the opacity of each highlight shifts based on which side faces the (imagined) light source. The visible motion comes from the 3D rotation moving the card — the gradients themselves stay put.
+    </div>
+    <p>That's why my earlier attempt looked like a sliding rectangle: I was sliding a colored band around, which is literally what makes things look like sliding bands. Two static highlights with opacity-driven cross-fade reads as real foil because that's how real foil actually works under a fixed light.</p>
+    <ul style="margin-top: 14px;">
+      <li><strong>Highlight TL</strong> — linear gradient at 135° from top-left, screen blend. Opacity peaks when card tilts up-left.</li>
+      <li><strong>Highlight BR</strong> — linear gradient at 315° from bottom-right, screen blend. Opacity peaks when card tilts down-right.</li>
+      <li><strong>Motion</strong> — 18-second loop, ±9° tilt range (was ±24°, too aggressive), small ±2° rotateZ swirl. Subtle "breathing held card" feel, not "spinning showpiece."</li>
+      <li><strong>Outer aura</strong> — kept the soft glow behind the card.</li>
+      <li><strong>Removed</strong> — SVG noise grain (was causing visual artifacts), counter-tint, specular radial, shadow wash. All of that was overengineered. Less is more.</li>
+    </ul>
+
+    <h4>Why this loops cleanly when exported</h4>
+    <ul>
+      <li>Every animation is a yoyo'd sine wave on a 6–10s period. Start and end positions are identical, so a video crop on any multiple of the period seams perfectly.</li>
+      <li>No "sweep across and reset" animations that produce glitch frames. The parallax is always anchored to the tilt — there's no discontinuous reset.</li>
+    </ul>
+
+    <h4>Dynamic data (toggle "Show dynamic fields" above)</h4>
+    <ul>
+      <li>Vendor: <code>vendor.name</code>, <code>vendor.avatar_url</code>, <code>vendor.ig_handle</code>, <code>vendor.tiktok_handle</code> — all in DB</li>
+      <li>Event: <code>event.event_date</code>, and the vendor's requested time window — all in DB</li>
+      <li><strong>Needs schema:</strong> <code>vendor.tagline</code> (60 char max), <code>event.venue</code> + <code>event.city</code> (if off-site events ever ship)</li>
+    </ul>
+
+    <h4>What ships next</h4>
+    <ul>
+      <li>Lock the design (static, animated, or both)</li>
+      <li>Add the missing columns</li>
+      <li>"Share card" button on <code>/vendors/dashboard</code> → modal with PNG (html-to-image) + MP4 (Playwright server endpoint) downloads</li>
+    </ul>
+  </div>
+
+<script>
+  // ── Holographic card driver ──────────────────────────────
+  // Strategy:
+  //   1. Idle: gentle sine wave on rotateX/Y + matching specular position.
+  //   2. Hover: cancel idle, follow mouse with quick easing.
+  //   3. Leave: re-snap to idle smoothly.
+  //
+  // All driven by CSS variables on .card, which feed into transforms and
+  // gradient positions simultaneously — that's how the foil "tracks" the
+  // tilt. GSAP handles the eases.
+
+  // Driver: rotates the card and cross-fades two corner highlights
+  // based on tilt direction. The highlights themselves never move —
+  // they fade in/out — which is why this approach doesn't look like
+  // a sliding stripe.
+  function driveCard(card, opts = {}) {
+    // Subtle ranges. Chase wanted less dramatic, less fast.
+    // restHighlight = opacity the TL highlight returns to at rest (after
+    // mouseleave). 0 = invisible at rest, higher = subtle baseline foil.
+    const { autoTilt = true, range = 9, rzRange = 2, period = 18, restHighlight = 0 } = opts;
+    let idleTl = null;
+    let isHovering = false;
+
+    const hlTL = card.querySelector('.highlight-tl');
+    const hlBR = card.querySelector('.highlight-br');
+
+    // Apply rest-state highlight on init.
+    if (hlTL) gsap.set(hlTL, { opacity: restHighlight });
+    if (hlBR) gsap.set(hlBR, { opacity: 0 });
+
+    const apply = (rx, ry, rz) => {
+      gsap.set(card, {
+        '--rx': rx + 'deg',
+        '--ry': ry + 'deg',
+        '--rz': rz + 'deg',
+      });
+      // Tilt direction → which corner faces "up" toward the imagined
+      // overhead light. With the new "hovered corner comes toward you"
+      // math, the hovered side is the closer side, so the highlight
+      // should sit there. ry > 0 + rx < 0 = top-left coming forward.
+      const diag = (ry - rx) / (range * 2); // -1..1
+      const tl = Math.max(0, diag);   // 0..1
+      const br = Math.max(0, -diag);  // 0..1
+      if (hlTL) gsap.set(hlTL, { opacity: tl });
+      if (hlBR) gsap.set(hlBR, { opacity: br });
+    };
+
+    // Idle: gentle figure-8 sine path. Long period so the motion
+    // reads as "the card is breathing," not "the card is shaking."
+    const startIdle = () => {
+      if (idleTl) idleTl.kill();
+      idleTl = gsap.timeline({ repeat: -1 });
+      idleTl.to({ t: 0 }, {
+        t: 1,
+        duration: period,
+        ease: 'none',
+        onUpdate: function() {
+          if (isHovering) return;
+          const t = this.targets()[0].t;
+          const a = t * Math.PI * 2;
+          const rx = Math.sin(a) * range;
+          const ry = Math.sin(a * 2) * range * 0.85;
+          const rz = Math.sin(a * 1.5) * rzRange;
+          apply(rx, ry, rz);
+        },
+      });
+    };
+
+    if (autoTilt) startIdle();
+
+    card.addEventListener('mouseenter', () => { isHovering = true; });
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+      // FLIPPED: hovered point comes TOWARD viewer.
+      // Cursor on right → right side comes forward → rotateY is negative.
+      // Cursor on bottom → bottom comes forward → rotateX is positive.
+      const ry = -(nx - 0.5) * range * 2;
+      const rx = (ny - 0.5) * range * 2;
+      const rz = -(nx - 0.5) * rzRange * 1.5;
+      gsap.to(card, {
+        '--rx': rx + 'deg',
+        '--ry': ry + 'deg',
+        '--rz': rz + 'deg',
+        duration: 0.45,
+        ease: 'power2.out',
+        onUpdate: () => {
+          // Highlight goes on the side that's tilted toward viewer
+          // (the side the cursor is on).
+          const diag = (ry - rx) / (range * 2);
+          if (hlTL) gsap.set(hlTL, { opacity: Math.max(0, diag) });
+          if (hlBR) gsap.set(hlBR, { opacity: Math.max(0, -diag) });
+        },
+      });
+    });
+    card.addEventListener('mouseleave', () => {
+      isHovering = false;
+      gsap.to(card, {
+        '--rx': '0deg',
+        '--ry': '0deg',
+        '--rz': '0deg',
+        duration: 0.8,
+        ease: 'power3.out',
+      });
+      // TL fades to rest baseline (so static keeps its subtle highlight);
+      // BR always fades to 0 at rest.
+      if (hlTL) gsap.to(hlTL, { opacity: restHighlight, duration: 0.5 });
+      if (hlBR) gsap.to(hlBR, { opacity: 0, duration: 0.5 });
+    });
+  }
+
+  // Static card: flat at rest with a subtle baseline highlight, but
+  // fully interactive on hover (tilts + tracks light to mouse).
+  // autoTilt:false = no idle loop.
+  const staticCard = document.getElementById('card-static');
+  driveCard(staticCard, { autoTilt: false, range: 9, rzRange: 2, restHighlight: 0.45 });
+
+  // Animated card: gentle 18-second figure-8, ±9° range, small swirl.
+  // Way slower and subtler than before. Highlights cross-fade as the
+  // tilt direction changes.
+  const animatedCard = document.getElementById('card-animated');
+  driveCard(animatedCard, { autoTilt: true, range: 9, rzRange: 2, period: 18 });
+
+  // Outer aura — slow breathe.
+  gsap.to('#aura', {
+    opacity: 0.85,
+    scale: 1.05,
+    duration: 3.2,
+    ease: 'sine.inOut',
+    yoyo: true,
+    repeat: -1,
+    transformOrigin: '50% 50%',
+  });
+</script>
+
+</body>
+</html>

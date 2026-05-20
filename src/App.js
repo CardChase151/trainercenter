@@ -4,7 +4,7 @@ import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -5758,6 +5758,493 @@ function VendorAvatar({ vendor, size = 96 }) {
   );
 }
 
+// ─── Holographic vendor card (shareable IG-ready) ─────────
+// Gold-foil card design used on the public Vendor Day page. Each card
+// renders the vendor's brand against a Trainer Center holo template:
+//   - 3D tilt + corner highlight cross-fade on desktop hover
+//   - Tap-to-animate (1.5s demo tilt then reset) on touch devices
+//   - Pure inline styles + CSS transitions (no GSAP dep added)
+//
+// scale prop = visual scale via transform. Card is always built at 405×640
+// internally so dimensions stay consistent regardless of display size.
+// PNG export at full design size + html-to-image pixelRatio gives a
+// 1080+ image ready for IG.
+function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = false, cardRef: externalRef = null }) {
+  const cardRef = useRef(null);
+  const hlTLRef = useRef(null);
+  const hlBRRef = useRef(null);
+  const mobileResetTimer = useRef(null);
+
+  // Forward the inner card ref so the IG modal can hand the DOM node
+  // to html-to-image for PNG capture.
+  useEffect(() => {
+    if (externalRef) externalRef.current = cardRef.current;
+  });
+
+  const REST_HIGHLIGHT = 0.45;
+  const RANGE = 9;
+  const RZ_RANGE = 2;
+
+  const applyTilt = useCallback((rx, ry, rz) => {
+    if (!cardRef.current) return;
+    cardRef.current.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)`;
+    const diag = (ry - rx) / (RANGE * 2);
+    if (hlTLRef.current) hlTLRef.current.style.opacity = String(Math.max(REST_HIGHLIGHT * 0.4, diag));
+    if (hlBRRef.current) hlBRRef.current.style.opacity = String(Math.max(0, -diag));
+  }, []);
+
+  const reset = useCallback(() => {
+    if (!cardRef.current) return;
+    cardRef.current.style.transform = 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)';
+    if (hlTLRef.current) hlTLRef.current.style.opacity = String(REST_HIGHLIGHT);
+    if (hlBRRef.current) hlBRRef.current.style.opacity = '0';
+  }, []);
+
+  useEffect(() => { reset(); }, [reset]);
+
+  const handleMouseMove = (e) => {
+    if (isMobile || frozen) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top) / rect.height;
+    const ry = -(nx - 0.5) * RANGE * 2;
+    const rx = (ny - 0.5) * RANGE * 2;
+    const rz = -(nx - 0.5) * RZ_RANGE * 1.5;
+    applyTilt(rx, ry, rz);
+  };
+
+  const handleMouseLeave = () => {
+    if (isMobile || frozen) return;
+    reset();
+  };
+
+  // Mobile tap: animate to a flattering tilt for 1.5s, then reset.
+  // Gives touch users a taste of the holo motion since they can't hover.
+  const handleTap = () => {
+    if (!isMobile || frozen) return;
+    if (mobileResetTimer.current) clearTimeout(mobileResetTimer.current);
+    applyTilt(-4, 6, -1);
+    mobileResetTimer.current = setTimeout(() => reset(), 1500);
+  };
+
+  useEffect(() => () => {
+    if (mobileResetTimer.current) clearTimeout(mobileResetTimer.current);
+  }, []);
+
+  const igNorm = (vendor.ig_handle || '').replace(/^@/, '').trim();
+  const ttNorm = (vendor.tiktok_handle || '').replace(/^@/, '').trim();
+  const tagline = (vendor.tagline || '').trim();
+  const name = vendorDisplayName(vendor) || '(no name)';
+
+  // Date + time formatting
+  const eventDate = event?.event_date
+    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase().replace(/,/g, ' ·')
+    : '';
+  const eventTime = (vendor.requested_start_time && vendor.requested_end_time)
+    ? `${formatTime12h(vendor.requested_start_time)} – ${formatTime12h(vendor.requested_end_time)}`
+    : '';
+
+  // Initials fallback for logo
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 1).map(w => w[0]?.toUpperCase()).join('') || '?';
+
+  // Card built at 405×640 internally; scaled visually via transform.
+  return (
+    <div style={{
+      width: 405 * scale,
+      height: 640 * scale,
+      position: 'relative',
+      perspective: 1100,
+      margin: '0 auto',
+    }}>
+      <div style={{
+        position: 'absolute', top: 0, left: 0,
+        width: 405, height: 640,
+        transform: `scale(${scale})`,
+        transformOrigin: 'top left',
+      }}>
+        <div
+          ref={cardRef}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          onClick={handleTap}
+          style={{
+            width: 405,
+            height: 640,
+            borderRadius: 24,
+            position: 'relative',
+            overflow: 'hidden',
+            background: 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
+            transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
+            transformOrigin: '50% 50%',
+            transformStyle: 'preserve-3d',
+            transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+            boxShadow: '0 30px 70px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
+            willChange: 'transform',
+            cursor: isMobile ? 'pointer' : 'default',
+          }}
+        >
+          {/* Gold foil border (conic ring via mask) */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            borderRadius: 24,
+            padding: 4,
+            background: 'conic-gradient(from 0deg, #D4A437 0%, #F2D785 12%, #fff8e1 25%, #F2D785 38%, #D4A437 50%, #F2D785 62%, #fff8e1 75%, #F2D785 88%, #D4A437 100%)',
+            WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+            WebkitMaskComposite: 'xor',
+            maskComposite: 'exclude',
+            pointerEvents: 'none',
+            zIndex: 5,
+          }} />
+
+          {/* Highlight TL */}
+          <div ref={hlTLRef} style={{
+            position: 'absolute', inset: 4, borderRadius: 20,
+            pointerEvents: 'none',
+            background: 'linear-gradient(135deg, rgba(255, 250, 220, 0.55) 0%, rgba(255, 240, 180, 0.20) 25%, rgba(255, 240, 180, 0.00) 55%)',
+            mixBlendMode: 'screen',
+            opacity: 0,
+            zIndex: 3,
+            transition: 'opacity 0.3s ease-out',
+          }} />
+
+          {/* Highlight BR */}
+          <div ref={hlBRRef} style={{
+            position: 'absolute', inset: 4, borderRadius: 20,
+            pointerEvents: 'none',
+            background: 'linear-gradient(315deg, rgba(255, 250, 220, 0.45) 0%, rgba(255, 240, 180, 0.15) 25%, rgba(255, 240, 180, 0.00) 55%)',
+            mixBlendMode: 'screen',
+            opacity: 0,
+            zIndex: 3,
+            transition: 'opacity 0.3s ease-out',
+          }} />
+
+          {/* Card content */}
+          <div style={{
+            position: 'relative',
+            zIndex: 1,
+            height: '100%',
+            padding: '26px 28px 26px',
+            display: 'flex',
+            flexDirection: 'column',
+            transform: 'translateZ(20px)',
+          }}>
+            {/* Brand bar */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 8,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 9,
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: '0.72rem', letterSpacing: '0.18em',
+                textTransform: 'uppercase', color: '#1a1a1a',
+              }}>
+                {/* Pokeball */}
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  background: 'linear-gradient(to bottom, #E63946 0% 50%, #fff 50% 100%)',
+                  position: 'relative', border: '2px solid #1a1a1a',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                }}>
+                  <div style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: '#fff', border: '2px solid #1a1a1a',
+                  }} />
+                </div>
+                <span>Trainer Center HB</span>
+              </div>
+              <div style={{
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: '0.64rem', letterSpacing: '0.2em',
+                color: '#D4A437', background: '#FBF1D4',
+                padding: '5px 10px', borderRadius: 5,
+                textTransform: 'uppercase', border: '1px solid #F2D785',
+              }}>Trade Night</div>
+            </div>
+
+            {/* Event title */}
+            <div style={{
+              fontFamily: 'Russo One, sans-serif',
+              fontSize: '0.95rem', lineHeight: 1.15,
+              letterSpacing: '0.04em', color: '#1a1a1a',
+              textTransform: 'uppercase', textAlign: 'left',
+              marginBottom: 10, paddingBottom: 10,
+              borderBottom: '1px solid rgba(212, 164, 55, 0.4)',
+            }}>
+              <span style={{ color: '#E63946' }}>TC's</span> {event?.title || 'Beach City Trade Night'}
+            </div>
+
+            {/* Hero */}
+            <div style={{
+              flex: 1,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              textAlign: 'center', padding: '10px 0',
+              transform: 'translateZ(30px)',
+            }}>
+              {/* Vendor logo with gold ring */}
+              <div style={{
+                width: 168, height: 168,
+                position: 'relative',
+                marginBottom: 18,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transform: 'translateZ(20px)',
+              }}>
+                <div style={{
+                  position: 'absolute', inset: -6,
+                  borderRadius: '50%',
+                  background: 'conic-gradient(from 0deg, #D4A437, #F2D785, #fff8e1, #F2D785, #D4A437)',
+                }} />
+                <div style={{
+                  position: 'relative',
+                  width: '100%', height: '100%',
+                  borderRadius: '50%',
+                  background: vendor.avatar_url ? '#fff' : 'linear-gradient(135deg, #E63946 0%, #B91D2C 100%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'Russo One, sans-serif',
+                  fontSize: '3.2rem',
+                  color: '#fff',
+                  textShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  border: '4px solid #fff',
+                  overflow: 'hidden',
+                  zIndex: 1,
+                }}>
+                  {vendor.avatar_url
+                    ? <img src={vendor.avatar_url} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : initials}
+                </div>
+              </div>
+
+              <div style={{
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: '1.55rem',
+                textTransform: 'uppercase', letterSpacing: '0.02em',
+                lineHeight: 1.1, marginBottom: 8,
+                color: '#1a1a1a',
+                wordBreak: 'break-word',
+              }}>{name}</div>
+
+              {tagline && (
+                <div style={{
+                  fontSize: '0.85rem', color: '#555',
+                  fontStyle: 'italic', fontWeight: 600,
+                  maxWidth: 300, lineHeight: 1.35,
+                  marginBottom: 4,
+                }}>"{tagline}"</div>
+              )}
+
+              {(igNorm || ttNorm) && (
+                <div style={{
+                  display: 'flex', justifyContent: 'center',
+                  gap: 8, marginTop: 14, flexWrap: 'wrap',
+                }}>
+                  {igNorm && (
+                    <div style={{
+                      background: '#fff', border: '1.5px solid #1a1a1a',
+                      color: '#1a1a1a',
+                      fontSize: '0.75rem', fontWeight: 800,
+                      padding: '6px 11px', borderRadius: 6,
+                      letterSpacing: '0.02em',
+                    }}>IG @{igNorm}</div>
+                  )}
+                  {ttNorm && (
+                    <div style={{
+                      background: '#fff', border: '1.5px solid #1a1a1a',
+                      color: '#1a1a1a',
+                      fontSize: '0.75rem', fontWeight: 800,
+                      padding: '6px 11px', borderRadius: 6,
+                      letterSpacing: '0.02em',
+                    }}>TT @{ttNorm}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom event band */}
+            <div style={{
+              marginTop: 18,
+              background: 'linear-gradient(90deg, #C8102E 0%, #8B0A1F 100%)',
+              borderRadius: 12,
+              padding: '12px 16px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              boxShadow: '0 6px 22px rgba(200, 16, 46, 0.30)',
+              color: '#fff',
+              transform: 'translateZ(10px)',
+            }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{
+                  fontFamily: 'Russo One, sans-serif',
+                  fontSize: '0.95rem', letterSpacing: '0.05em',
+                  lineHeight: 1,
+                }}>{eventDate}</div>
+                {eventTime && (
+                  <div style={{
+                    fontSize: '0.72rem',
+                    color: 'rgba(255,255,255,0.92)',
+                    marginTop: 3, fontWeight: 600,
+                  }}>{eventTime}</div>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{
+                  fontFamily: 'Russo One, sans-serif',
+                  fontSize: '0.72rem', letterSpacing: '0.05em',
+                  lineHeight: 1,
+                }}>8567 Edinger Ave</div>
+                <div style={{
+                  fontSize: '0.6rem', color: 'rgba(255,255,255,0.8)',
+                  marginTop: 3, fontWeight: 600,
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
+                }}>Huntington Beach, CA</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── "Post to IG" modal ───────────────────────────────────
+// Logged-in vendor taps the Send button under their own card → this opens.
+// Renders a full-size HoloVendorCard preview and offers a Static (PNG)
+// download. Video option is shown disabled — v2 work, ships when there's
+// real demand for animated exports.
+function PostToIGModal({ vendor, event, onClose }) {
+  const cardRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleDownloadPNG = async () => {
+    if (!cardRef.current || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      // Lazy-import html-to-image to keep it out of the main bundle.
+      const { toPng } = await import('html-to-image');
+      // pixelRatio=3 turns the 405×640 design into a ~1215×1920 PNG —
+      // sharper than IG needs, future-proof for any platform.
+      const dataUrl = await toPng(cardRef.current, {
+        pixelRatio: 3,
+        cacheBust: true,
+        backgroundColor: '#ffffff',
+      });
+      const safeName = (vendorDisplayName(vendor) || 'vendor').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const safeDate = event?.event_date || 'event';
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `tc-vendor-card-${safeName}-${safeDate}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('[PostToIGModal] download failed', err);
+      setError(err.message || 'Could not generate the image. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16, zIndex: 9999,
+    }} onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="modal-safe-bottom smooth-scroll"
+        style={{
+          backgroundColor: '#fff', borderRadius: 18,
+          padding: '24px 22px',
+          maxWidth: 480, width: '100%',
+          maxHeight: '92vh', overflow: 'auto',
+          textAlign: 'center',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Share to Instagram</h3>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#888', padding: 4, display: 'flex',
+          }} aria-label="Close"><X size={20} /></button>
+        </div>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px', textAlign: 'left' }}>
+          Download your branded card and post it to your IG feed or story.
+        </p>
+
+        {/* Preview card */}
+        <div style={{
+          display: 'flex', justifyContent: 'center',
+          marginBottom: 20,
+          padding: '10px 0',
+        }}>
+          <HoloVendorCard
+            vendor={vendor}
+            event={event}
+            isOwn={false}
+            isMobile={false}
+            scale={0.82}
+            frozen={true}
+            cardRef={cardRef}
+          />
+        </div>
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+            color: '#dc2626', borderRadius: 8,
+            padding: '10px 12px', fontSize: '0.85rem',
+            marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+            textAlign: 'left',
+          }}>
+            <AlertCircle size={16} />{error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            type="button"
+            onClick={handleDownloadPNG}
+            disabled={busy}
+            style={{
+              flex: 1, padding: '12px 14px',
+              backgroundColor: busy ? '#999' : '#1a1a1a',
+              color: '#fff', border: 'none', borderRadius: 10,
+              fontSize: '0.92rem', fontWeight: 700,
+              cursor: busy ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center',
+              justifyContent: 'center', gap: 6,
+              fontFamily: 'inherit',
+            }}
+          >
+            {busy ? <><Loader2 size={14} className="spin" /> Generating…</> : <>Download static</>}
+          </button>
+          <button
+            type="button"
+            disabled
+            title="Coming soon — animated foil card export"
+            style={{
+              flex: 1, padding: '12px 14px',
+              backgroundColor: '#f3f4f6',
+              color: '#999', border: '1px solid #e5e7eb',
+              borderRadius: 10,
+              fontSize: '0.92rem', fontWeight: 700,
+              cursor: 'not-allowed',
+              fontFamily: 'inherit',
+            }}
+          >
+            Video (soon)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Vendor card for the vendor-day showcase ──────────────
 function VendorCard({ vendor, isOwn }) {
   const handles = [
@@ -7223,7 +7710,7 @@ function VendorDayPage({ isMobile }) {
           id, title, event_date, cancelled,
           vendor_applications (
             id, status, requested_start_time, requested_end_time,
-            vendor:vendors ( id, name, avatar_url, specialty, bio, ig_handle, tiktok_handle, fb_handle )
+            vendor:vendors ( id, name, business_name, avatar_url, specialty, bio, tagline, ig_handle, tiktok_handle, fb_handle )
           )
         `)
         .eq('has_vendors', true)
@@ -7447,6 +7934,10 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
   const isPast = dayDiff < 0;
   const relativeLabel = isPast ? 'PAST' : dayDiff === 0 ? 'TODAY' : dayDiff === 1 ? 'TOMORROW' : (dayDiff <= 7 ? 'THIS WEEK' : 'COMING UP');
   const vendors = event.approved_vendors || [];
+  // Vendor selected for the Post-to-IG modal (only the logged-in vendor's
+  // own card surfaces the trigger button, but we keep state at the row
+  // level so the modal lives outside the scaled card transform).
+  const [postingVendor, setPostingVendor] = useState(null);
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
@@ -7500,14 +7991,58 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile
-            ? 'repeat(auto-fill, minmax(160px, 1fr))'
-            : 'repeat(auto-fill, minmax(220px, 1fr))',
-          gap: isMobile ? '12px' : '20px',
+            ? 'repeat(auto-fill, minmax(180px, 1fr))'
+            : 'repeat(auto-fill, minmax(240px, 1fr))',
+          gap: isMobile ? '14px' : '24px',
+          padding: isMobile ? '0 4px' : 0,
         }}>
-          {vendors.map(v => (
-            <VendorCard key={v.id} vendor={v} isOwn={myVendorId === v.id} />
-          ))}
+          {vendors.map(v => {
+            const isOwn = myVendorId === v.id;
+            // Card scaled to fit the grid cell (design is 405 wide).
+            const cardScale = isMobile ? 0.42 : 0.56;
+            return (
+              <div key={v.id} style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: 10,
+              }}>
+                <HoloVendorCard
+                  vendor={v}
+                  event={event}
+                  isOwn={isOwn}
+                  isMobile={isMobile}
+                  scale={cardScale}
+                />
+                {isOwn && (
+                  <button
+                    type="button"
+                    onClick={() => setPostingVendor(v)}
+                    style={{
+                      backgroundColor: '#1a1a1a', color: '#fff',
+                      border: 'none', borderRadius: 10,
+                      padding: '8px 14px',
+                      fontSize: '0.8rem', fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontFamily: 'inherit',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    }}
+                  >
+                    <Send size={14} /> Post to IG
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      {postingVendor && (
+        <PostToIGModal
+          vendor={postingVendor}
+          event={event}
+          onClose={() => setPostingVendor(null)}
+        />
       )}
     </div>
   );
@@ -9846,6 +10381,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
     tiktok_handle: existingVendor?.tiktok_handle || '',
     fb_handle: existingVendor?.fb_handle || '',
     specialty: existingVendor?.specialty || '',
+    tagline: existingVendor?.tagline || '',
     bio: existingVendor?.bio || '',
     heard_from: existingVendor?.heard_from || '',
     referred_by_name: existingVendor?.referred_by_name || '',
@@ -9893,6 +10429,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
       tiktok_handle: cleanHandle(form.tiktok_handle),
       fb_handle: cleanHandle(form.fb_handle),
       specialty: form.specialty.trim() || null,
+      tagline: form.tagline.trim() || null,
       bio: form.bio.trim() || null,
       experience_level: form.experience_level || null,
       applicant_questions: form.applicant_questions.trim() || null,
@@ -10100,6 +10637,18 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             <option value="Modern">Modern chase cards</option>
             <option value="Mixed">Mixed inventory</option>
           </select>
+
+          <label style={labelCss}>Tagline (shows on your shareable card)</label>
+          <input
+            value={form.tagline}
+            onChange={setField('tagline')}
+            maxLength={60}
+            placeholder="Where every pull tells a story"
+            style={inputCss}
+          />
+          <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px', marginBottom: '12px', textAlign: 'right' }}>
+            {form.tagline.length} / 60
+          </div>
 
           <label style={labelCss}>Short bio (shows next to your posts)</label>
           <textarea value={form.bio} onChange={setField('bio')} rows={3} placeholder="A sentence or two about your shop or what you bring to Vendor Day" style={{ ...inputCss, fontFamily: 'inherit', resize: 'vertical' }} />
