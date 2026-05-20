@@ -6130,7 +6130,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   fontFamily: 'Russo One, sans-serif',
                   fontSize: f(0.72), letterSpacing: '0.04em',
                   lineHeight: 1.1, whiteSpace: 'nowrap',
-                }}>8567 Edinger Ave</div>
+                }}>4911 Warner Ave #210</div>
                 <div style={{
                   fontSize: f(0.58), color: 'rgba(255,255,255,0.8)',
                   marginTop: 4, fontWeight: 600,
