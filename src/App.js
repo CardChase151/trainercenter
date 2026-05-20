@@ -5769,11 +5769,10 @@ function VendorAvatar({ vendor, size = 96 }) {
 // internally so dimensions stay consistent regardless of display size.
 // PNG export at full design size + html-to-image pixelRatio gives a
 // 1080+ image ready for IG.
-function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = false, cardRef: externalRef = null, pikachuBackground = false }) {
+function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = false, cardRef: externalRef = null, pikachuBackground = false, onClick = null }) {
   const cardRef = useRef(null);
   const hlTLRef = useRef(null);
   const hlBRRef = useRef(null);
-  const mobileResetTimer = useRef(null);
 
   // Forward the inner card ref so the IG modal can hand the DOM node
   // to html-to-image for PNG capture.
@@ -5826,18 +5825,12 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
     reset();
   };
 
-  // Mobile tap: animate to a flattering tilt for 1.5s, then reset.
-  // Gives touch users a taste of the holo motion since they can't hover.
-  const handleTap = () => {
-    if (!isMobile || frozen) return;
-    if (mobileResetTimer.current) clearTimeout(mobileResetTimer.current);
-    applyTilt(-4, 6, -1);
-    mobileResetTimer.current = setTimeout(() => reset(), 1500);
+  // Click/tap the card → open the download modal (if onClick is provided).
+  // No more mobile tap-tilt animation — tap goes straight to the modal.
+  const handleCardClick = () => {
+    if (frozen || !onClick) return;
+    onClick();
   };
-
-  useEffect(() => () => {
-    if (mobileResetTimer.current) clearTimeout(mobileResetTimer.current);
-  }, []);
 
   const igNorm = (vendor.ig_handle || '').replace(/^@/, '').trim();
   const tagline = (vendor.tagline || '').trim();
@@ -5878,7 +5871,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
           ref={cardRef}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          onClick={handleTap}
+          onClick={handleCardClick}
           style={{
             width: 405,
             height: 640,
@@ -5897,7 +5890,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
             boxShadow: '0 30px 70px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
             willChange: 'transform',
-            cursor: isMobile ? 'pointer' : 'default',
+            cursor: onClick ? 'pointer' : 'default',
           }}
         >
           {/* Gold foil border (conic ring via mask) */}
@@ -6160,11 +6153,10 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   );
 }
 
-// ─── "Post to IG" modal ───────────────────────────────────
-// Logged-in vendor taps the Send button under their own card → this opens.
-// Renders a full-size HoloVendorCard preview and offers a Static (PNG)
-// download. Video option is shown disabled — v2 work, ships when there's
-// real demand for animated exports.
+// ─── Card download modal ──────────────────────────────────
+// Anyone taps a vendor card → this opens. Renders a full-size HoloVendorCard
+// preview with two buttons: Download Image (PNG) and Download Video (coming
+// soon). No login required — friction-free sharing for any visitor.
 function PostToIGModal({ vendor, event, onClose }) {
   const cardRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -6219,14 +6211,14 @@ function PostToIGModal({ vendor, event, onClose }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Share to Instagram</h3>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Share this card</h3>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: '#888', padding: 4, display: 'flex',
           }} aria-label="Close"><X size={20} /></button>
         </div>
         <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px', textAlign: 'left' }}>
-          Download your branded card and post it to your IG feed or story.
+          Download the image or video and post it anywhere — IG, X, group chats.
         </p>
 
         {/* Preview card */}
@@ -6275,7 +6267,7 @@ function PostToIGModal({ vendor, event, onClose }) {
               fontFamily: 'inherit',
             }}
           >
-            {busy ? <><Loader2 size={14} className="spin" /> Generating…</> : <>Download static</>}
+            {busy ? <><Loader2 size={14} className="spin" /> Generating…</> : <><ImageIcon size={14} /> Download image</>}
           </button>
           <button
             type="button"
@@ -6289,9 +6281,10 @@ function PostToIGModal({ vendor, event, onClose }) {
               fontSize: '0.92rem', fontWeight: 700,
               cursor: 'not-allowed',
               fontFamily: 'inherit',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}
           >
-            Video (soon)
+            <Film size={14} /> Download video (soon)
           </button>
         </div>
       </div>
@@ -8278,42 +8271,22 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
           padding: isMobile ? '0 4px' : 0,
         }}>
           {vendors.map(v => {
-            const isOwn = myVendorId === v.id;
             // Card visually scaled to fit the grid cell (design is 405 wide).
             // Font sizes inside the card auto-boost when scale is small so
             // text stays readable — see fontBoost inside HoloVendorCard.
             const cardScale = isMobile ? 0.42 : 0.56;
             return (
               <div key={v.id} style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', gap: 10,
+                display: 'flex', justifyContent: 'center',
               }}>
                 <HoloVendorCard
                   vendor={v}
                   event={event}
-                  isOwn={isOwn}
+                  isOwn={false}
                   isMobile={isMobile}
                   scale={cardScale}
+                  onClick={() => setPostingVendor(v)}
                 />
-                {isOwn && (
-                  <button
-                    type="button"
-                    onClick={() => setPostingVendor(v)}
-                    style={{
-                      backgroundColor: '#1a1a1a', color: '#fff',
-                      border: 'none', borderRadius: 10,
-                      padding: '8px 14px',
-                      fontSize: '0.8rem', fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      cursor: 'pointer',
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      fontFamily: 'inherit',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                    }}
-                  >
-                    <Send size={14} /> Post to IG
-                  </button>
-                )}
               </div>
             );
           })}
