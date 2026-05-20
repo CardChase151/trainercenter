@@ -5769,7 +5769,7 @@ function VendorAvatar({ vendor, size = 96 }) {
 // internally so dimensions stay consistent regardless of display size.
 // PNG export at full design size + html-to-image pixelRatio gives a
 // 1080+ image ready for IG.
-function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = false, cardRef: externalRef = null }) {
+function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = false, cardRef: externalRef = null, pikachuBackground = false }) {
   const cardRef = useRef(null);
   const hlTLRef = useRef(null);
   const hlBRRef = useRef(null);
@@ -5840,16 +5840,20 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   }, []);
 
   const igNorm = (vendor.ig_handle || '').replace(/^@/, '').trim();
-  const ttNorm = (vendor.tiktok_handle || '').replace(/^@/, '').trim();
   const tagline = (vendor.tagline || '').trim();
   const name = vendorDisplayName(vendor) || '(no name)';
 
-  // Date + time formatting
+  // Date: compact "FRI MAY 29" — no commas/separators so it never wraps.
   const eventDate = event?.event_date
-    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase().replace(/,/g, ' ·')
+    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase().replace(/,/g, '')
     : '';
+  // Time: compact "12 PM – 10 PM" (drop ":00" when minutes are zero).
+  const compactTime = (t) => {
+    const lbl = formatTime12h(t) || '';
+    return lbl.replace(/:00\s/, ' ');
+  };
   const eventTime = (vendor.requested_start_time && vendor.requested_end_time)
-    ? `${formatTime12h(vendor.requested_start_time)} – ${formatTime12h(vendor.requested_end_time)}`
+    ? `${compactTime(vendor.requested_start_time)} – ${compactTime(vendor.requested_end_time)}`
     : '';
 
   // Initials fallback for logo
@@ -5881,9 +5885,12 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             borderRadius: 24,
             position: 'relative',
             overflow: 'hidden',
-            // Pikachu background zoomed in beyond cover so he reads big,
-            // with a soft white wash on top to keep text legible.
-            background: "linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(253,250,243,0.55) 100%), url('/pikachuuuu.jpg') center / 140% no-repeat",
+            // Default: clean cream card. With pikachuBackground=true (used
+            // by IG download exports only), layer a faded Pikachu behind a
+            // strong white wash so he's a hint, not a distraction.
+            background: pikachuBackground
+              ? "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(253,250,243,0.82) 100%), url('/pikachuuuu.jpg') center / 140% no-repeat"
+              : 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
             transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
             transformOrigin: '50% 50%',
             transformStyle: 'preserve-3d',
@@ -5938,54 +5945,57 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             flexDirection: 'column',
             transform: 'translateZ(20px)',
           }}>
-            {/* Brand bar */}
+            {/* Brand bar: TC logo + TRADE NIGHT pill, both left-aligned. */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginBottom: 8,
+              display: 'flex', alignItems: 'center', gap: 10,
+              marginBottom: 10,
             }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 9,
-                fontFamily: 'Russo One, sans-serif',
-                fontSize: f(0.72), letterSpacing: '0.18em',
-                textTransform: 'uppercase', color: '#1a1a1a',
-              }}>
-                {/* Pokeball */}
-                <div style={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  background: 'linear-gradient(to bottom, #E63946 0% 50%, #fff 50% 100%)',
-                  position: 'relative', border: '2px solid #1a1a1a',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                }}>
-                  <div style={{
-                    position: 'absolute', top: '50%', left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: '#fff', border: '2px solid #1a1a1a',
-                  }} />
-                </div>
-                <span>Trainer Center HB</span>
-              </div>
+              <img
+                src="/logo-circle-transparent.png"
+                alt="Trainer Center"
+                crossOrigin="anonymous"
+                style={{
+                  width: 32, height: 32,
+                  borderRadius: '50%',
+                  background: '#1a1a1a',
+                  padding: 2,
+                  flexShrink: 0,
+                }}
+              />
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
-                fontSize: f(0.64), letterSpacing: '0.2em',
+                fontSize: f(0.62), letterSpacing: '0.22em',
                 color: '#D4A437', background: '#FBF1D4',
-                padding: '5px 10px', borderRadius: 5,
+                padding: '4px 9px', borderRadius: 5,
                 textTransform: 'uppercase', border: '1px solid #F2D785',
+                lineHeight: 1,
               }}>Trade Night</div>
             </div>
 
-            {/* Event title. We render "TC's" as the red accent ourselves,
-                so strip any "TC's" prefix already in event.title (the DB
-                label is "TC's Beach City Trade Night!") to avoid doubling. */}
+            {/* Event title, centered, two lines:
+                  "Trainer Center's"
+                  "Beach City Trade Night"
+                The DB title is "TC's Beach City Trade Night!" — we strip
+                "TC's " prefix since the first line is our rendered version
+                of that branding. */}
             <div style={{
-              fontFamily: 'Russo One, sans-serif',
-              fontSize: f(0.95), lineHeight: 1.15,
-              letterSpacing: '0.04em', color: '#1a1a1a',
-              textTransform: 'uppercase', textAlign: 'left',
+              textAlign: 'center',
               marginBottom: 10, paddingBottom: 10,
               borderBottom: '1px solid rgba(212, 164, 55, 0.4)',
+              fontFamily: 'Russo One, sans-serif',
+              textTransform: 'uppercase',
             }}>
-              <span style={{ color: '#E63946' }}>TC's</span> {(event?.title || 'Beach City Trade Night').replace(/^TC'?s\s+/i, '')}
+              <div style={{
+                fontSize: f(0.72), lineHeight: 1.1,
+                color: '#E63946',
+                letterSpacing: '0.06em',
+                marginBottom: 2,
+              }}>Trainer Center's</div>
+              <div style={{
+                fontSize: f(1.05), lineHeight: 1.05,
+                color: '#1a1a1a',
+                letterSpacing: '0.03em',
+              }}>{(event?.title || 'Beach City Trade Night').replace(/^TC'?s\s+/i, '').replace(/!$/, '')}</div>
             </div>
 
             {/* Hero */}
@@ -6047,81 +6057,69 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 }}>"{tagline}"</div>
               )}
 
-              {(igNorm || ttNorm) && (
+              {igNorm && (
                 <div style={{
                   display: 'flex', justifyContent: 'center',
-                  gap: 8, marginTop: 14, flexWrap: 'wrap',
+                  marginTop: 14,
                 }}>
-                  {igNorm && (
-                    <a
-                      href={`https://instagram.com/${igNorm}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        background: '#fff', border: '1.5px solid #1a1a1a',
-                        color: '#1a1a1a', textDecoration: 'none',
-                        fontSize: f(0.85), fontWeight: 800,
-                        padding: '7px 12px', borderRadius: 7,
-                        letterSpacing: '0.02em',
-                      }}
-                    >IG @{igNorm}</a>
-                  )}
-                  {ttNorm && (
-                    <a
-                      href={`https://tiktok.com/@${ttNorm}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{
-                        background: '#fff', border: '1.5px solid #1a1a1a',
-                        color: '#1a1a1a', textDecoration: 'none',
-                        fontSize: f(0.85), fontWeight: 800,
-                        padding: '7px 12px', borderRadius: 7,
-                        letterSpacing: '0.02em',
-                      }}
-                    >TT @{ttNorm}</a>
-                  )}
+                  <a
+                    href={`https://instagram.com/${igNorm}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      background: '#fff', border: '1.5px solid #1a1a1a',
+                      color: '#1a1a1a', textDecoration: 'none',
+                      fontSize: f(0.85), fontWeight: 800,
+                      padding: '7px 14px', borderRadius: 7,
+                      letterSpacing: '0.02em',
+                    }}
+                  >IG @{igNorm}</a>
                 </div>
               )}
             </div>
 
-            {/* Bottom event band */}
+            {/* Bottom event band. Each side gets two lines that never wrap
+                (whiteSpace nowrap). Compact formats keep it readable at
+                grid scale. */}
             <div style={{
               marginTop: 18,
               background: 'linear-gradient(90deg, #C8102E 0%, #8B0A1F 100%)',
               borderRadius: 12,
-              padding: '12px 16px',
+              padding: '10px 14px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              gap: 8,
               boxShadow: '0 6px 22px rgba(200, 16, 46, 0.30)',
               color: '#fff',
               transform: 'translateZ(10px)',
             }}>
-              <div style={{ textAlign: 'left' }}>
+              <div style={{ textAlign: 'left', minWidth: 0 }}>
                 <div style={{
                   fontFamily: 'Russo One, sans-serif',
-                  fontSize: f(0.95), letterSpacing: '0.05em',
-                  lineHeight: 1,
+                  fontSize: f(0.85), letterSpacing: '0.04em',
+                  lineHeight: 1.1, whiteSpace: 'nowrap',
                 }}>{eventDate}</div>
                 {eventTime && (
                   <div style={{
-                    fontSize: f(0.72),
+                    fontSize: f(0.68),
                     color: 'rgba(255,255,255,0.92)',
-                    marginTop: 3, fontWeight: 600,
+                    marginTop: 4, fontWeight: 600,
+                    whiteSpace: 'nowrap',
                   }}>{eventTime}</div>
                 )}
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right', minWidth: 0 }}>
                 <div style={{
                   fontFamily: 'Russo One, sans-serif',
-                  fontSize: f(0.72), letterSpacing: '0.05em',
-                  lineHeight: 1,
+                  fontSize: f(0.72), letterSpacing: '0.04em',
+                  lineHeight: 1.1, whiteSpace: 'nowrap',
                 }}>8567 Edinger Ave</div>
                 <div style={{
-                  fontSize: f(0.6), color: 'rgba(255,255,255,0.8)',
-                  marginTop: 3, fontWeight: 600,
+                  fontSize: f(0.58), color: 'rgba(255,255,255,0.8)',
+                  marginTop: 4, fontWeight: 600,
                   letterSpacing: '0.06em', textTransform: 'uppercase',
-                }}>Huntington Beach, CA</div>
+                  whiteSpace: 'nowrap',
+                }}>Huntington Beach</div>
               </div>
             </div>
           </div>
@@ -6213,6 +6211,7 @@ function PostToIGModal({ vendor, event, onClose }) {
             isMobile={false}
             scale={0.82}
             frozen={true}
+            pikachuBackground={true}
             cardRef={cardRef}
           />
         </div>
@@ -6441,6 +6440,7 @@ function BulkDownloadModal({ vendors, event, onClose }) {
                 isMobile={false}
                 scale={1}
                 frozen={true}
+                pikachuBackground={true}
                 cardRef={cardRefs.current[v.id]}
               />
             </div>
