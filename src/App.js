@@ -19216,6 +19216,101 @@ function EventTablesPage({ isMobile, staff }) {
   );
 }
 
+// ─── Compact sizzle card ──────────────────────────────────
+// Pared-down vendor card for the sizzle reel grid. Just the logo,
+// vendor name, and (optionally) the IG handle — no event title, no
+// date, no address. Those live in the static header banner of the
+// sizzle frame so they don't need to repeat on every card.
+function SizzleCard({ vendor }) {
+  const igNorm = (vendor.ig_handle || '').replace(/^@/, '').trim();
+  const name = vendorDisplayName(vendor) || '(no name)';
+  const isSingleWord = !name.includes(' ');
+  const nameSize = isSingleWord
+    ? Math.min(0.85, 14 / Math.max(name.length, 1))
+    : 0.85;
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 1).map(w => w[0]?.toUpperCase()).join('') || '?';
+
+  return (
+    <div style={{
+      width: 130, height: 195,
+      borderRadius: 14,
+      position: 'relative',
+      overflow: 'hidden',
+      background: 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
+      boxShadow: '0 8px 22px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04)',
+    }}>
+      {/* Gold foil border */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        borderRadius: 14,
+        padding: 2,
+        background: 'conic-gradient(from 0deg, #D4A437 0%, #F2D785 12%, #fff8e1 25%, #F2D785 38%, #D4A437 50%, #F2D785 62%, #fff8e1 75%, #F2D785 88%, #D4A437 100%)',
+        WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+        WebkitMaskComposite: 'xor',
+        maskComposite: 'exclude',
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{
+        padding: '12px 8px 10px',
+        height: '100%',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center', gap: 8,
+        position: 'relative', zIndex: 1,
+      }}>
+        {/* Logo */}
+        <div style={{
+          width: 78, height: 78,
+          borderRadius: '50%',
+          background: vendor.avatar_url ? '#fff' : 'linear-gradient(135deg, #E63946 0%, #B91D2C 100%)',
+          border: '3px solid #fff',
+          boxShadow: '0 0 0 1.5px #D4A437',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden',
+          color: '#fff',
+          fontFamily: 'Russo One, sans-serif',
+          fontSize: '1.8rem',
+        }}>
+          {vendor.avatar_url
+            ? <img src={vendor.avatar_url} alt="" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : initials}
+        </div>
+
+        {/* Name */}
+        <div style={{
+          fontFamily: 'Russo One, sans-serif',
+          fontSize: `${nameSize}rem`,
+          color: '#1a1a1a',
+          textTransform: 'uppercase',
+          letterSpacing: '0.02em',
+          lineHeight: 1.05,
+          ...(isSingleWord
+            ? { whiteSpace: 'nowrap' }
+            : { wordBreak: 'normal', overflowWrap: 'normal' }),
+        }}>{name}</div>
+
+        {/* IG handle */}
+        {igNorm && (
+          <div style={{
+            fontSize: '0.6rem',
+            fontWeight: 800,
+            color: '#1a1a1a',
+            background: 'rgba(255,255,255,0.7)',
+            border: '1px solid #1a1a1a',
+            padding: '3px 7px',
+            borderRadius: 4,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>@{igNorm}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Staff Event Sizzle (/staff/events/:eventId/sizzle) ────
 // 9:16 portrait recording frame with all approved vendor cards
 // scrolling vertically on a 5-second loop. Staff drag-selects the
@@ -19290,19 +19385,16 @@ function EventSizzlePage({ isMobile, staff }) {
     );
   }
 
-  // Three columns of vertically-scrolling cards inside the 9:16 frame.
-  // Each column shows the same vendor list, but animation-delay shifts
-  // them by 1/3 of the cycle each — at any moment col 1 / col 2 / col 3
-  // are at three different vertical positions, creating the "staircase"
-  // visual Chase wanted (no two columns ever in lock-step).
+  // Three columns of vertically-scrolling sizzle cards inside the 9:16
+  // frame. Each column shows the same vendor list, but animation-delay
+  // shifts them by 1/3 of the cycle each — at any moment col 1/2/3 are
+  // at three different vertical positions, creating the staircase visual.
   const COLUMNS = 3;
 
-  // Cards are rendered at a smaller scale to fit three across in 405px
-  // wide. After 4px gap each side, each column is ~131px → card scale ~0.32.
-  const CARD_SCALE = 0.32;
-  const CARD_W = Math.round(405 * CARD_SCALE);   // ≈ 130
-  const CARD_H = Math.round(640 * CARD_SCALE);   // ≈ 205
-  const GAP = 10;
+  // Compact SizzleCard is 130x195. Gap between them.
+  const CARD_W = 130;
+  const CARD_H = 195;
+  const GAP = 12;
   const slotHeight = CARD_H + GAP;
   const cycleDistance = vendors.length * slotHeight;
 
@@ -19417,45 +19509,92 @@ function EventSizzlePage({ isMobile, staff }) {
                 overflow: 'hidden',
                 position: 'relative',
                 display: 'flex',
-                gap: 6,
-                padding: 4,
+                flexDirection: 'column',
               }}>
-                {Array.from({ length: COLUMNS }).map((_, colIdx) => (
-                  <div key={colIdx} style={{
-                    flex: 1,
-                    position: 'relative',
+                {/* Static header banner — TC branding + date so it doesn't
+                    need to repeat on every card below. */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #C8102E 0%, #8B0A1F 100%)',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  color: '#fff',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+                  zIndex: 2,
+                }}>
+                  <div style={{
+                    width: 44, height: 44, borderRadius: '50%',
+                    backgroundColor: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                     overflow: 'hidden',
-                    display: 'flex',
-                    justifyContent: 'center',
+                    flexShrink: 0,
+                    border: '2px solid #fff',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
                   }}>
-                    <div
-                      className="sizzle-track"
-                      style={{
-                        // Each column is phase-shifted by 1/3 of the loop
-                        // (negative delay = "already running" at start).
-                        animationDelay: `-${(colIdx * LOOP_SEC) / COLUMNS}s`,
-                      }}
-                    >
-                      {duplicated.map((v, i) => (
-                        <div key={`${v.id}-${colIdx}-${i}`} style={{
-                          marginBottom: GAP,
-                          display: 'flex', justifyContent: 'center',
-                          width: CARD_W,
-                        }}>
-                          <HoloVendorCard
-                            vendor={v}
-                            event={event}
-                            isOwn={false}
-                            isMobile={false}
-                            scale={CARD_SCALE}
-                            frozen={true}
-                            pikachuBackground={true}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <img
+                      src="/logo-circle-transparent.png"
+                      alt="Trainer Center"
+                      crossOrigin="anonymous"
+                      style={{ width: 60, height: 60, objectFit: 'contain' }}
+                    />
                   </div>
-                ))}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '0.62rem',
+                      letterSpacing: '0.18em',
+                      textTransform: 'uppercase',
+                      fontWeight: 700,
+                      opacity: 0.85,
+                      lineHeight: 1,
+                      marginBottom: 4,
+                    }}>Trainer Center's</div>
+                    <div style={{
+                      fontFamily: 'Russo One, sans-serif',
+                      fontSize: '1.15rem',
+                      letterSpacing: '0.03em',
+                      lineHeight: 1.05,
+                      textTransform: 'uppercase',
+                    }}>{new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase().replace(/,/g, '')} Lineup</div>
+                  </div>
+                </div>
+
+                {/* Three staggered scrolling columns of compact sizzle cards. */}
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  gap: 6,
+                  padding: '12px 4px 0',
+                  overflow: 'hidden',
+                }}>
+                  {Array.from({ length: COLUMNS }).map((_, colIdx) => (
+                    <div key={colIdx} style={{
+                      flex: 1,
+                      position: 'relative',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      justifyContent: 'center',
+                    }}>
+                      <div
+                        className="sizzle-track"
+                        style={{
+                          animationDelay: `-${(colIdx * LOOP_SEC) / COLUMNS}s`,
+                        }}
+                      >
+                        {duplicated.map((v, i) => (
+                          <div key={`${v.id}-${colIdx}-${i}`} style={{
+                            marginBottom: GAP,
+                            display: 'flex', justifyContent: 'center',
+                            width: CARD_W,
+                          }}>
+                            <SizzleCard vendor={v} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
