@@ -5785,12 +5785,12 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   const RANGE = 9;
   const RZ_RANGE = 2;
 
-  // Font boost: when the card is visually scaled down (grid view), CSS
-  // transform shrinks text proportionally and it gets hard to read. We
-  // compensate by bumping the native font sizes inversely. The 0.85 keeps
-  // us a hair under full compensation so the layout doesn't burst. At
-  // scale 0.56 this gives ~52% larger native fonts → readable in grid.
-  const fontBoost = scale >= 0.9 ? 1 : Math.max(1, 0.85 / scale);
+  // Font boost: native font sizes are tuned for full-scale (1.0) export
+  // where the card is meant to read as a poster-sized IG image. When the
+  // card is shrunk for grid display, CSS transform shrinks text too, so
+  // we partially compensate. 0.7/scale = moderate boost (1.0x at native,
+  // ~1.25x in desktop grid, ~1.7x in mobile grid).
+  const fontBoost = scale >= 0.9 ? 1 : Math.max(1, 0.7 / scale);
   const f = (rem) => `${(rem * fontBoost).toFixed(3)}rem`;
 
   const applyTilt = useCallback((rx, ry, rz) => {
@@ -5984,7 +5984,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               <div style={{
                 height: 36,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: f(0.78), lineHeight: 1,
+                fontSize: f(1.05), lineHeight: 1,
                 color: '#E63946',
                 letterSpacing: '0.06em',
               }}>Trainer Center's</div>
@@ -5992,8 +5992,8 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               {/* Row 2: "Beach City Trade Night" — single line, slightly
                   smaller so it never wraps even at grid scale. */}
               <div style={{
-                marginTop: 4,
-                fontSize: f(0.92), lineHeight: 1.05,
+                marginTop: 2,
+                fontSize: f(1.35), lineHeight: 1.05,
                 color: '#1a1a1a',
                 letterSpacing: '0.02em',
                 whiteSpace: 'nowrap',
@@ -6046,12 +6046,12 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 // Single-word names get auto-shrunk to fit on one line.
                 // Multi-word names stay at full size and wrap at spaces
                 // (no mid-word breaks — that's what was penalizing long
-                // single words). 22 ≈ the max chars that fit at 1.55rem
-                // across the card's internal width.
+                // single words). 22 ≈ the max chars that fit at base
+                // 1.95rem across the card's internal width.
                 const isSingleWord = !name.includes(' ');
                 const nameSize = isSingleWord
-                  ? Math.min(1.55, 22 / Math.max(name.length, 1))
-                  : 1.55;
+                  ? Math.min(1.95, 28 / Math.max(name.length, 1))
+                  : 1.95;
                 return (
                   <div style={{
                     fontFamily: 'Russo One, sans-serif',
@@ -6068,7 +6068,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
 
               {tagline && (
                 <div style={{
-                  fontSize: f(0.85), color: '#555',
+                  fontSize: f(1.0), color: '#555',
                   fontStyle: 'italic', fontWeight: 600,
                   maxWidth: 300, lineHeight: 1.35,
                   marginBottom: 4,
@@ -6088,8 +6088,8 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                     style={{
                       background: '#fff', border: '1.5px solid #1a1a1a',
                       color: '#1a1a1a', textDecoration: 'none',
-                      fontSize: f(0.85), fontWeight: 800,
-                      padding: '7px 14px', borderRadius: 7,
+                      fontSize: f(1.0), fontWeight: 800,
+                      padding: '8px 16px', borderRadius: 7,
                       letterSpacing: '0.02em',
                     }}
                   >IG @{igNorm}</a>
@@ -6108,7 +6108,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   {eventDate && (
                     <div style={{
                       fontFamily: 'Russo One, sans-serif',
-                      fontSize: f(1.0),
+                      fontSize: f(1.4),
                       letterSpacing: '0.05em',
                       color: '#1a1a1a',
                       lineHeight: 1.05,
@@ -6117,7 +6117,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   )}
                   {eventTime && (
                     <div style={{
-                      fontSize: f(0.78),
+                      fontSize: f(0.95),
                       color: '#555',
                       fontWeight: 700,
                       letterSpacing: '0.04em',
@@ -6142,11 +6142,11 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             }}>
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
-                fontSize: f(0.92), letterSpacing: '0.04em',
+                fontSize: f(1.2), letterSpacing: '0.04em',
                 lineHeight: 1.1, whiteSpace: 'nowrap',
               }}>4911 Warner Ave #210</div>
               <div style={{
-                fontSize: f(0.62),
+                fontSize: f(0.78),
                 color: 'rgba(255,255,255,0.85)',
                 marginTop: 4, fontWeight: 600,
                 letterSpacing: '0.08em', textTransform: 'uppercase',
