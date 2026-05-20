@@ -8216,7 +8216,10 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
       ) : (
         <>
         {isAdmin && (
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{
+            display: 'flex', justifyContent: 'center', gap: 12,
+            marginBottom: 24, flexWrap: 'wrap',
+          }}>
             <button
               type="button"
               onClick={() => setBulkDownloading(true)}
@@ -8234,6 +8237,22 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
             >
               <UploadIcon size={14} /> Download all cards (ZIP)
             </button>
+            <Link
+              to={`/staff/events/${event.id}/sizzle`}
+              style={{
+                backgroundColor: '#C8102E', color: '#fff',
+                border: 'none', borderRadius: 10,
+                padding: '10px 18px',
+                fontSize: '0.85rem', fontWeight: 800,
+                letterSpacing: '0.04em',
+                textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontFamily: 'inherit',
+                boxShadow: '0 4px 12px rgba(200,16,46,0.18)',
+              }}
+            >
+              <Film size={14} /> Sizzle reel
+            </Link>
           </div>
         )}
         <div style={{
@@ -18062,38 +18081,22 @@ function EventTimeMapPage({ isMobile, staff }) {
               });
               const tables = full + (dbl * 2) + paired + solo + tbd;
               return (
-                <>
-                  <Link
-                    to={`/staff/events/${eventId}/tables`}
-                    style={{
-                      backgroundColor: '#fff', color: '#1a1a1a',
-                      border: '1px solid #1a1a1a',
-                      padding: '6px 14px', borderRadius: '10px',
-                      textDecoration: 'none',
-                      display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
-                      fontFamily: 'inherit', minWidth: '96px',
-                    }}
-                  >
-                    <span style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Tables</span>
-                    <span style={{ fontSize: '1.05rem', fontWeight: '900', lineHeight: 1.1 }}>
-                      {tables}{tbd > 0 && <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: '700', marginLeft: '6px' }}>· {tbd} TBD</span>}
-                    </span>
-                  </Link>
-                  <Link
-                    to={`/staff/events/${eventId}/sizzle`}
-                    style={{
-                      backgroundColor: '#1a1a1a', color: '#fff',
-                      border: '1px solid #1a1a1a',
-                      padding: '10px 14px', borderRadius: '10px',
-                      textDecoration: 'none',
-                      fontSize: '0.85rem', fontWeight: '700',
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    Sizzle reel
-                  </Link>
-                </>
+                <Link
+                  to={`/staff/events/${eventId}/tables`}
+                  style={{
+                    backgroundColor: '#fff', color: '#1a1a1a',
+                    border: '1px solid #1a1a1a',
+                    padding: '6px 14px', borderRadius: '10px',
+                    textDecoration: 'none',
+                    display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
+                    fontFamily: 'inherit', minWidth: '96px',
+                  }}
+                >
+                  <span style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Tables</span>
+                  <span style={{ fontSize: '1.05rem', fontWeight: '900', lineHeight: 1.1 }}>
+                    {tables}{tbd > 0 && <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: '700', marginLeft: '6px' }}>· {tbd} TBD</span>}
+                  </span>
+                </Link>
               );
             })()}
             <button
@@ -19310,8 +19313,13 @@ function EventSizzlePage({ isMobile, staff }) {
   const slotHeight = CARD_HEIGHT + GAP;
   // Total translate distance for one cycle = vendors.length * slotHeight.
   const cycleDistance = vendors.length * slotHeight;
-  // Loop duration. Fast = ~3s, slow = ~6s. Default 5s feels cinematic.
-  const LOOP_SEC = 5;
+  // Dwell time per card: ~1.5s lets each card register before the next
+  // scrolls into view. Loop total scales with vendor count so it never
+  // feels like wheel-of-fortune at high counts. Capped at 60s — IG Reels
+  // hard limit is 90s, but we leave headroom in case staff records a
+  // little beyond one full loop.
+  const SEC_PER_CARD = 1.5;
+  const LOOP_SEC = Math.min(60, Math.max(5, vendors.length * SEC_PER_CARD));
 
   const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -19368,7 +19376,7 @@ function EventSizzlePage({ isMobile, staff }) {
         }}>
           <strong style={{ color: '#fff' }}>How to capture:</strong> Press <code style={{ background: '#0a0a0a', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.82em' }}>Cmd + Shift + 5</code>,
           choose "Record Selected Portion," drag-select the framed area below, and capture
-          one full loop ({LOOP_SEC} sec). Upload directly to IG Reels.
+          one full loop ({LOOP_SEC.toFixed(1)} sec). Upload directly to IG Reels.
         </div>
 
         {vendors.length === 0 ? (
@@ -19442,8 +19450,8 @@ function EventSizzlePage({ isMobile, staff }) {
           color: '#666', fontSize: '0.78rem',
           textAlign: 'center',
         }}>
-          Loop: {LOOP_SEC}s · Cards: {vendors.length} ·
-          {vendors.length > 0 && ` ~${(LOOP_SEC / vendors.length).toFixed(2)}s per card visible`}
+          Loop: {LOOP_SEC.toFixed(1)}s · Cards: {vendors.length} ·
+          {vendors.length > 0 && ` ~${(LOOP_SEC / vendors.length).toFixed(1)}s per card visible`}
         </div>
       </div>
     </div>
