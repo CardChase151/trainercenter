@@ -6041,14 +6041,29 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 </div>
               </div>
 
-              <div style={{
-                fontFamily: 'Russo One, sans-serif',
-                fontSize: f(1.55),
-                textTransform: 'uppercase', letterSpacing: '0.02em',
-                lineHeight: 1.1, marginBottom: 8,
-                color: '#1a1a1a',
-                wordBreak: 'break-word',
-              }}>{name}</div>
+              {(() => {
+                // Single-word names get auto-shrunk to fit on one line.
+                // Multi-word names stay at full size and wrap at spaces
+                // (no mid-word breaks — that's what was penalizing long
+                // single words). 22 ≈ the max chars that fit at 1.55rem
+                // across the card's internal width.
+                const isSingleWord = !name.includes(' ');
+                const nameSize = isSingleWord
+                  ? Math.min(1.55, 22 / Math.max(name.length, 1))
+                  : 1.55;
+                return (
+                  <div style={{
+                    fontFamily: 'Russo One, sans-serif',
+                    fontSize: f(nameSize),
+                    textTransform: 'uppercase', letterSpacing: '0.02em',
+                    lineHeight: 1.1, marginBottom: 8,
+                    color: '#1a1a1a',
+                    ...(isSingleWord
+                      ? { whiteSpace: 'nowrap' }
+                      : { wordBreak: 'normal', overflowWrap: 'normal' }),
+                  }}>{name}</div>
+                );
+              })()}
 
               {tagline && (
                 <div style={{
