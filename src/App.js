@@ -5785,6 +5785,14 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   const RANGE = 9;
   const RZ_RANGE = 2;
 
+  // Font boost: when the card is visually scaled down (grid view), CSS
+  // transform shrinks text proportionally and it gets hard to read. We
+  // compensate by bumping the native font sizes inversely. The 0.85 keeps
+  // us a hair under full compensation so the layout doesn't burst. At
+  // scale 0.56 this gives ~52% larger native fonts → readable in grid.
+  const fontBoost = scale >= 0.9 ? 1 : Math.max(1, 0.85 / scale);
+  const f = (rem) => `${(rem * fontBoost).toFixed(3)}rem`;
+
   const applyTilt = useCallback((rx, ry, rz) => {
     if (!cardRef.current) return;
     cardRef.current.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg)`;
@@ -5873,7 +5881,9 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             borderRadius: 24,
             position: 'relative',
             overflow: 'hidden',
-            background: 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
+            // Pikachu background zoomed in beyond cover so he reads big,
+            // with a soft white wash on top to keep text legible.
+            background: "linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(253,250,243,0.55) 100%), url('/pikachuuuu.jpg') center / 140% no-repeat",
             transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
             transformOrigin: '50% 50%',
             transformStyle: 'preserve-3d',
@@ -5936,7 +5946,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 9,
                 fontFamily: 'Russo One, sans-serif',
-                fontSize: '0.72rem', letterSpacing: '0.18em',
+                fontSize: f(0.72), letterSpacing: '0.18em',
                 textTransform: 'uppercase', color: '#1a1a1a',
               }}>
                 {/* Pokeball */}
@@ -5957,7 +5967,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               </div>
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
-                fontSize: '0.64rem', letterSpacing: '0.2em',
+                fontSize: f(0.64), letterSpacing: '0.2em',
                 color: '#D4A437', background: '#FBF1D4',
                 padding: '5px 10px', borderRadius: 5,
                 textTransform: 'uppercase', border: '1px solid #F2D785',
@@ -5969,7 +5979,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 label is "TC's Beach City Trade Night!") to avoid doubling. */}
             <div style={{
               fontFamily: 'Russo One, sans-serif',
-              fontSize: '0.95rem', lineHeight: 1.15,
+              fontSize: f(0.95), lineHeight: 1.15,
               letterSpacing: '0.04em', color: '#1a1a1a',
               textTransform: 'uppercase', textAlign: 'left',
               marginBottom: 10, paddingBottom: 10,
@@ -6006,7 +6016,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   background: vendor.avatar_url ? '#fff' : 'linear-gradient(135deg, #E63946 0%, #B91D2C 100%)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontFamily: 'Russo One, sans-serif',
-                  fontSize: '3.2rem',
+                  fontSize: f(3.2),
                   color: '#fff',
                   textShadow: '0 4px 12px rgba(0,0,0,0.3)',
                   border: '4px solid #fff',
@@ -6021,7 +6031,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
 
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
-                fontSize: '1.55rem',
+                fontSize: f(1.55),
                 textTransform: 'uppercase', letterSpacing: '0.02em',
                 lineHeight: 1.1, marginBottom: 8,
                 color: '#1a1a1a',
@@ -6030,7 +6040,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
 
               {tagline && (
                 <div style={{
-                  fontSize: '0.85rem', color: '#555',
+                  fontSize: f(0.85), color: '#555',
                   fontStyle: 'italic', fontWeight: 600,
                   maxWidth: 300, lineHeight: 1.35,
                   marginBottom: 4,
@@ -6051,7 +6061,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                       style={{
                         background: '#fff', border: '1.5px solid #1a1a1a',
                         color: '#1a1a1a', textDecoration: 'none',
-                        fontSize: '0.85rem', fontWeight: 800,
+                        fontSize: f(0.85), fontWeight: 800,
                         padding: '7px 12px', borderRadius: 7,
                         letterSpacing: '0.02em',
                       }}
@@ -6066,7 +6076,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                       style={{
                         background: '#fff', border: '1.5px solid #1a1a1a',
                         color: '#1a1a1a', textDecoration: 'none',
-                        fontSize: '0.85rem', fontWeight: 800,
+                        fontSize: f(0.85), fontWeight: 800,
                         padding: '7px 12px', borderRadius: 7,
                         letterSpacing: '0.02em',
                       }}
@@ -6090,12 +6100,12 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               <div style={{ textAlign: 'left' }}>
                 <div style={{
                   fontFamily: 'Russo One, sans-serif',
-                  fontSize: '0.95rem', letterSpacing: '0.05em',
+                  fontSize: f(0.95), letterSpacing: '0.05em',
                   lineHeight: 1,
                 }}>{eventDate}</div>
                 {eventTime && (
                   <div style={{
-                    fontSize: '0.72rem',
+                    fontSize: f(0.72),
                     color: 'rgba(255,255,255,0.92)',
                     marginTop: 3, fontWeight: 600,
                   }}>{eventTime}</div>
@@ -6104,11 +6114,11 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               <div style={{ textAlign: 'right' }}>
                 <div style={{
                   fontFamily: 'Russo One, sans-serif',
-                  fontSize: '0.72rem', letterSpacing: '0.05em',
+                  fontSize: f(0.72), letterSpacing: '0.05em',
                   lineHeight: 1,
                 }}>8567 Edinger Ave</div>
                 <div style={{
-                  fontSize: '0.6rem', color: 'rgba(255,255,255,0.8)',
+                  fontSize: f(0.6), color: 'rgba(255,255,255,0.8)',
                   marginTop: 3, fontWeight: 600,
                   letterSpacing: '0.06em', textTransform: 'uppercase',
                 }}>Huntington Beach, CA</div>
@@ -8212,16 +8222,17 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile
-            ? '1fr'
-            : 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: isMobile ? '32px' : '32px',
+            ? 'repeat(auto-fill, minmax(180px, 1fr))'
+            : 'repeat(auto-fill, minmax(240px, 1fr))',
+          gap: isMobile ? '16px' : '24px',
           padding: isMobile ? '0 4px' : 0,
         }}>
           {vendors.map(v => {
             const isOwn = myVendorId === v.id;
-            // Card scaled to fit the grid cell (design is 405 wide). Bigger
-            // than before so the text and logo are actually readable.
-            const cardScale = isMobile ? 0.88 : 0.84;
+            // Card visually scaled to fit the grid cell (design is 405 wide).
+            // Font sizes inside the card auto-boost when scale is small so
+            // text stays readable — see fontBoost inside HoloVendorCard.
+            const cardScale = isMobile ? 0.42 : 0.56;
             return (
               <div key={v.id} style={{
                 display: 'flex', flexDirection: 'column',
