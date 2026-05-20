@@ -6296,6 +6296,186 @@ function PostToIGModal({ vendor, event, onClose }) {
   );
 }
 
+// ─── IG group chat helper ─────────────────────────────────
+// IG doesn't expose a public URL scheme to pre-create a group DM with
+// multiple users, so the fastest workflow we can build is:
+//   1. List every approved vendor's IG handle in one place.
+//   2. Copy-all to clipboard (one handle per line) plus per-handle copy.
+//   3. Deep link to IG's new-message screen (app on mobile, web fallback).
+//   4. Staff pastes handles into the "To" field one by one.
+function IGGroupChatModal({ vendors, onClose }) {
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  const vendorsWithIG = vendors
+    .map(v => ({ id: v.id, name: vendorDisplayName(v), handle: (v.ig_handle || '').replace(/^@/, '').trim() }))
+    .filter(v => v.handle);
+
+  const flagCopy = (key) => {
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(curr => curr === key ? null : curr), 1400);
+  };
+
+  const copyOne = async (handle) => {
+    try {
+      await navigator.clipboard.writeText(`@${handle}`);
+      flagCopy(handle);
+    } catch (e) {
+      console.error('[IGGroupChat] copy failed', e);
+      alert('Could not copy — your browser may have blocked clipboard access.');
+    }
+  };
+
+  const copyAll = async () => {
+    const text = vendorsWithIG.map(v => `@${v.handle}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      flagCopy('__all');
+    } catch (e) {
+      console.error('[IGGroupChat] copy-all failed', e);
+      alert('Could not copy — your browser may have blocked clipboard access.');
+    }
+  };
+
+  const openInstagram = () => {
+    // On iOS/Android with IG installed, instagram://direct/new pops the
+    // new-message screen. Browsers ignore the unknown scheme and the
+    // window.open of the https fallback takes over after the timeout.
+    const start = Date.now();
+    window.location.href = 'instagram://direct/new';
+    setTimeout(() => {
+      if (Date.now() - start < 1200) {
+        window.open('https://www.instagram.com/direct/inbox/', '_blank', 'noopener');
+      }
+    }, 800);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16, zIndex: 9999,
+    }} onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="modal-safe-bottom smooth-scroll"
+        style={{
+          backgroundColor: '#fff', borderRadius: 18,
+          padding: '22px',
+          maxWidth: 480, width: '100%',
+          maxHeight: '88vh', overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Start IG group chat</h3>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#888', padding: 4, display: 'flex',
+          }} aria-label="Close"><X size={20} /></button>
+        </div>
+        <p style={{ fontSize: '0.82rem', color: '#666', margin: '0 0 14px', lineHeight: 1.5 }}>
+          IG doesn't let outside apps pre-build a group DM. Closest fast-track:
+          copy these handles, open Instagram, start a new message, paste each
+          into the "To" field.
+        </p>
+
+        {vendorsWithIG.length === 0 ? (
+          <div style={{
+            backgroundColor: '#f9fafb', border: '1px dashed #ddd',
+            borderRadius: 10, padding: '20px',
+            textAlign: 'center', color: '#888', fontSize: '0.88rem',
+            marginBottom: 14,
+          }}>
+            No approved vendors have an IG handle on file yet.
+          </div>
+        ) : (
+          <>
+            <div style={{
+              display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap',
+            }}>
+              <button
+                type="button"
+                onClick={copyAll}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  backgroundColor: copiedKey === '__all' ? '#15803d' : '#1a1a1a',
+                  color: '#fff', border: 'none', borderRadius: 10,
+                  fontSize: '0.85rem', fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  fontFamily: 'inherit',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {copiedKey === '__all'
+                  ? <><Check size={14} /> Copied all {vendorsWithIG.length}</>
+                  : <>Copy all {vendorsWithIG.length} handles</>}
+              </button>
+              <button
+                type="button"
+                onClick={openInstagram}
+                style={{
+                  padding: '10px 14px',
+                  backgroundColor: '#C8102E',
+                  color: '#fff', border: 'none', borderRadius: 10,
+                  fontSize: '0.85rem', fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  fontFamily: 'inherit',
+                }}
+              >
+                <ExternalLink size={14} /> Open IG
+              </button>
+            </div>
+
+            <div style={{
+              border: '1px solid #eee', borderRadius: 10,
+              overflow: 'hidden',
+            }}>
+              {vendorsWithIG.map((v, i) => (
+                <div key={v.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 12px',
+                  borderBottom: i < vendorsWithIG.length - 1 ? '1px solid #f1f1f1' : 'none',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '0.85rem', fontWeight: 700, color: '#1a1a1a',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>@{v.handle}</div>
+                    <div style={{
+                      fontSize: '0.7rem', color: '#888',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>{v.name}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyOne(v.handle)}
+                    style={{
+                      padding: '5px 10px',
+                      backgroundColor: copiedKey === v.handle ? '#15803d' : '#fff',
+                      color: copiedKey === v.handle ? '#fff' : '#1a1a1a',
+                      border: '1px solid ' + (copiedKey === v.handle ? '#15803d' : '#d1d5db'),
+                      borderRadius: 6,
+                      fontSize: '0.72rem', fontWeight: 700,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {copiedKey === v.handle ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Staff bulk card download (ZIP) ───────────────────────
 // Renders every approved vendor's card off-screen, snapshots each to a
 // PNG via html-to-image, zips them with JSZip, downloads as one file.
@@ -8175,6 +8355,7 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
   const [postingVendor, setPostingVendor] = useState(null);
   // Staff-only bulk export: render every approved card, zip them, download.
   const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [igChatOpen, setIgChatOpen] = useState(false);
   const isAdmin = !!staff?.isAdmin;
 
   return (
@@ -8265,6 +8446,22 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
             >
               <Film size={14} /> Sizzle reel
             </Link>
+            <button
+              type="button"
+              onClick={() => setIgChatOpen(true)}
+              style={{
+                backgroundColor: '#fff', color: '#1a1a1a',
+                border: '1px solid #1a1a1a', borderRadius: 10,
+                padding: '10px 18px',
+                fontSize: '0.85rem', fontWeight: 800,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontFamily: 'inherit',
+              }}
+            >
+              <Users size={14} /> Start IG group chat
+            </button>
           </div>
         )}
         <div style={{
@@ -8312,6 +8509,13 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
           vendors={vendors}
           event={event}
           onClose={() => setBulkDownloading(false)}
+        />
+      )}
+
+      {igChatOpen && (
+        <IGGroupChatModal
+          vendors={vendors}
+          onClose={() => setIgChatOpen(false)}
         />
       )}
     </div>
