@@ -5945,20 +5945,16 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             flexDirection: 'column',
             transform: 'translateZ(20px)',
           }}>
-            {/* Brand bar: TC logo + TRADE NIGHT pill, both left-aligned.
-                Logo sits in a white circle (matches the footer treatment)
-                so the dark elements in the logo image stay visible. */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              marginBottom: 10,
-            }}>
+            {/* Brand bar: just the TC logo, left-aligned. White circle
+                wrapper matches the footer treatment so the dark logo
+                elements stay legible. */}
+            <div style={{ marginBottom: 4 }}>
               <div style={{
                 width: 36, height: 36, borderRadius: '50%',
                 backgroundColor: '#fff',
                 border: '1px solid #e5e7eb',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 overflow: 'hidden',
-                flexShrink: 0,
                 boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
               }}>
                 <img
@@ -5972,14 +5968,6 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   }}
                 />
               </div>
-              <div style={{
-                fontFamily: 'Russo One, sans-serif',
-                fontSize: f(0.62), letterSpacing: '0.22em',
-                color: '#D4A437', background: '#FBF1D4',
-                padding: '4px 9px', borderRadius: 5,
-                textTransform: 'uppercase', border: '1px solid #F2D785',
-                lineHeight: 1,
-              }}>Trade Night</div>
             </div>
 
             {/* Event title, centered, two lines:
