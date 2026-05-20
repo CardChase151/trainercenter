@@ -5840,13 +5840,17 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   const eventDate = event?.event_date
     ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase().replace(/,/g, '')
     : '';
-  // Time: compact "12 PM – 10 PM" (drop ":00" when minutes are zero).
+  // Time: actual EVENT hours (not the vendor's personal show-up window).
+  // Prefer vendor_start_time/vendor_end_time (the public-facing event hours),
+  // fall back to start_time/end_time. Compact format drops ":00".
   const compactTime = (t) => {
     const lbl = formatTime12h(t) || '';
     return lbl.replace(/:00\s/, ' ');
   };
-  const eventTime = (vendor.requested_start_time && vendor.requested_end_time)
-    ? `${compactTime(vendor.requested_start_time)} – ${compactTime(vendor.requested_end_time)}`
+  const evStart = event?.vendor_start_time || event?.start_time;
+  const evEnd   = event?.vendor_end_time   || event?.end_time;
+  const eventTime = (evStart && evEnd)
+    ? `${compactTime(evStart)} – ${compactTime(evEnd)}`
     : '';
 
   // Initials fallback for logo
@@ -7938,6 +7942,7 @@ function VendorDayPage({ isMobile, staff }) {
         .from('events')
         .select(`
           id, title, event_date, cancelled,
+          start_time, end_time, vendor_start_time, vendor_end_time,
           vendor_applications (
             id, status, requested_start_time, requested_end_time,
             vendor:vendors ( id, name, business_name, avatar_url, specialty, bio, tagline, ig_handle, tiktok_handle, fb_handle )
