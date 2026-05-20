@@ -9244,7 +9244,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   const isToday = event.event_date === today;
   const isPast = event.event_date < today;
 
-  const submitApplication = async ({ requested_start_time, requested_end_time, vendor_note }) => {
+  const submitApplication = async ({ requested_start_time, requested_end_time, requested_table_size, vendor_note }) => {
     // The apply modal enforces non-null times; if we somehow get here
     // without them, fail loudly instead of writing null. The DB also
     // has a NOT NULL constraint on these columns now (see migration
@@ -9259,6 +9259,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         event_id: event.id,
         requested_start_time,
         requested_end_time,
+        requested_table_size: requested_table_size || 'tbd',
         vendor_note: vendor_note || null,
       })
       .select()
@@ -10427,6 +10428,7 @@ function vendorMatchesQuery(vendor, query) {
 function ApplyForEventModal({ event, onClose, onSubmit }) {
   const [startTime, setStartTime] = useState((event.start_time || '12:00:00').slice(0, 5));
   const [endTime, setEndTime] = useState((event.end_time || '20:00:00').slice(0, 5));
+  const [tableSize, setTableSize] = useState('tbd');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -10453,6 +10455,7 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
       await onSubmit({
         requested_start_time: startTime,
         requested_end_time: endTime,
+        requested_table_size: tableSize,
         vendor_note: note.trim() || null,
       });
       onClose();
@@ -10513,6 +10516,41 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
               style={inputCss}
             />
           </div>
+        </div>
+
+        <label style={labelCss}>Table space needed</label>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '6px', marginBottom: '16px',
+        }}>
+          {[
+            { key: 'half',   label: 'Half',   sub: 'Share' },
+            { key: 'full',   label: 'Full',   sub: '1 table' },
+            { key: 'double', label: 'Double', sub: '2 tables' },
+            { key: 'tbd',    label: 'Not sure', sub: 'Decide later' },
+          ].map(opt => {
+            const active = tableSize === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setTableSize(opt.key)}
+                style={{
+                  padding: '10px 6px',
+                  border: active ? '2px solid #C8102E' : '2px solid #e5e7eb',
+                  backgroundColor: active ? '#fef2f2' : '#fff',
+                  color: active ? '#C8102E' : '#1a1a1a',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem', fontWeight: '800',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
+                }}
+              >
+                <span>{opt.label}</span>
+                <span style={{ fontSize: '0.62rem', fontWeight: '600', opacity: 0.7 }}>{opt.sub}</span>
+              </button>
+            );
+          })}
         </div>
 
         <label style={labelCss}>Notes for chef (optional)</label>
@@ -16800,7 +16838,7 @@ function EventTimeMapPage({ isMobile, staff }) {
       const [evRes, appsRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
         supabase.from('vendor_applications')
-          .select('id, status, requested_start_time, requested_end_time, vendor_note, vendor:vendors(*)')
+          .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor_note, vendor:vendors(*)')
           .eq('event_id', eventId)
           .eq('status', 'approved'),
       ]);
@@ -17197,6 +17235,43 @@ function EventTimeMapPage({ isMobile, staff }) {
                 {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
               </div>
             </div>
+            {(() => {
+              // Quick tables summary for the header link: count tables needed
+              // and how many vendors haven't been sized yet. Matches the math
+              // on the Tables page so the badge agrees with the destination.
+              const full   = apps.filter(a => a.requested_table_size === 'full').length;
+              const dbl    = apps.filter(a => a.requested_table_size === 'double').length;
+              const tbd    = apps.filter(a => a.requested_table_size === 'tbd').length;
+              const groups = new Map();
+              apps.filter(a => a.requested_table_size === 'half').forEach(a => {
+                const k = a.table_group_id || `solo-${a.id}`;
+                if (!groups.has(k)) groups.set(k, 0);
+                groups.set(k, groups.get(k) + 1);
+              });
+              let paired = 0, solo = 0;
+              Array.from(groups.values()).forEach(n => {
+                if (n === 2) paired++; else solo += n;
+              });
+              const tables = full + (dbl * 2) + paired + solo + tbd;
+              return (
+                <Link
+                  to={`/staff/events/${eventId}/tables`}
+                  style={{
+                    backgroundColor: '#fff', color: '#1a1a1a',
+                    border: '1px solid #1a1a1a',
+                    padding: '6px 14px', borderRadius: '10px',
+                    textDecoration: 'none',
+                    display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
+                    fontFamily: 'inherit', minWidth: '96px',
+                  }}
+                >
+                  <span style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Tables</span>
+                  <span style={{ fontSize: '1.05rem', fontWeight: '900', lineHeight: 1.1 }}>
+                    {tables}{tbd > 0 && <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: '700', marginLeft: '6px' }}>· {tbd} TBD</span>}
+                  </span>
+                </Link>
+              );
+            })()}
             <button
               type="button"
               onClick={handlePrintChecklist}
@@ -17671,6 +17746,509 @@ function EventTimeMapPage({ isMobile, staff }) {
           &nbsp;&nbsp;&nbsp;&nbsp;
           Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '120px' }}>&nbsp;</span>
         </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Staff Event Tables page (/staff/events/:eventId/tables) ──
+// Per-event table planning. Each approved vendor is sized (half / full /
+// double / tbd). Half-table vendors with non-overlapping times can be
+// paired so they share one physical table — staff clicks "Auto-pair" to
+// generate suggestions. Pair persistence is the `table_group_id` UUID on
+// vendor_applications; two rows sharing it = one half-table.
+function EventTablesPage({ isMobile, staff }) {
+  const { eventId } = useParams();
+  const isAdmin = !!staff?.isAdmin;
+
+  const [event, setEvent] = useState(null);
+  const [apps, setApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyAppId, setBusyAppId] = useState(null);
+  const [pairing, setPairing] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    if (!eventId) return;
+    setLoading(true);
+    const [evRes, appsRes] = await Promise.all([
+      supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
+      supabase.from('vendor_applications')
+        .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor:vendors(id, name, avatar_url)')
+        .eq('event_id', eventId)
+        .eq('status', 'approved'),
+    ]);
+    if (evRes.error) { setError(evRes.error.message); setLoading(false); return; }
+    if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
+    setEvent(evRes.data || null);
+    setApps(appsRes.data || []);
+    setLoading(false);
+  }, [eventId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchData();
+  }, [isAdmin, fetchData]);
+
+  // Update a single application's table size. Optimistic so the UI flips
+  // instantly; falls back to a refetch on error.
+  const updateSize = async (appId, newSize) => {
+    if (busyAppId) return;
+    setBusyAppId(appId);
+    const prev = apps;
+    // If changing AWAY from 'half' and the row was paired, also clear its
+    // group_id and clear the partner's group_id (a group of one is just
+    // an unpaired half).
+    const app = apps.find(a => a.id === appId);
+    const wasPaired = !!app?.table_group_id;
+    const partner = wasPaired ? apps.find(a => a.id !== appId && a.table_group_id === app.table_group_id) : null;
+    const clearGroup = wasPaired && newSize !== 'half';
+
+    setApps(curr => curr.map(a => {
+      if (a.id === appId) return { ...a, requested_table_size: newSize, table_group_id: clearGroup ? null : a.table_group_id };
+      if (clearGroup && partner && a.id === partner.id) return { ...a, table_group_id: null };
+      return a;
+    }));
+
+    const updates = [supabase.from('vendor_applications').update({
+      requested_table_size: newSize,
+      ...(clearGroup ? { table_group_id: null } : {}),
+    }).eq('id', appId)];
+    if (clearGroup && partner) {
+      updates.push(supabase.from('vendor_applications').update({ table_group_id: null }).eq('id', partner.id));
+    }
+    const results = await Promise.all(updates);
+    setBusyAppId(null);
+    const firstErr = results.find(r => r.error);
+    if (firstErr?.error) {
+      alert(`Could not update size: ${firstErr.error.message}`);
+      setApps(prev);
+    }
+  };
+
+  const unpair = async (appId) => {
+    if (busyAppId) return;
+    const app = apps.find(a => a.id === appId);
+    if (!app?.table_group_id) return;
+    const partner = apps.find(a => a.id !== appId && a.table_group_id === app.table_group_id);
+    setBusyAppId(appId);
+    const prev = apps;
+    setApps(curr => curr.map(a => {
+      if (a.id === appId || (partner && a.id === partner.id)) return { ...a, table_group_id: null };
+      return a;
+    }));
+    const ids = [appId];
+    if (partner) ids.push(partner.id);
+    const { error: updErr } = await supabase
+      .from('vendor_applications')
+      .update({ table_group_id: null })
+      .in('id', ids);
+    setBusyAppId(null);
+    if (updErr) {
+      alert(`Could not unpair: ${updErr.message}`);
+      setApps(prev);
+    }
+  };
+
+  // Time helpers — minutes-since-midnight for arithmetic.
+  const parseTime = (t) => {
+    if (!t) return null;
+    const [h, m] = String(t).slice(0, 5).split(':');
+    const hh = parseInt(h, 10), mm = parseInt(m, 10);
+    if (isNaN(hh) || isNaN(mm)) return null;
+    return hh * 60 + mm;
+  };
+  const fmt12 = (mins) => {
+    if (mins == null) return '';
+    const hh = Math.floor(mins / 60), mm = mins % 60;
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+    return mm === 0 ? `${h12} ${ampm}` : `${h12}:${String(mm).padStart(2, '0')} ${ampm}`;
+  };
+
+  // Greedy half-table pairing with a 30-minute overlap tolerance. For each
+  // candidate pair (A, B), overlap = max(0, min(endA,endB) - max(startA,startB)).
+  // Pairs with overlap ≤ 30 min are eligible. We sort by overlap ascending
+  // (largest gap first) and walk the list, marking vendors used as we go.
+  // Not globally optimal (would need Hungarian for that) but good enough
+  // for the scales we hit per event (typically 5-15 halves).
+  const OVERLAP_TOLERANCE_MIN = 30;
+  const computePairs = (halves) => {
+    const sized = halves.map(a => ({
+      app: a,
+      start: parseTime(a.requested_start_time) ?? 0,
+      end: parseTime(a.requested_end_time) ?? 24 * 60,
+    }));
+    const candidates = [];
+    for (let i = 0; i < sized.length; i++) {
+      for (let j = i + 1; j < sized.length; j++) {
+        const A = sized[i], B = sized[j];
+        const overlap = Math.max(0, Math.min(A.end, B.end) - Math.max(A.start, B.start));
+        if (overlap <= OVERLAP_TOLERANCE_MIN) {
+          candidates.push({ a: A.app.id, b: B.app.id, overlap });
+        }
+      }
+    }
+    candidates.sort((x, y) => x.overlap - y.overlap);
+    const used = new Set();
+    const pairs = [];
+    for (const c of candidates) {
+      if (used.has(c.a) || used.has(c.b)) continue;
+      used.add(c.a); used.add(c.b);
+      pairs.push([c.a, c.b]);
+    }
+    return pairs;
+  };
+
+  const runAutoPair = async () => {
+    const tbdCount = apps.filter(a => a.requested_table_size === 'tbd').length;
+    if (tbdCount > 0) {
+      const ok = window.confirm(
+        `${tbdCount} vendor${tbdCount === 1 ? '' : 's'} still marked TBD. Auto-pair the ones already sized as half-table anyway?`
+      );
+      if (!ok) return;
+    }
+    const halves = apps.filter(a => a.requested_table_size === 'half');
+    if (halves.length < 2) {
+      alert('Need at least 2 half-table vendors to pair.');
+      return;
+    }
+    setPairing(true);
+
+    // Reset all existing half-table groups before re-pairing — auto-pair is
+    // a full recompute, not an incremental layer. Manual unpair stays as
+    // the override for keeping a hand-picked pair stable.
+    const halfIds = halves.map(h => h.id);
+    const { error: resetErr } = await supabase
+      .from('vendor_applications')
+      .update({ table_group_id: null })
+      .in('id', halfIds);
+    if (resetErr) {
+      setPairing(false);
+      alert(`Could not reset existing pairs: ${resetErr.message}`);
+      return;
+    }
+
+    const pairs = computePairs(halves);
+    if (pairs.length === 0) {
+      setPairing(false);
+      await fetchData();
+      alert('No non-overlapping half-table pairs found. Half-tables stay solo.');
+      return;
+    }
+
+    // Assign a fresh UUID per pair and write both rows.
+    const writes = pairs.map(([a, b]) => {
+      const groupId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      return supabase
+        .from('vendor_applications')
+        .update({ table_group_id: groupId })
+        .in('id', [a, b]);
+    });
+    const results = await Promise.all(writes);
+    setPairing(false);
+    const firstErr = results.find(r => r.error);
+    if (firstErr?.error) {
+      alert(`Some pairings failed to save: ${firstErr.error.message}`);
+    }
+    await fetchData();
+  };
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#666' }}>
+          Staff only.
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#999' }}>
+          <Loader2 size={18} className="spin" /> Loading tables…
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (error || !event) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '600px', margin: '60px auto', textAlign: 'center', color: '#991b1b' }}>
+          {error || 'Event not found.'}
+          <div style={{ marginTop: '14px' }}>
+            <Link to="/staff/vendors" style={{ color: '#1a1a1a' }}>← Back to staff dashboard</Link>
+          </div>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // Counts
+  const halfCount   = apps.filter(a => a.requested_table_size === 'half').length;
+  const fullCount   = apps.filter(a => a.requested_table_size === 'full').length;
+  const doubleCount = apps.filter(a => a.requested_table_size === 'double').length;
+  const tbdCount    = apps.filter(a => a.requested_table_size === 'tbd').length;
+
+  // Build pair groups. Vendors with the same table_group_id share a half-table.
+  // Group of 1 = unpaired half (still its own table for counting).
+  const groupMap = new Map();
+  apps.filter(a => a.requested_table_size === 'half').forEach(a => {
+    const key = a.table_group_id || `solo-${a.id}`;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(a);
+  });
+  const halfGroups = Array.from(groupMap.values());
+  const pairedGroups   = halfGroups.filter(g => g.length === 2 && g[0].table_group_id);
+  const unpairedHalves = halfGroups.filter(g => g.length === 1 || (g.length === 2 && !g[0].table_group_id))
+    .flatMap(g => g);
+
+  // Total tables needed:
+  //   - each full = 1 table
+  //   - each double = 2 tables
+  //   - each paired half = 0.5 + 0.5 = 1 table
+  //   - each unpaired half = 1 table (until paired)
+  //   - each tbd = 1 table (count as full for safety until resolved)
+  const totalTables = fullCount + (doubleCount * 2) + pairedGroups.length + unpairedHalves.length + tbdCount;
+
+  const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Render a single vendor row (used both standalone and inside paired-group cards).
+  const VendorRow = ({ app, isInPair }) => {
+    const v = app.vendor || {};
+    const sMin = parseTime(app.requested_start_time);
+    const eMin = parseTime(app.requested_end_time);
+    const busy = busyAppId === app.id;
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: isInPair ? '8px 0' : '12px 14px',
+        borderBottom: isInPair ? 'none' : '1px solid #f1f1f1',
+        opacity: busy ? 0.5 : 1,
+      }}>
+        <div style={{
+          width: '34px', height: '34px', borderRadius: '50%',
+          backgroundColor: '#eee', overflow: 'hidden', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.85rem', fontWeight: '800', color: '#888',
+        }}>
+          {v.avatar_url
+            ? <img src={v.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : (v.name || '?').charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {v.name || '(no name)'}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#666' }}>
+            {sMin != null && eMin != null ? `${fmt12(sMin)} – ${fmt12(eMin)}` : 'No slot'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+          {['half', 'full', 'double', 'tbd'].map(opt => {
+            const active = app.requested_table_size === opt;
+            const labels = { half: 'Half', full: 'Full', double: 'Double', tbd: 'TBD' };
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => updateSize(app.id, opt)}
+                disabled={busy}
+                style={{
+                  padding: '6px 10px',
+                  border: active ? '1px solid #C8102E' : '1px solid #e5e7eb',
+                  backgroundColor: active ? '#C8102E' : '#fff',
+                  color: active ? '#fff' : '#666',
+                  borderRadius: '6px',
+                  fontSize: '0.72rem', fontWeight: '700',
+                  cursor: busy ? 'wait' : 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >{labels[opt]}</button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto 64px' }}>
+        <Link to={`/staff/events/${eventId}/timemap`} style={{
+          color: '#666', fontSize: '0.78rem', fontWeight: '700',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '12px',
+        }}>
+          ← Back to time map
+        </Link>
+
+        <div style={{ marginBottom: '12px' }}>
+          <SectionHeader title="Tables" subtitle={`${event.title || 'Vendor Day'} · ${dateLabel}`} />
+        </div>
+
+        {/* Summary tiles */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)',
+          gap: '10px',
+          marginBottom: '18px',
+        }}>
+          <StatTile label="Tables needed" value={totalTables} accent="#C8102E" />
+          <StatTile label="Half tables" value={`${halfCount}`} sub={`${pairedGroups.length} paired · ${unpairedHalves.length} solo`} />
+          <StatTile label="Full tables" value={fullCount} />
+          <StatTile label="Doubles" value={doubleCount} />
+          <StatTile label="TBD" value={tbdCount} accent={tbdCount > 0 ? '#92400e' : '#1a1a1a'} />
+        </div>
+
+        {tbdCount > 0 && (
+          <div style={{
+            backgroundColor: '#fef3c7', border: '1px solid #fde68a',
+            borderRadius: '10px', padding: '10px 14px',
+            fontSize: '0.85rem', color: '#92400e', marginBottom: '14px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <AlertCircle size={16} />
+            <span><strong>{tbdCount}</strong> vendor{tbdCount === 1 ? '' : 's'} still TBD. Total counts them as full tables until you decide.</span>
+          </div>
+        )}
+
+        {/* Auto-pair action */}
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+          padding: '14px 18px', marginBottom: '14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '12px', flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#1a1a1a' }}>Auto-pair half-tables</div>
+            <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '2px' }}>
+              Pairs half-table vendors whose times don't overlap (30-min tolerance). Resets existing pairs.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={runAutoPair}
+            disabled={pairing || halfCount < 2}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: pairing ? '#999' : '#1a1a1a',
+              color: '#fff', border: 'none', borderRadius: '10px',
+              fontSize: '0.85rem', fontWeight: '700',
+              cursor: pairing || halfCount < 2 ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              opacity: halfCount < 2 ? 0.5 : 1,
+            }}
+          >
+            {pairing ? <><Loader2 size={14} className="spin" /> Pairing…</> : <><Link2 size={14} /> Auto-pair</>}
+          </button>
+        </div>
+
+        {/* Paired half-tables */}
+        {pairedGroups.length > 0 && (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#888',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: '8px',
+            }}>Paired half-tables · {pairedGroups.length}</div>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {pairedGroups.map((g, idx) => (
+                <div key={g[0].table_group_id} style={{
+                  backgroundColor: '#fff', border: '2px solid #15803d',
+                  borderRadius: '12px', padding: '12px 16px',
+                  position: 'relative',
+                }}>
+                  <div style={{
+                    position: 'absolute', top: '-9px', left: '12px',
+                    backgroundColor: '#15803d', color: '#fff',
+                    fontSize: '0.62rem', fontWeight: '800',
+                    padding: '2px 8px', borderRadius: '4px',
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  }}>
+                    <Link2 size={10} /> Table {idx + 1} · Shared
+                  </div>
+                  <VendorRow app={g[0]} isInPair />
+                  <div style={{ borderTop: '1px dashed #15803d', margin: '4px 0' }} />
+                  <VendorRow app={g[1]} isInPair />
+                  <div style={{ textAlign: 'right', marginTop: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => unpair(g[0].id)}
+                      style={{
+                        padding: '4px 10px', backgroundColor: 'transparent',
+                        color: '#991b1b', border: '1px solid #fecaca',
+                        borderRadius: '6px', fontSize: '0.72rem', fontWeight: '700',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >Unpair</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Unpaired halves */}
+        {unpairedHalves.length > 0 && (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#888',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: '8px',
+            }}>Unpaired half-tables · {unpairedHalves.length}</div>
+            <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px', overflow: 'hidden' }}>
+              {unpairedHalves.map(a => (
+                <VendorRow key={a.id} app={a} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Fulls + doubles */}
+        {(fullCount + doubleCount) > 0 && (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#888',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: '8px',
+            }}>Full &amp; double · {fullCount + doubleCount}</div>
+            <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px', overflow: 'hidden' }}>
+              {apps.filter(a => a.requested_table_size === 'full' || a.requested_table_size === 'double').map(a => (
+                <VendorRow key={a.id} app={a} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TBDs */}
+        {tbdCount > 0 && (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#92400e',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: '8px',
+            }}>To be decided · {tbdCount}</div>
+            <div style={{ backgroundColor: '#fff', border: '1px solid #fde68a', borderRadius: '12px', overflow: 'hidden' }}>
+              {apps.filter(a => a.requested_table_size === 'tbd').map(a => (
+                <VendorRow key={a.id} app={a} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {apps.length === 0 && (
+          <div style={{
+            backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+            padding: '40px 20px', textAlign: 'center', color: '#888',
+          }}>
+            No approved vendors yet.
+          </div>
+        )}
       </div>
     </PageWrapper>
   );
@@ -19133,6 +19711,7 @@ function App() {
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/timemap" element={<EventTimeMapPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/events/:eventId/tables" element={<EventTablesPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
