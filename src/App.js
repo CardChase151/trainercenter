@@ -19303,21 +19303,29 @@ function EventSizzlePage({ isMobile, staff }) {
     );
   }
 
-  // Duplicate the vendor list so the vertical scroll loops seamlessly.
-  // When the animation reaches -50% translation, we're back at the start
-  // of the second copy which looks identical to the first.
-  const duplicated = vendors.length > 0 ? [...vendors, ...vendors] : [];
-  // Each card slot height = 640 (card) + 16 (gap).
-  const CARD_HEIGHT = 640;
-  const GAP = 16;
-  const slotHeight = CARD_HEIGHT + GAP;
-  // Total translate distance for one cycle = vendors.length * slotHeight.
+  // Three columns of vertically-scrolling cards inside the 9:16 frame.
+  // Each column shows the same vendor list, but animation-delay shifts
+  // them by 1/3 of the cycle each — at any moment col 1 / col 2 / col 3
+  // are at three different vertical positions, creating the "staircase"
+  // visual Chase wanted (no two columns ever in lock-step).
+  const COLUMNS = 3;
+
+  // Cards are rendered at a smaller scale to fit three across in 405px
+  // wide. After 4px gap each side, each column is ~131px → card scale ~0.32.
+  const CARD_SCALE = 0.32;
+  const CARD_W = Math.round(405 * CARD_SCALE);   // ≈ 130
+  const CARD_H = Math.round(640 * CARD_SCALE);   // ≈ 205
+  const GAP = 10;
+  const slotHeight = CARD_H + GAP;
   const cycleDistance = vendors.length * slotHeight;
+
+  // Duplicate so the vertical scroll loop never shows a gap when it
+  // wraps around. Each column animates the same content, just phase-shifted.
+  const duplicated = vendors.length > 0 ? [...vendors, ...vendors] : [];
+
   // Dwell time per card: ~1.5s lets each card register before the next
-  // scrolls into view. Loop total scales with vendor count so it never
-  // feels like wheel-of-fortune at high counts. Capped at 60s — IG Reels
-  // hard limit is 90s, but we leave headroom in case staff records a
-  // little beyond one full loop.
+  // scrolls into view. Loop total scales with vendor count. Cap at 60s
+  // (IG Reels hard limit is 90, leave headroom).
   const SEC_PER_CARD = 1.5;
   const LOOP_SEC = Math.min(60, Math.max(5, vendors.length * SEC_PER_CARD));
 
@@ -19421,25 +19429,46 @@ function EventSizzlePage({ isMobile, staff }) {
                 backgroundColor: '#fdfaf3',
                 overflow: 'hidden',
                 position: 'relative',
+                display: 'flex',
+                gap: 6,
+                padding: 4,
               }}>
-                <div className="sizzle-track">
-                  {duplicated.map((v, i) => (
-                    <div key={`${v.id}-${i}`} style={{
-                      marginBottom: GAP,
-                      display: 'flex', justifyContent: 'center',
-                    }}>
-                      <HoloVendorCard
-                        vendor={v}
-                        event={event}
-                        isOwn={false}
-                        isMobile={false}
-                        scale={1}
-                        frozen={true}
-                        pikachuBackground={true}
-                      />
+                {Array.from({ length: COLUMNS }).map((_, colIdx) => (
+                  <div key={colIdx} style={{
+                    flex: 1,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}>
+                    <div
+                      className="sizzle-track"
+                      style={{
+                        // Each column is phase-shifted by 1/3 of the loop
+                        // (negative delay = "already running" at start).
+                        animationDelay: `-${(colIdx * LOOP_SEC) / COLUMNS}s`,
+                      }}
+                    >
+                      {duplicated.map((v, i) => (
+                        <div key={`${v.id}-${colIdx}-${i}`} style={{
+                          marginBottom: GAP,
+                          display: 'flex', justifyContent: 'center',
+                          width: CARD_W,
+                        }}>
+                          <HoloVendorCard
+                            vendor={v}
+                            event={event}
+                            isOwn={false}
+                            isMobile={false}
+                            scale={CARD_SCALE}
+                            frozen={true}
+                            pikachuBackground={true}
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -19450,8 +19479,8 @@ function EventSizzlePage({ isMobile, staff }) {
           color: '#666', fontSize: '0.78rem',
           textAlign: 'center',
         }}>
-          Loop: {LOOP_SEC.toFixed(1)}s · Cards: {vendors.length} ·
-          {vendors.length > 0 && ` ~${(LOOP_SEC / vendors.length).toFixed(1)}s per card visible`}
+          Loop: {LOOP_SEC.toFixed(1)}s · Cards: {vendors.length} · {COLUMNS} staggered columns
+          {vendors.length > 0 && ` · ~${(LOOP_SEC / vendors.length).toFixed(1)}s per card per column`}
         </div>
       </div>
     </div>
