@@ -17763,6 +17763,9 @@ function EventTablesPage({ isMobile, staff }) {
 
   const [event, setEvent] = useState(null);
   const [apps, setApps] = useState([]);
+  const [noteCounts, setNoteCounts] = useState({}); // vendor_id -> count
+  const [profilesById, setProfilesById] = useState({});
+  const [notesVendor, setNotesVendor] = useState(null); // open VendorNotesModal
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyAppId, setBusyAppId] = useState(null);
@@ -17771,17 +17774,36 @@ function EventTablesPage({ isMobile, staff }) {
   const fetchData = useCallback(async () => {
     if (!eventId) return;
     setLoading(true);
-    const [evRes, appsRes] = await Promise.all([
+    const [evRes, appsRes, profRes] = await Promise.all([
       supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
       supabase.from('vendor_applications')
-        .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor:vendors(id, name, avatar_url)')
+        .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor:vendors(id, name, avatar_url, ig_handle, tiktok_handle, experience_level, staff_experience_rating)')
         .eq('event_id', eventId)
         .eq('status', 'approved'),
+      supabase.from('profiles').select('id, name, email'),
     ]);
     if (evRes.error) { setError(evRes.error.message); setLoading(false); return; }
     if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
     setEvent(evRes.data || null);
     setApps(appsRes.data || []);
+    const profMap = {};
+    (profRes.data || []).forEach(p => { profMap[p.id] = p; });
+    setProfilesById(profMap);
+
+    // Per-vendor note counts so the row can show "3 notes" without
+    // fetching every body. RLS limits this to admins.
+    const vendorIds = (appsRes.data || []).map(a => a.vendor?.id).filter(Boolean);
+    if (vendorIds.length > 0) {
+      const { data: notesData } = await supabase
+        .from('vendor_notes')
+        .select('vendor_id')
+        .in('vendor_id', vendorIds);
+      const counts = {};
+      (notesData || []).forEach(r => { counts[r.vendor_id] = (counts[r.vendor_id] || 0) + 1; });
+      setNoteCounts(counts);
+    } else {
+      setNoteCounts({});
+    }
     setLoading(false);
   }, [eventId]);
 
@@ -17822,6 +17844,26 @@ function EventTablesPage({ isMobile, staff }) {
     const firstErr = results.find(r => r.error);
     if (firstErr?.error) {
       alert(`Could not update size: ${firstErr.error.message}`);
+      setApps(prev);
+    }
+  };
+
+  // Staff-curated experience rating (vendors.staff_experience_rating).
+  // Optimistic — flip the joined vendor on every app row that references
+  // this vendor id, then write the DB. Revert if it fails.
+  const setVendorRating = async (vendorId, rating) => {
+    const prev = apps;
+    setApps(curr => curr.map(a => (
+      a.vendor?.id === vendorId
+        ? { ...a, vendor: { ...a.vendor, staff_experience_rating: rating } }
+        : a
+    )));
+    const { error: updErr } = await supabase
+      .from('vendors')
+      .update({ staff_experience_rating: rating })
+      .eq('id', vendorId);
+    if (updErr) {
+      alert(`Could not save rating: ${updErr.message}`);
       setApps(prev);
     }
   };
@@ -18017,59 +18059,151 @@ function EventTablesPage({ isMobile, staff }) {
   const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   // Render a single vendor row (used both standalone and inside paired-group cards).
+  // Two-row layout: identity + size picker on top, meta info (socials,
+  // experience, staff rating, notes) below so chef sees everything that
+  // shapes the seating decision in one glance.
   const VendorRow = ({ app, isInPair }) => {
     const v = app.vendor || {};
     const sMin = parseTime(app.requested_start_time);
     const eMin = parseTime(app.requested_end_time);
     const busy = busyAppId === app.id;
+    const ratingMeta = STAFF_RATING_BY_KEY[v.staff_experience_rating];
+    const ratingColor = ratingMeta?.color || '#9ca3af';
+    const ratingBg = ratingMeta ? `${ratingMeta.color}15` : '#fff';
+    const expLabel = VENDOR_EXPERIENCE_LABELS[v.experience_level];
+    const igNorm = (v.ig_handle || '').replace(/^@/, '').trim();
+    const ttNorm = (v.tiktok_handle || '').replace(/^@/, '').trim();
+    const noteCount = noteCounts[v.id] || 0;
+
     return (
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '12px',
         padding: isInPair ? '8px 0' : '12px 14px',
         borderBottom: isInPair ? 'none' : '1px solid #f1f1f1',
         opacity: busy ? 0.5 : 1,
+        display: 'flex', flexDirection: 'column', gap: '8px',
       }}>
+        {/* Top row: identity + size picker */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '50%',
+            backgroundColor: '#eee', overflow: 'hidden', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.85rem', fontWeight: '800', color: '#888',
+          }}>
+            {v.avatar_url
+              ? <img src={v.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : (v.name || '?').charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: '120px' }}>
+            <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#1a1a1a' }}>
+              {v.name || '(no name)'}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#666' }}>
+              {sMin != null && eMin != null ? `${fmt12(sMin)} – ${fmt12(eMin)}` : 'No slot'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+            {['half', 'full', 'double', 'tbd'].map(opt => {
+              const active = app.requested_table_size === opt;
+              const labels = { half: 'Half', full: 'Full', double: 'Double', tbd: 'TBD' };
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => updateSize(app.id, opt)}
+                  disabled={busy}
+                  style={{
+                    padding: '6px 10px',
+                    border: active ? '1px solid #C8102E' : '1px solid #e5e7eb',
+                    backgroundColor: active ? '#C8102E' : '#fff',
+                    color: active ? '#fff' : '#666',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem', fontWeight: '700',
+                    cursor: busy ? 'wait' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >{labels[opt]}</button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Meta row: socials, vendor self-report experience, staff rating, notes */}
         <div style={{
-          width: '34px', height: '34px', borderRadius: '50%',
-          backgroundColor: '#eee', overflow: 'hidden', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '0.85rem', fontWeight: '800', color: '#888',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          flexWrap: 'wrap', paddingLeft: '46px',
         }}>
-          {v.avatar_url
-            ? <img src={v.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : (v.name || '?').charAt(0).toUpperCase()}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: '800', fontSize: '0.92rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {v.name || '(no name)'}
-          </div>
-          <div style={{ fontSize: '0.78rem', color: '#666' }}>
-            {sMin != null && eMin != null ? `${fmt12(sMin)} – ${fmt12(eMin)}` : 'No slot'}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-          {['half', 'full', 'double', 'tbd'].map(opt => {
-            const active = app.requested_table_size === opt;
-            const labels = { half: 'Half', full: 'Full', double: 'Double', tbd: 'TBD' };
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => updateSize(app.id, opt)}
-                disabled={busy}
-                style={{
-                  padding: '6px 10px',
-                  border: active ? '1px solid #C8102E' : '1px solid #e5e7eb',
-                  backgroundColor: active ? '#C8102E' : '#fff',
-                  color: active ? '#fff' : '#666',
-                  borderRadius: '6px',
-                  fontSize: '0.72rem', fontWeight: '700',
-                  cursor: busy ? 'wait' : 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >{labels[opt]}</button>
-            );
-          })}
+          {igNorm && (
+            <a
+              href={`https://instagram.com/${igNorm}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                fontSize: '0.72rem', fontWeight: '700', color: '#666',
+                backgroundColor: '#f4f4f5', padding: '3px 8px',
+                borderRadius: '5px', textDecoration: 'none',
+              }}
+              title="Open Instagram"
+            >IG @{igNorm}</a>
+          )}
+          {ttNorm && (
+            <a
+              href={`https://tiktok.com/@${ttNorm}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                fontSize: '0.72rem', fontWeight: '700', color: '#666',
+                backgroundColor: '#f4f4f5', padding: '3px 8px',
+                borderRadius: '5px', textDecoration: 'none',
+              }}
+              title="Open TikTok"
+            >TT @{ttNorm}</a>
+          )}
+          {expLabel && (
+            <span style={{
+              fontSize: '0.7rem', fontWeight: '700',
+              color: '#1e40af', backgroundColor: '#dbeafe',
+              padding: '3px 8px', borderRadius: '5px',
+            }} title="Vendor self-reported experience">
+              {expLabel}
+            </span>
+          )}
+          <select
+            value={v.staff_experience_rating || ''}
+            onChange={e => setVendorRating(v.id, e.target.value || null)}
+            title="Staff experience rating"
+            style={{
+              fontSize: '0.72rem', fontWeight: '800',
+              color: ratingMeta ? ratingColor : '#6b7280',
+              backgroundColor: ratingBg,
+              border: `1px solid ${ratingMeta ? ratingColor : '#d1d5db'}`,
+              padding: '3px 6px', borderRadius: '5px',
+              fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            <option value="">Unrated</option>
+            {STAFF_RATINGS.map(r => (
+              <option key={r.key} value={r.key}>{r.label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setNotesVendor(v)}
+            style={{
+              fontSize: '0.72rem', fontWeight: '700',
+              color: noteCount > 0 ? '#1a1a1a' : '#6b7280',
+              backgroundColor: noteCount > 0 ? '#fef3c7' : '#fff',
+              border: `1px solid ${noteCount > 0 ? '#fde68a' : '#d1d5db'}`,
+              padding: '3px 8px', borderRadius: '5px',
+              fontFamily: 'inherit', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+            }}
+          >
+            <FileEdit size={11} />
+            {noteCount > 0 ? `${noteCount} note${noteCount === 1 ? '' : 's'}` : 'Notes'}
+          </button>
         </div>
       </div>
     );
@@ -18250,6 +18384,20 @@ function EventTablesPage({ isMobile, staff }) {
           </div>
         )}
       </div>
+
+      {notesVendor && (
+        <VendorNotesModal
+          vendor={notesVendor}
+          currentUserId={staff?.id}
+          profilesById={profilesById}
+          onClose={() => {
+            setNotesVendor(null);
+            // Refresh count when modal closes so newly added/deleted notes
+            // reflect on the row's badge.
+            fetchData();
+          }}
+        />
+      )}
     </PageWrapper>
   );
 }
