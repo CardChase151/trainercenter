@@ -5964,7 +5964,9 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               }}>Trade Night</div>
             </div>
 
-            {/* Event title */}
+            {/* Event title. We render "TC's" as the red accent ourselves,
+                so strip any "TC's" prefix already in event.title (the DB
+                label is "TC's Beach City Trade Night!") to avoid doubling. */}
             <div style={{
               fontFamily: 'Russo One, sans-serif',
               fontSize: '0.95rem', lineHeight: 1.15,
@@ -5973,7 +5975,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               marginBottom: 10, paddingBottom: 10,
               borderBottom: '1px solid rgba(212, 164, 55, 0.4)',
             }}>
-              <span style={{ color: '#E63946' }}>TC's</span> {event?.title || 'Beach City Trade Night'}
+              <span style={{ color: '#E63946' }}>TC's</span> {(event?.title || 'Beach City Trade Night').replace(/^TC'?s\s+/i, '')}
             </div>
 
             {/* Hero */}
@@ -6041,22 +6043,34 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   gap: 8, marginTop: 14, flexWrap: 'wrap',
                 }}>
                   {igNorm && (
-                    <div style={{
-                      background: '#fff', border: '1.5px solid #1a1a1a',
-                      color: '#1a1a1a',
-                      fontSize: '0.75rem', fontWeight: 800,
-                      padding: '6px 11px', borderRadius: 6,
-                      letterSpacing: '0.02em',
-                    }}>IG @{igNorm}</div>
+                    <a
+                      href={`https://instagram.com/${igNorm}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        background: '#fff', border: '1.5px solid #1a1a1a',
+                        color: '#1a1a1a', textDecoration: 'none',
+                        fontSize: '0.85rem', fontWeight: 800,
+                        padding: '7px 12px', borderRadius: 7,
+                        letterSpacing: '0.02em',
+                      }}
+                    >IG @{igNorm}</a>
                   )}
                   {ttNorm && (
-                    <div style={{
-                      background: '#fff', border: '1.5px solid #1a1a1a',
-                      color: '#1a1a1a',
-                      fontSize: '0.75rem', fontWeight: 800,
-                      padding: '6px 11px', borderRadius: 6,
-                      letterSpacing: '0.02em',
-                    }}>TT @{ttNorm}</div>
+                    <a
+                      href={`https://tiktok.com/@${ttNorm}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      style={{
+                        background: '#fff', border: '1.5px solid #1a1a1a',
+                        color: '#1a1a1a', textDecoration: 'none',
+                        fontSize: '0.85rem', fontWeight: 800,
+                        padding: '7px 12px', borderRadius: 7,
+                        letterSpacing: '0.02em',
+                      }}
+                    >TT @{ttNorm}</a>
                   )}
                 </div>
               )}
@@ -6242,6 +6256,188 @@ function PostToIGModal({ vendor, event, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Staff bulk card download (ZIP) ───────────────────────
+// Renders every approved vendor's card off-screen, snapshots each to a
+// PNG via html-to-image, zips them with JSZip, downloads as one file.
+// Lazy-imports the libs so the main bundle stays lean.
+function BulkDownloadModal({ vendors, event, onClose }) {
+  const cardRefs = useRef({});
+  const [progress, setProgress] = useState({ done: 0, total: vendors.length });
+  const [step, setStep] = useState('starting'); // starting | rendering | zipping | done | error
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // Give the off-screen cards one paint cycle to mount and load
+        // their avatar images before we start snapshotting.
+        await new Promise(r => setTimeout(r, 600));
+        if (cancelled) return;
+        setStep('rendering');
+
+        const [{ toBlob }, JSZipMod] = await Promise.all([
+          import('html-to-image'),
+          import('jszip'),
+        ]);
+        const JSZip = JSZipMod.default || JSZipMod;
+        const zip = new JSZip();
+
+        for (let i = 0; i < vendors.length; i++) {
+          if (cancelled) return;
+          const v = vendors[i];
+          const node = cardRefs.current[v.id]?.current;
+          if (!node) {
+            setProgress({ done: i + 1, total: vendors.length });
+            continue;
+          }
+          const blob = await toBlob(node, {
+            pixelRatio: 3,
+            cacheBust: true,
+            backgroundColor: '#ffffff',
+          });
+          if (blob) {
+            const safeName = (vendorDisplayName(v) || 'vendor')
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
+            zip.file(`${safeName || 'vendor'}-${v.id.slice(0, 8)}.png`, blob);
+          }
+          setProgress({ done: i + 1, total: vendors.length });
+        }
+
+        if (cancelled) return;
+        setStep('zipping');
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const safeDate = event?.event_date || 'event';
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tc-vendor-cards-${safeDate}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (!cancelled) setStep('done');
+      } catch (err) {
+        console.error('[BulkDownloadModal] failed', err);
+        if (!cancelled) {
+          setError(err.message || 'Could not generate the cards.');
+          setStep('error');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  return (
+    <>
+      {/* Modal UI */}
+      <div style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, zIndex: 9999,
+      }}>
+        <div style={{
+          backgroundColor: '#fff', borderRadius: 18,
+          padding: '24px 22px',
+          maxWidth: 420, width: '100%',
+          textAlign: 'center',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>
+            {step === 'done' ? 'Download started' : step === 'error' ? 'Something went wrong' : 'Building card pack…'}
+          </h3>
+          {step !== 'done' && step !== 'error' && (
+            <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 16px' }}>
+              {step === 'zipping'
+                ? 'Zipping cards…'
+                : `Rendering ${progress.done} of ${progress.total} vendor card${progress.total === 1 ? '' : 's'}…`}
+            </p>
+          )}
+          {step === 'done' && (
+            <p style={{ fontSize: '0.85rem', color: '#15803d', margin: '0 0 16px' }}>
+              Your ZIP is downloading. Each card is in there as a PNG.
+            </p>
+          )}
+          {step === 'error' && (
+            <div style={{
+              backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+              color: '#dc2626', borderRadius: 8,
+              padding: '10px 12px', fontSize: '0.85rem',
+              marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 8,
+              textAlign: 'left',
+            }}>
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />{error}
+            </div>
+          )}
+
+          {/* Progress bar */}
+          {step !== 'error' && (
+            <div style={{
+              width: '100%', height: 8,
+              backgroundColor: '#f3f4f6', borderRadius: 999,
+              overflow: 'hidden', marginBottom: 18,
+            }}>
+              <div style={{
+                width: `${step === 'done' ? 100 : pct}%`,
+                height: '100%',
+                backgroundColor: step === 'done' ? '#15803d' : '#1a1a1a',
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={step !== 'done' && step !== 'error'}
+            style={{
+              padding: '10px 18px',
+              backgroundColor: (step === 'done' || step === 'error') ? '#1a1a1a' : '#e5e7eb',
+              color: (step === 'done' || step === 'error') ? '#fff' : '#999',
+              border: 'none', borderRadius: 10,
+              fontSize: '0.88rem', fontWeight: 700,
+              cursor: (step === 'done' || step === 'error') ? 'pointer' : 'wait',
+              fontFamily: 'inherit',
+            }}
+          >
+            {step === 'done' ? 'Done' : step === 'error' ? 'Close' : 'Working…'}
+          </button>
+        </div>
+      </div>
+
+      {/* Off-screen render area. Cards mount here at full design size
+          (scale=1, frozen=true) so html-to-image captures pristine PNGs.
+          left:-99999 keeps them invisible without breaking layout. */}
+      <div style={{
+        position: 'fixed', left: -99999, top: 0,
+        pointerEvents: 'none',
+      }} aria-hidden="true">
+        {vendors.map(v => {
+          if (!cardRefs.current[v.id]) cardRefs.current[v.id] = { current: null };
+          return (
+            <div key={v.id} style={{ marginBottom: 20 }}>
+              <HoloVendorCard
+                vendor={v}
+                event={event}
+                isOwn={false}
+                isMobile={false}
+                scale={1}
+                frozen={true}
+                cardRef={cardRefs.current[v.id]}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -7691,7 +7887,7 @@ function VendorDayAboutPage({ isMobile }) {
 //   default: one event at a time (date selector at top)
 //   ?view=list: every vendor_day event in a long scrollable list
 // Event title is dynamic from events.title — never hardcoded.
-function VendorDayPage({ isMobile }) {
+function VendorDayPage({ isMobile, staff }) {
   const [allEvents, setAllEvents] = useState([]); // events with vendor_applications joined
   const [loading, setLoading] = useState(true);
   const [myVendorId, setMyVendorId] = useState(null); // for inline edit-on-own-card affordance
@@ -7909,13 +8105,13 @@ function VendorDayPage({ isMobile }) {
         </div>
 
         {view === 'single' && selectedEvent && (
-          <VendorDaySingleEvent event={selectedEvent} myVendorId={myVendorId} isMobile={isMobile} />
+          <VendorDaySingleEvent event={selectedEvent} myVendorId={myVendorId} isMobile={isMobile} staff={staff} />
         )}
 
         {view === 'list' && (
           <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '48px' }}>
             {[...futureEvents, ...pastEvents].map(ev => (
-              <VendorDaySingleEvent key={ev.id} event={ev} myVendorId={myVendorId} isMobile={isMobile} compact />
+              <VendorDaySingleEvent key={ev.id} event={ev} myVendorId={myVendorId} isMobile={isMobile} staff={staff} compact />
             ))}
           </div>
         )}
@@ -7926,7 +8122,7 @@ function VendorDayPage({ isMobile }) {
 
 // One Vendor Day section: hero header + grid of approved vendors.
 // Used both as the single-event view and as a row in the list view.
-function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) {
+function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, staff = null }) {
   const d = new Date(event.event_date + 'T12:00:00');
   const dateStr = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -7938,6 +8134,9 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
   // own card surfaces the trigger button, but we keep state at the row
   // level so the modal lives outside the scaled card transform).
   const [postingVendor, setPostingVendor] = useState(null);
+  // Staff-only bulk export: render every approved card, zip them, download.
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const isAdmin = !!staff?.isAdmin;
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
@@ -7988,18 +8187,41 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
           {isPast ? 'No vendors recorded for this date.' : "No vendors confirmed yet — check back soon."}
         </div>
       ) : (
+        <>
+        {isAdmin && (
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <button
+              type="button"
+              onClick={() => setBulkDownloading(true)}
+              style={{
+                backgroundColor: '#1a1a1a', color: '#fff',
+                border: 'none', borderRadius: 10,
+                padding: '10px 18px',
+                fontSize: '0.85rem', fontWeight: 800,
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                fontFamily: 'inherit',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+              }}
+            >
+              <UploadIcon size={14} /> Download all cards (ZIP)
+            </button>
+          </div>
+        )}
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile
-            ? 'repeat(auto-fill, minmax(180px, 1fr))'
-            : 'repeat(auto-fill, minmax(240px, 1fr))',
-          gap: isMobile ? '14px' : '24px',
+            ? '1fr'
+            : 'repeat(auto-fill, minmax(340px, 1fr))',
+          gap: isMobile ? '32px' : '32px',
           padding: isMobile ? '0 4px' : 0,
         }}>
           {vendors.map(v => {
             const isOwn = myVendorId === v.id;
-            // Card scaled to fit the grid cell (design is 405 wide).
-            const cardScale = isMobile ? 0.42 : 0.56;
+            // Card scaled to fit the grid cell (design is 405 wide). Bigger
+            // than before so the text and logo are actually readable.
+            const cardScale = isMobile ? 0.88 : 0.84;
             return (
               <div key={v.id} style={{
                 display: 'flex', flexDirection: 'column',
@@ -8035,6 +8257,7 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
             );
           })}
         </div>
+        </>
       )}
 
       {postingVendor && (
@@ -8042,6 +8265,14 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false }) 
           vendor={postingVendor}
           event={event}
           onClose={() => setPostingVendor(null)}
+        />
+      )}
+
+      {bulkDownloading && (
+        <BulkDownloadModal
+          vendors={vendors}
+          event={event}
+          onClose={() => setBulkDownloading(false)}
         />
       )}
     </div>
@@ -20391,7 +20622,7 @@ function App() {
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
         <Route path="/blog" element={<BlogListPage isMobile={isMobile} />} />
         <Route path="/blog/:slug" element={<BlogPostPage isMobile={isMobile} />} />
-        <Route path="/vendor-day" element={<VendorDayPage isMobile={isMobile} />} />
+        <Route path="/vendor-day" element={<VendorDayPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendor-day/about" element={<VendorDayAboutPage isMobile={isMobile} />} />
         <Route path="/checkin" element={<GuestCheckinPage isMobile={isMobile} />} />
         <Route path="/staff/preview" element={<StaffPreviewPage isMobile={isMobile} />} />
