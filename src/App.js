@@ -5945,23 +5945,33 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             flexDirection: 'column',
             transform: 'translateZ(20px)',
           }}>
-            {/* Brand bar: TC logo + TRADE NIGHT pill, both left-aligned. */}
+            {/* Brand bar: TC logo + TRADE NIGHT pill, both left-aligned.
+                Logo sits in a white circle (matches the footer treatment)
+                so the dark elements in the logo image stay visible. */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               marginBottom: 10,
             }}>
-              <img
-                src="/logo-circle-transparent.png"
-                alt="Trainer Center"
-                crossOrigin="anonymous"
-                style={{
-                  width: 32, height: 32,
-                  borderRadius: '50%',
-                  background: '#1a1a1a',
-                  padding: 2,
-                  flexShrink: 0,
-                }}
-              />
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                backgroundColor: '#fff',
+                border: '1px solid #e5e7eb',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden',
+                flexShrink: 0,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              }}>
+                <img
+                  src="/logo-circle-transparent.png"
+                  alt="Trainer Center"
+                  crossOrigin="anonymous"
+                  style={{
+                    width: 50, height: 50,
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+              </div>
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
                 fontSize: f(0.62), letterSpacing: '0.22em',
