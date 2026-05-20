@@ -18062,22 +18062,38 @@ function EventTimeMapPage({ isMobile, staff }) {
               });
               const tables = full + (dbl * 2) + paired + solo + tbd;
               return (
-                <Link
-                  to={`/staff/events/${eventId}/tables`}
-                  style={{
-                    backgroundColor: '#fff', color: '#1a1a1a',
-                    border: '1px solid #1a1a1a',
-                    padding: '6px 14px', borderRadius: '10px',
-                    textDecoration: 'none',
-                    display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
-                    fontFamily: 'inherit', minWidth: '96px',
-                  }}
-                >
-                  <span style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Tables</span>
-                  <span style={{ fontSize: '1.05rem', fontWeight: '900', lineHeight: 1.1 }}>
-                    {tables}{tbd > 0 && <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: '700', marginLeft: '6px' }}>· {tbd} TBD</span>}
-                  </span>
-                </Link>
+                <>
+                  <Link
+                    to={`/staff/events/${eventId}/tables`}
+                    style={{
+                      backgroundColor: '#fff', color: '#1a1a1a',
+                      border: '1px solid #1a1a1a',
+                      padding: '6px 14px', borderRadius: '10px',
+                      textDecoration: 'none',
+                      display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start',
+                      fontFamily: 'inherit', minWidth: '96px',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.55rem', fontWeight: '800', letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6 }}>Tables</span>
+                    <span style={{ fontSize: '1.05rem', fontWeight: '900', lineHeight: 1.1 }}>
+                      {tables}{tbd > 0 && <span style={{ fontSize: '0.7rem', color: '#92400e', fontWeight: '700', marginLeft: '6px' }}>· {tbd} TBD</span>}
+                    </span>
+                  </Link>
+                  <Link
+                    to={`/staff/events/${eventId}/sizzle`}
+                    style={{
+                      backgroundColor: '#1a1a1a', color: '#fff',
+                      border: '1px solid #1a1a1a',
+                      padding: '10px 14px', borderRadius: '10px',
+                      textDecoration: 'none',
+                      fontSize: '0.85rem', fontWeight: '700',
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Sizzle reel
+                  </Link>
+                </>
               );
             })()}
             <button
@@ -19207,6 +19223,230 @@ function EventTablesPage({ isMobile, staff }) {
         />
       )}
     </PageWrapper>
+  );
+}
+
+// ─── Staff Event Sizzle (/staff/events/:eventId/sizzle) ────
+// 9:16 portrait recording frame with all approved vendor cards
+// scrolling vertically on a 5-second loop. Staff drag-selects the
+// frame with Cmd-Shift-5 to screencap an IG-Reel-ready MP4. Loop is
+// seam-perfect (cards duplicated) so the recording can be trimmed to
+// any 5s multiple without a glitch frame.
+function EventSizzlePage({ isMobile, staff }) {
+  const { eventId } = useParams();
+  const isAdmin = !!staff?.isAdmin;
+
+  const [event, setEvent] = useState(null);
+  const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isAdmin || !eventId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const [evRes, appsRes] = await Promise.all([
+        supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
+        supabase.from('vendor_applications')
+          .select('id, status, requested_start_time, requested_end_time, vendor:vendors(id, name, business_name, avatar_url, ig_handle, tiktok_handle, tagline)')
+          .eq('event_id', eventId)
+          .eq('status', 'approved'),
+      ]);
+      if (cancelled) return;
+      if (evRes.error) { setError(evRes.error.message); setLoading(false); return; }
+      if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
+      setEvent(evRes.data || null);
+      // Flatten the vendor data with the time slot info so HoloVendorCard
+      // can pull requested_start_time/end_time off the vendor object directly.
+      const cleaned = (appsRes.data || [])
+        .filter(a => a.vendor)
+        .map(a => ({
+          ...a.vendor,
+          requested_start_time: a.requested_start_time,
+          requested_end_time: a.requested_end_time,
+        }));
+      setVendors(cleaned);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [eventId, isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: 600, margin: '60px auto', textAlign: 'center', color: '#666' }}>
+          Staff only.
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (loading) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: 600, margin: '60px auto', textAlign: 'center', color: '#999' }}>
+          <Loader2 size={18} className="spin" /> Loading sizzle…
+        </div>
+      </PageWrapper>
+    );
+  }
+  if (error || !event) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: 600, margin: '60px auto', textAlign: 'center', color: '#991b1b' }}>
+          {error || 'Event not found.'}
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // Duplicate the vendor list so the vertical scroll loops seamlessly.
+  // When the animation reaches -50% translation, we're back at the start
+  // of the second copy which looks identical to the first.
+  const duplicated = vendors.length > 0 ? [...vendors, ...vendors] : [];
+  // Each card slot height = 640 (card) + 16 (gap).
+  const CARD_HEIGHT = 640;
+  const GAP = 16;
+  const slotHeight = CARD_HEIGHT + GAP;
+  // Total translate distance for one cycle = vendors.length * slotHeight.
+  const cycleDistance = vendors.length * slotHeight;
+  // Loop duration. Fast = ~3s, slow = ~6s. Default 5s feels cinematic.
+  const LOOP_SEC = 5;
+
+  const dateLabel = new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // 9:16 frame inside the recording target. 405 native card width → frame
+  // width 405, frame height (405 * 16/9) ≈ 720. Matches the holo card
+  // design's max width so cards display at scale 1.0.
+  const FRAME_W = 405;
+  const FRAME_H = 720;
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#0a0a0a',
+      color: '#fff',
+      padding: '32px 20px 60px',
+      fontFamily: 'Inter, -apple-system, sans-serif',
+    }}>
+      <style>{`
+        @keyframes sizzleScroll {
+          from { transform: translateY(0); }
+          to   { transform: translateY(-${cycleDistance}px); }
+        }
+        .sizzle-track {
+          animation: sizzleScroll ${LOOP_SEC}s linear infinite;
+          will-change: transform;
+        }
+      `}</style>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ marginBottom: 8 }}>
+          <Link to={`/staff/events/${eventId}/timemap`} style={{
+            color: '#888', fontSize: '0.78rem', fontWeight: 700,
+            textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>← Back to time map</Link>
+        </div>
+        <h1 style={{
+          fontFamily: 'Russo One, sans-serif',
+          fontSize: '1.8rem', letterSpacing: '0.04em',
+          margin: '0 0 4px', textTransform: 'uppercase',
+        }}>Sizzle Reel</h1>
+        <p style={{ color: '#999', fontSize: '0.9rem', margin: '0 0 8px' }}>
+          {event.title || 'Vendor Day'} · {dateLabel} · {vendors.length} vendor{vendors.length === 1 ? '' : 's'}
+        </p>
+        <div style={{
+          backgroundColor: '#1a1a1a',
+          border: '1px solid #2a2a2a',
+          borderRadius: 10,
+          padding: '12px 16px',
+          fontSize: '0.85rem',
+          color: '#ccc',
+          marginBottom: 32,
+          maxWidth: 640,
+        }}>
+          <strong style={{ color: '#fff' }}>How to capture:</strong> Press <code style={{ background: '#0a0a0a', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.82em' }}>Cmd + Shift + 5</code>,
+          choose "Record Selected Portion," drag-select the framed area below, and capture
+          one full loop ({LOOP_SEC} sec). Upload directly to IG Reels.
+        </div>
+
+        {vendors.length === 0 ? (
+          <div style={{
+            backgroundColor: '#1a1a1a', border: '1px dashed #2a2a2a',
+            borderRadius: 12, padding: '48px 20px', textAlign: 'center',
+            color: '#666',
+          }}>
+            No approved vendors yet.
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex', justifyContent: 'center',
+            padding: '20px 0',
+          }}>
+            {/* Recording target: dashed border outlines where staff
+                drag-selects with Cmd-Shift-5. The inner card-scroll area
+                is what'll get captured (without the dashed line). */}
+            <div style={{
+              position: 'relative',
+              padding: 12,
+              border: '2px dashed #444',
+              borderRadius: 8,
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: -10,
+                left: 12,
+                background: '#0a0a0a',
+                padding: '0 8px',
+                fontSize: '0.65rem',
+                color: '#666',
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}>
+                Capture area · {FRAME_W} × {FRAME_H} (9:16)
+              </div>
+              <div style={{
+                width: FRAME_W,
+                height: FRAME_H,
+                backgroundColor: '#fdfaf3',
+                overflow: 'hidden',
+                position: 'relative',
+              }}>
+                <div className="sizzle-track">
+                  {duplicated.map((v, i) => (
+                    <div key={`${v.id}-${i}`} style={{
+                      marginBottom: GAP,
+                      display: 'flex', justifyContent: 'center',
+                    }}>
+                      <HoloVendorCard
+                        vendor={v}
+                        event={event}
+                        isOwn={false}
+                        isMobile={false}
+                        scale={1}
+                        frozen={true}
+                        pikachuBackground={true}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          marginTop: 32,
+          color: '#666', fontSize: '0.78rem',
+          textAlign: 'center',
+        }}>
+          Loop: {LOOP_SEC}s · Cards: {vendors.length} ·
+          {vendors.length > 0 && ` ~${(LOOP_SEC / vendors.length).toFixed(2)}s per card visible`}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -20668,6 +20908,7 @@ function App() {
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/timemap" element={<EventTimeMapPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/tables" element={<EventTablesPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/events/:eventId/sizzle" element={<EventSizzlePage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/members" element={<StaffMembersPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/comms" element={<StaffCommsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
