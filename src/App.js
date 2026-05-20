@@ -5945,11 +5945,21 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             flexDirection: 'column',
             transform: 'translateZ(20px)',
           }}>
-            {/* Brand bar: just the TC logo, left-aligned. White circle
-                wrapper matches the footer treatment so the dark logo
-                elements stay legible. */}
-            <div style={{ marginBottom: 4 }}>
+            {/* Title block: logo sits absolute top-left, "Trainer Center's"
+                is centered on the same row as the logo, then "Beach City
+                Trade Night" centered below on a single line. */}
+            <div style={{
+              position: 'relative',
+              textAlign: 'center',
+              marginBottom: 10, paddingBottom: 10,
+              borderBottom: '1px solid rgba(212, 164, 55, 0.4)',
+              fontFamily: 'Russo One, sans-serif',
+              textTransform: 'uppercase',
+            }}>
+              {/* Logo, absolutely positioned left so it doesn't shift the
+                  centered text away from the card's true horizontal center. */}
               <div style={{
+                position: 'absolute', left: 0, top: 0,
                 width: 36, height: 36, borderRadius: '50%',
                 backgroundColor: '#fff',
                 border: '1px solid #e5e7eb',
@@ -5968,31 +5978,25 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   }}
                 />
               </div>
-            </div>
 
-            {/* Event title, centered, two lines:
-                  "Trainer Center's"
-                  "Beach City Trade Night"
-                The DB title is "TC's Beach City Trade Night!" — we strip
-                "TC's " prefix since the first line is our rendered version
-                of that branding. */}
-            <div style={{
-              textAlign: 'center',
-              marginBottom: 10, paddingBottom: 10,
-              borderBottom: '1px solid rgba(212, 164, 55, 0.4)',
-              fontFamily: 'Russo One, sans-serif',
-              textTransform: 'uppercase',
-            }}>
+              {/* Row 1: "Trainer Center's" — fixed height matches the logo
+                  so the text reads as being on the same line as the badge. */}
               <div style={{
-                fontSize: f(0.72), lineHeight: 1.1,
+                height: 36,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: f(0.78), lineHeight: 1,
                 color: '#E63946',
                 letterSpacing: '0.06em',
-                marginBottom: 2,
               }}>Trainer Center's</div>
+
+              {/* Row 2: "Beach City Trade Night" — single line, slightly
+                  smaller so it never wraps even at grid scale. */}
               <div style={{
-                fontSize: f(1.05), lineHeight: 1.05,
+                marginTop: 4,
+                fontSize: f(0.92), lineHeight: 1.05,
                 color: '#1a1a1a',
-                letterSpacing: '0.03em',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
               }}>{(event?.title || 'Beach City Trade Night').replace(/^TC'?s\s+/i, '').replace(/!$/, '')}</div>
             </div>
 
