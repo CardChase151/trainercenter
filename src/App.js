@@ -6309,15 +6309,38 @@ function PostToIGModal({ vendor, event, onClose }) {
         setIosGenerating(true);
         setError('');
 
+        // 0) Pre-warm the browser image cache BEFORE anything else.
+        //    Root cause of the "first click fails, second click works"
+        //    pattern: on the first capture, the source images
+        //    (/pikachuuuu.jpg, /logo-circle-transparent.png, the vendor
+        //    avatar) hadn't been fetched yet. inlineCardImages tried to
+        //    fetch them in parallel with html-to-image's own internal
+        //    fetch and the clone-DOM snapshot raced the network. Once
+        //    the browser has them in its HTTP cache, subsequent calls
+        //    are instant. Doing vanilla Image() loads here puts every
+        //    asset in cache before we run a single line of capture code.
+        const urls = [
+          '/pikachuuuu.jpg',
+          '/logo-circle-transparent.png',
+          ...(vendor?.avatar_url ? [vendor.avatar_url] : []),
+        ];
+        await Promise.all(urls.map(url => new Promise(resolve => {
+          const probe = new Image();
+          const done = () => resolve();
+          probe.onload = done;
+          probe.onerror = done;
+          probe.src = url;
+          setTimeout(done, 5000);
+        })));
+        if (cancelled) return;
+
         // 1) Wait for two animation frames so React commits the hidden
-        //    capture card and the browser paints at least once. This is
-        //    more reliable than a fixed timeout.
+        //    capture card and the browser paints at least once. More
+        //    reliable than a fixed timeout.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         if (cancelled || !cardRef.current) return;
 
-        // 2) Poll until every expected <img> is actually in the DOM. The
-        //    first-click bug was the capture racing the mount — imgs
-        //    weren't there yet, so inlineCardImages walked an empty list.
+        // 2) Poll until every expected <img> is actually in the DOM.
         for (let attempts = 0; attempts < 40; attempts++) {
           if (cancelled) return;
           const found = cardRef.current.querySelectorAll('img').length;
@@ -6326,14 +6349,17 @@ function PostToIGModal({ vendor, event, onClose }) {
         }
         if (cancelled || !cardRef.current) return;
 
-        // 3) Now inline + wait for decode + capture.
+        // 3) Inline + wait for decode + capture.
         await inlineCardImages(cardRef.current);
         await ensureImagesLoaded(cardRef.current);
 
         const { toPng } = await import('html-to-image');
         const dataUrl = await toPng(cardRef.current, {
           pixelRatio: 3,
-          cacheBust: true,
+          // cacheBust off — we WANT html-to-image to use the warmed
+          // browser cache. With cacheBust:true it'd append a query
+          // string and force a fresh fetch that races the snapshot.
+          cacheBust: false,
           backgroundColor: '#ffffff',
         });
         if (!cancelled) setIosImage(dataUrl);
