@@ -5947,13 +5947,21 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   // Initials fallback for logo
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 1).map(w => w[0]?.toUpperCase()).join('') || '?';
 
+  // 3D effects (perspective, preserve-3d, translateZ on inner elements,
+  // will-change) only matter for desktop hover-driven cards. On mobile
+  // and on frozen cards (downloads / modal preview / sizzle) they don't
+  // animate but they still allocate GPU compositing layers — at 30+
+  // cards on /vendor-day that's enough memory to crash iOS Safari just
+  // from scrolling. Gate everything heavy to desktop-interactive only.
+  const enable3D = !isMobile && !frozen;
+
   // Card built at 405×640 internally; scaled visually via transform.
   return (
     <div style={{
       width: 405 * scale,
       height: 640 * scale,
       position: 'relative',
-      perspective: 1100,
+      ...(enable3D ? { perspective: 1100 } : null),
       margin: '0 auto',
     }}>
       <div style={{
@@ -5973,16 +5981,15 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             borderRadius: 24,
             position: 'relative',
             overflow: 'hidden',
-            // Card background is just the clean cream. Pikachu (when
-            // pikachuBackground=true) renders as an <img> element below
-            // so inlineCardImages can capture it for the PNG export.
             background: 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
-            transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
-            transformOrigin: '50% 50%',
-            transformStyle: 'preserve-3d',
-            transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+            ...(enable3D ? {
+              transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
+              transformOrigin: '50% 50%',
+              transformStyle: 'preserve-3d',
+              transition: 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+              willChange: 'transform',
+            } : null),
             boxShadow: '0 30px 70px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
-            willChange: 'transform',
             cursor: onClick ? 'pointer' : 'default',
           }}
         >
@@ -6020,27 +6027,32 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             />
           )}
 
-          {/* Highlight TL */}
-          <div ref={hlTLRef} style={{
-            position: 'absolute', inset: 4, borderRadius: 20,
-            pointerEvents: 'none',
-            background: 'linear-gradient(135deg, rgba(255, 250, 220, 0.55) 0%, rgba(255, 240, 180, 0.20) 25%, rgba(255, 240, 180, 0.00) 55%)',
-            mixBlendMode: 'screen',
-            opacity: 0,
-            zIndex: 3,
-            transition: 'opacity 0.3s ease-out',
-          }} />
-
-          {/* Highlight BR */}
-          <div ref={hlBRRef} style={{
-            position: 'absolute', inset: 4, borderRadius: 20,
-            pointerEvents: 'none',
-            background: 'linear-gradient(315deg, rgba(255, 250, 220, 0.45) 0%, rgba(255, 240, 180, 0.15) 25%, rgba(255, 240, 180, 0.00) 55%)',
-            mixBlendMode: 'screen',
-            opacity: 0,
-            zIndex: 3,
-            transition: 'opacity 0.3s ease-out',
-          }} />
+          {/* Foil shimmer highlights — only mounted when 3D hover is
+              enabled (desktop interactive cards). mix-blend-mode: screen
+              forces a compositing layer per element; skipping these on
+              mobile/frozen saves significant GPU memory. */}
+          {enable3D && (
+            <>
+              <div ref={hlTLRef} style={{
+                position: 'absolute', inset: 4, borderRadius: 20,
+                pointerEvents: 'none',
+                background: 'linear-gradient(135deg, rgba(255, 250, 220, 0.55) 0%, rgba(255, 240, 180, 0.20) 25%, rgba(255, 240, 180, 0.00) 55%)',
+                mixBlendMode: 'screen',
+                opacity: 0,
+                zIndex: 3,
+                transition: 'opacity 0.3s ease-out',
+              }} />
+              <div ref={hlBRRef} style={{
+                position: 'absolute', inset: 4, borderRadius: 20,
+                pointerEvents: 'none',
+                background: 'linear-gradient(315deg, rgba(255, 250, 220, 0.45) 0%, rgba(255, 240, 180, 0.15) 25%, rgba(255, 240, 180, 0.00) 55%)',
+                mixBlendMode: 'screen',
+                opacity: 0,
+                zIndex: 3,
+                transition: 'opacity 0.3s ease-out',
+              }} />
+            </>
+          )}
 
           {/* Card content */}
           <div style={{
@@ -6050,7 +6062,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             padding: '26px 28px 26px',
             display: 'flex',
             flexDirection: 'column',
-            transform: 'translateZ(20px)',
+            ...(enable3D ? { transform: 'translateZ(20px)' } : null),
           }}>
             {/* Title block: logo sits absolute top-left, "Trainer Center's"
                 is centered on the same row as the logo, then "Beach City
@@ -6113,7 +6125,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'flex-start',
               textAlign: 'center', paddingTop: 14,
-              transform: 'translateZ(30px)',
+              ...(enable3D ? { transform: 'translateZ(30px)' } : null),
             }}>
               {/* Vendor logo with gold ring */}
               <div style={{
@@ -6121,7 +6133,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 position: 'relative',
                 marginBottom: 18,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transform: 'translateZ(20px)',
+                ...(enable3D ? { transform: 'translateZ(20px)' } : null),
               }}>
                 <div style={{
                   position: 'absolute', inset: -6,
@@ -6246,9 +6258,9 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
               borderRadius: 12,
               padding: '12px 16px',
               textAlign: 'center',
-              boxShadow: frozen ? 'none' : '0 6px 22px rgba(200, 16, 46, 0.30)',
+              boxShadow: enable3D ? '0 6px 22px rgba(200, 16, 46, 0.30)' : 'none',
               color: '#fff',
-              transform: frozen ? 'none' : 'translateZ(10px)',
+              ...(enable3D ? { transform: 'translateZ(10px)' } : null),
             }}>
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
