@@ -6271,14 +6271,60 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   );
 }
 
+// iOS detection (iPhone, iPod, iPad including newer iPads that report
+// as MacIntel with touch support). Used to switch the share modal into
+// long-press-save mode where downloads are unreliable.
+const isIOS = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
 // ─── Card download modal ──────────────────────────────────
-// Anyone taps a vendor card → this opens. Renders a full-size HoloVendorCard
-// preview with two buttons: Download Image (PNG) and Download Video (coming
-// soon). No login required — friction-free sharing for any visitor.
+// Anyone taps a vendor card → this opens.
+// - Desktop / Android: full-size HoloVendorCard preview + Download buttons
+//   (PNG works reliably there, Video TBD).
+// - iOS: skip downloads (iOS Safari has been flaky with html-to-image
+//   exports). Pre-render the card as a PNG and display it as a real <img>
+//   so the user can long-press → "Save to Photos" using iOS's native
+//   image action menu, or screenshot.
 function PostToIGModal({ vendor, event, onClose }) {
   const cardRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [iosImage, setIosImage] = useState(null); // dataURL once generated
+  const [iosGenerating, setIosGenerating] = useState(false);
+  const ios = isIOS();
+
+  // Auto-generate the PNG on iOS as soon as the modal mounts so the user
+  // sees the saved-ready image right away (no extra tap needed).
+  useEffect(() => {
+    if (!ios) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setIosGenerating(true);
+        setError('');
+        // Give React one frame to mount the hidden capture card.
+        await new Promise(r => setTimeout(r, 80));
+        if (cancelled || !cardRef.current) return;
+        await inlineCardImages(cardRef.current);
+        await ensureImagesLoaded(cardRef.current);
+        const { toPng } = await import('html-to-image');
+        const dataUrl = await toPng(cardRef.current, {
+          pixelRatio: 3,
+          cacheBust: true,
+          backgroundColor: '#ffffff',
+        });
+        if (!cancelled) setIosImage(dataUrl);
+      } catch (e) {
+        console.error('[PostToIGModal iOS] generate failed', e);
+        if (!cancelled) setError(e.message || 'Could not prepare the image.');
+      } finally {
+        if (!cancelled) setIosGenerating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ios]);
 
   const handleDownloadPNG = async () => {
     if (!cardRef.current || busy) return;
@@ -6348,72 +6394,142 @@ function PostToIGModal({ vendor, event, onClose }) {
           }} aria-label="Close"><X size={20} /></button>
         </div>
 
-        {/* Preview card — small confirmation thumbnail. Not meant for
-            inspecting details; the downloaded PNG renders at full 1080+. */}
-        <div style={{
-          display: 'flex', justifyContent: 'center',
-          marginBottom: 16,
-        }}>
-          <HoloVendorCard
-            vendor={vendor}
-            event={event}
-            isOwn={false}
-            isMobile={false}
-            scale={0.5}
-            frozen={true}
-            pikachuBackground={true}
-            cardRef={cardRef}
-          />
-        </div>
+        {ios ? (
+          // ─── iOS: show the generated PNG as an actual <img> so
+          // long-press triggers iOS's native "Save to Photos" action.
+          <>
+            <p style={{ fontSize: '0.78rem', color: '#666', margin: '4px 0 12px', textAlign: 'left', lineHeight: 1.4 }}>
+              Press and hold the card → "Save to Photos." Or just screenshot.
+            </p>
 
-        {error && (
-          <div style={{
-            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-            color: '#dc2626', borderRadius: 8,
-            padding: '10px 12px', fontSize: '0.85rem',
-            marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
-            textAlign: 'left',
-          }}>
-            <AlertCircle size={16} />{error}
-          </div>
+            {iosGenerating && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                padding: '40px 20px',
+                color: '#999', fontSize: '0.88rem',
+              }}>
+                <Loader2 size={22} className="spin" />
+                <span>Preparing your card…</span>
+              </div>
+            )}
+
+            {!iosGenerating && error && (
+              <div style={{
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                color: '#dc2626', borderRadius: 8,
+                padding: '10px 12px', fontSize: '0.85rem',
+                marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 8,
+                textAlign: 'left',
+              }}>
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />{error}
+              </div>
+            )}
+
+            {!iosGenerating && iosImage && (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <img
+                  src={iosImage}
+                  alt="Vendor card"
+                  style={{
+                    width: '100%',
+                    maxWidth: 340,
+                    height: 'auto',
+                    borderRadius: 14,
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+                    display: 'block',
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Hidden capture card — rendered offscreen, used as source
+                for the PNG export. Pikachu + TC logo + avatar all
+                inline-resolved by inlineCardImages before capture. */}
+            <div style={{
+              position: 'fixed', left: -99999, top: 0,
+              pointerEvents: 'none',
+            }} aria-hidden="true">
+              <HoloVendorCard
+                vendor={vendor}
+                event={event}
+                isOwn={false}
+                isMobile={false}
+                scale={1}
+                frozen={true}
+                pikachuBackground={true}
+                cardRef={cardRef}
+              />
+            </div>
+          </>
+        ) : (
+          // ─── Desktop / Android: existing download flow.
+          <>
+            <div style={{
+              display: 'flex', justifyContent: 'center',
+              marginBottom: 16,
+            }}>
+              <HoloVendorCard
+                vendor={vendor}
+                event={event}
+                isOwn={false}
+                isMobile={false}
+                scale={0.5}
+                frozen={true}
+                pikachuBackground={true}
+                cardRef={cardRef}
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                color: '#dc2626', borderRadius: 8,
+                padding: '10px 12px', fontSize: '0.85rem',
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+                textAlign: 'left',
+              }}>
+                <AlertCircle size={16} />{error}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={handleDownloadPNG}
+                disabled={busy}
+                style={{
+                  flex: 1, padding: '12px 14px',
+                  backgroundColor: busy ? '#999' : '#1a1a1a',
+                  color: '#fff', border: 'none', borderRadius: 10,
+                  fontSize: '0.92rem', fontWeight: 700,
+                  cursor: busy ? 'wait' : 'pointer',
+                  display: 'inline-flex', alignItems: 'center',
+                  justifyContent: 'center', gap: 6,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {busy ? <><Loader2 size={14} className="spin" /> Generating…</> : <><ImageIcon size={14} /> Download image</>}
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Coming soon — animated foil card export"
+                style={{
+                  flex: 1, padding: '12px 14px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#999', border: '1px solid #e5e7eb',
+                  borderRadius: 10,
+                  fontSize: '0.92rem', fontWeight: 700,
+                  cursor: 'not-allowed',
+                  fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <Film size={14} /> Download video (soon)
+              </button>
+            </div>
+          </>
         )}
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            type="button"
-            onClick={handleDownloadPNG}
-            disabled={busy}
-            style={{
-              flex: 1, padding: '12px 14px',
-              backgroundColor: busy ? '#999' : '#1a1a1a',
-              color: '#fff', border: 'none', borderRadius: 10,
-              fontSize: '0.92rem', fontWeight: 700,
-              cursor: busy ? 'wait' : 'pointer',
-              display: 'inline-flex', alignItems: 'center',
-              justifyContent: 'center', gap: 6,
-              fontFamily: 'inherit',
-            }}
-          >
-            {busy ? <><Loader2 size={14} className="spin" /> Generating…</> : <><ImageIcon size={14} /> Download image</>}
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Coming soon — animated foil card export"
-            style={{
-              flex: 1, padding: '12px 14px',
-              backgroundColor: '#f3f4f6',
-              color: '#999', border: '1px solid #e5e7eb',
-              borderRadius: 10,
-              fontSize: '0.92rem', fontWeight: 700,
-              cursor: 'not-allowed',
-              fontFamily: 'inherit',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
-          >
-            <Film size={14} /> Download video (soon)
-          </button>
-        </div>
       </div>
     </div>
   );
