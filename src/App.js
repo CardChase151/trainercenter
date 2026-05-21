@@ -57,6 +57,42 @@ const ensureImagesLoaded = (root) => {
   }));
 };
 
+// Pre-fetch every <img> inside `root` and replace its src with a data URL.
+// Eliminates CORS-during-capture failures that were causing the TC logo
+// and vendor avatars to come out as empty rings in the downloaded PNG.
+// html-to-image does its own fetch internally but it can silently fail on
+// images served without the right CORS headers; running the fetch first
+// and inlining the result is the bulletproof path.
+const inlineCardImages = async (root) => {
+  if (!root) return;
+  const imgs = Array.from(root.querySelectorAll('img'));
+  await Promise.all(imgs.map(async (img) => {
+    if (!img.src || img.src.startsWith('data:')) return;
+    try {
+      const res = await fetch(img.src, { mode: 'cors', credentials: 'omit', cache: 'no-cache' });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      img.removeAttribute('crossorigin');
+      img.src = dataUrl;
+      // Wait for the new data URL to decode before continuing.
+      await new Promise(resolve => {
+        if (img.complete && img.naturalHeight > 0) return resolve();
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+        setTimeout(resolve, 2000);
+      });
+    } catch (e) {
+      console.warn('[inlineCardImages] failed for', img.src, e);
+    }
+  }));
+};
+
 // Format an ISO timestamp to a relative-friendly local string
 const formatAuditTime = (ts) => {
   if (!ts) return '';
@@ -6188,28 +6224,35 @@ function PostToIGModal({ vendor, event, onClose }) {
     setBusy(true);
     setError('');
     try {
-      // Wait for every img inside the card to finish loading before we
-      // hand the DOM to html-to-image. Without this, the capture fires
-      // before the avatar / TC logo are decoded and the PNG comes out
-      // with empty rings.
+      // 1) Pre-fetch + inline every image as a data URL so the capture
+      //    can't fail on a CORS or network race. (Was the cause of the
+      //    "empty ring" downloads.)
+      await inlineCardImages(cardRef.current);
+      // 2) Belt-and-suspenders: wait for all imgs to finish decoding.
       await ensureImagesLoaded(cardRef.current);
-      // Lazy-import html-to-image to keep it out of the main bundle.
-      const { toPng } = await import('html-to-image');
+      // 3) Lazy-import html-to-image to keep it out of the main bundle.
+      const { toBlob } = await import('html-to-image');
       // pixelRatio=3 turns the 405×640 design into a ~1215×1920 PNG —
-      // sharper than IG needs, future-proof for any platform.
-      const dataUrl = await toPng(cardRef.current, {
+      // sharper than IG needs, future-proof for any platform. toBlob +
+      // createObjectURL is more reliable on iOS Safari than data URLs,
+      // which sometimes trigger a navigation instead of a download.
+      const blob = await toBlob(cardRef.current, {
         pixelRatio: 3,
         cacheBust: true,
         backgroundColor: '#ffffff',
       });
+      if (!blob) throw new Error('Image could not be encoded.');
       const safeName = (vendorDisplayName(vendor) || 'vendor').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       const safeDate = event?.event_date || 'event';
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = dataUrl;
+      a.href = url;
       a.download = `tc-vendor-card-${safeName}-${safeDate}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      // Release the blob after a tick so the download has started.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('[PostToIGModal] download failed', err);
       setError(err.message || 'Could not generate the image. Try again.');
@@ -6228,37 +6271,34 @@ function PostToIGModal({ vendor, event, onClose }) {
         onClick={e => e.stopPropagation()}
         className="modal-safe-bottom smooth-scroll"
         style={{
-          backgroundColor: '#fff', borderRadius: 18,
-          padding: '24px 22px',
-          maxWidth: 480, width: '100%',
-          maxHeight: '92vh', overflow: 'auto',
+          backgroundColor: '#fff', borderRadius: 16,
+          padding: '18px',
+          maxWidth: 380, width: '100%',
+          maxHeight: '85dvh', overflow: 'auto',
           textAlign: 'center',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Share this card</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1a1a1a' }}>Share this card</h3>
           <button onClick={onClose} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: '#888', padding: 4, display: 'flex',
           }} aria-label="Close"><X size={20} /></button>
         </div>
-        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px', textAlign: 'left' }}>
-          Download the image or video and post it anywhere — IG, X, group chats.
-        </p>
 
-        {/* Preview card */}
+        {/* Preview card — small confirmation thumbnail. Not meant for
+            inspecting details; the downloaded PNG renders at full 1080+. */}
         <div style={{
           display: 'flex', justifyContent: 'center',
-          marginBottom: 20,
-          padding: '10px 0',
+          marginBottom: 16,
         }}>
           <HoloVendorCard
             vendor={vendor}
             event={event}
             isOwn={false}
             isMobile={false}
-            scale={0.82}
+            scale={0.5}
             frozen={true}
             pikachuBackground={true}
             cardRef={cardRef}
@@ -6533,7 +6573,8 @@ function BulkDownloadModal({ vendors, event, onClose }) {
             setProgress({ done: i + 1, total: vendors.length });
             continue;
           }
-          // Wait for the offscreen card's images to finish loading.
+          // Pre-fetch + inline images, then wait for decode.
+          await inlineCardImages(node);
           await ensureImagesLoaded(node);
           const blob = await toBlob(node, {
             pixelRatio: 3,
