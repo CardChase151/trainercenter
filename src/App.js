@@ -11196,6 +11196,10 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Belt-and-suspenders: the submit button is already disabled while
+    // submitting, but a rapid double-tap or Enter-key submit can sneak
+    // through before React paints the disabled state. Bail early here too.
+    if (submitting) return;
     if (!form.first_name.trim() || !form.last_name.trim()) {
       setError('First and last name both required.');
       return;
@@ -11503,17 +11507,50 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             </>
           )}
 
-          {error && (
-            <div style={{
-              backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-              borderRadius: '8px', padding: '10px 12px', marginBottom: '16px',
-              fontSize: '0.85rem', color: '#dc2626',
-              display: 'flex', alignItems: 'center', gap: '8px'
-            }}>
-              <AlertCircle size={16} />
-              {error}
-            </div>
-          )}
+          {error && (() => {
+            // Quick-validation errors (first name / logo missing) are
+            // user-actionable on the spot — no need to route them to IG.
+            const isValidationError = /required|need both|logo is required/i.test(error);
+            return (
+              <div style={{
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '8px', padding: '12px 14px', marginBottom: '16px',
+                fontSize: '0.88rem', color: '#dc2626',
+                display: 'flex', alignItems: 'flex-start', gap: '10px'
+              }}>
+                <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {isValidationError ? (
+                    <div>{error}</div>
+                  ) : (
+                    <>
+                      <div style={{ fontWeight: 700, marginBottom: '4px', color: '#991b1b' }}>
+                        Something didn't go through.
+                      </div>
+                      <div style={{ color: '#7f1d1d', lineHeight: 1.45 }}>
+                        DM us right now at{' '}
+                        <a
+                          href="https://instagram.com/trainercenter.pokemon"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#C8102E', fontWeight: 800, textDecoration: 'underline' }}
+                        >@trainercenter.pokemon</a>
+                        {' '}on Instagram and we'll sort it out fast.
+                      </div>
+                      <div style={{
+                        marginTop: '8px', paddingTop: '8px',
+                        borderTop: '1px solid #fecaca',
+                        fontSize: '0.72rem', color: '#9b8888',
+                        fontFamily: 'monospace', wordBreak: 'break-word',
+                      }}>
+                        {error}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           <button type="submit" disabled={submitting} style={{
             width: '100%', padding: '14px',
