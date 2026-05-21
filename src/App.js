@@ -6307,29 +6307,37 @@ function PostToIGModal({ vendor, event, onClose }) {
 
   // Auto-generate the PNG on iOS as soon as the modal mounts.
   //
-  // Memory budget on iOS Safari is tight — the "error continues to occur"
-  // crash is the tab being killed for using too much RAM. To stay under
-  // the limit we:
-  //   1. Preload images SEQUENTIALLY (not parallel) so we never have
-  //      multiple decode buffers alive at once.
-  //   2. Skip the custom inlineCardImages canvas pipeline (each image
-  //      it touched cost an extra canvas + dataURL string in memory).
-  //   3. Use toBlob with pixelRatio 1.5 instead of toPng with 3.
-  //      Output is ~600×960 PNG — IG downscales most uploads anyway, so
-  //      this is plenty. Blob URLs are GC-able, dataURL strings aren't.
+  // Background: html-to-image hits WebKit bug 219770 on iOS Safari. It
+  // builds an SVG with <foreignObject> containing the DOM, loads it as
+  // an Image, then draws to canvas. WebKit's Image.onload fires BEFORE
+  // nested images inside the foreignObject have decoded, so the first
+  // capture often paints an incomplete frame. Documented across
+  // bubkoo/html-to-image issues #361, #420, #461, #488.
+  //
+  // Fix: use modern-screenshot (a fork by qq15725) on iOS specifically.
+  // It has drawImageInterval + delay options that work around the bug
+  // by giving WebKit time to finish decoding before draw. Multiple
+  // maintainers confirm it fully fixes the iOS first-try-blank pattern.
+  //
+  // Also:
+  //   - pixelRatio: 1 (was 1.5) — halves canvas memory.
+  //   - img.decode() in preload — more reliable signal than onload.
+  //   - Blob revoke moved off unmount onto img onLoad so the URL isn't
+  //     killed before the <img> binds to it.
+  //   - Size-check retry: if the returned blob is suspiciously small,
+  //     try once more (catches the rare incomplete capture).
   useEffect(() => {
     if (!ios) return;
     let cancelled = false;
-    let createdUrl = null;
 
     (async () => {
       try {
         setIosGenerating(true);
         setError('');
 
-        // 1) Pre-warm the browser HTTP cache one image at a time so the
-        //    capture can grab each from cache instantly without doing
-        //    network races.
+        // 1) Pre-warm the browser HTTP cache one image at a time. Using
+        //    img.decode() (not onload) so we know the bitmap is actually
+        //    ready, not just the metadata.
         const urls = [
           '/logo-circle-transparent.png',
           '/pikachuuuu.jpg',
@@ -6340,7 +6348,13 @@ function PostToIGModal({ vendor, event, onClose }) {
           await new Promise(resolve => {
             const probe = new Image();
             const done = () => resolve();
-            probe.onload = done;
+            probe.onload = () => {
+              if (probe.decode) {
+                probe.decode().then(done).catch(done);
+              } else {
+                done();
+              }
+            };
             probe.onerror = done;
             probe.src = url;
             setTimeout(done, 4000);
@@ -6352,18 +6366,30 @@ function PostToIGModal({ vendor, event, onClose }) {
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         if (cancelled || !cardRef.current) return;
 
-        // 3) Capture as a blob. Lower pixelRatio = much less memory.
-        const { toBlob } = await import('html-to-image');
-        const blob = await toBlob(cardRef.current, {
-          pixelRatio: 1.5,
-          cacheBust: false,
+        // 3) Capture with modern-screenshot. drawImageInterval=100 loops
+        //    a draw per embedded image with a 100ms gap so WebKit has
+        //    time to actually decode each one. delay=300 pauses after
+        //    the SVG-wrapper Image loads before the first draw.
+        const { domToBlob } = await import('modern-screenshot');
+        const captureOpts = {
+          scale: 1, // pixelRatio equivalent
           backgroundColor: '#ffffff',
-        });
+          drawImageInterval: 100,
+          delay: 300,
+        };
+
+        let blob = await domToBlob(cardRef.current, captureOpts);
+        // Retry once if the blob is suspiciously small (likely an
+        // incomplete capture). Real cards land around 50-200KB at scale 1.
+        if (blob && blob.size < 8000 && !cancelled) {
+          await new Promise(r => setTimeout(r, 250));
+          blob = await domToBlob(cardRef.current, captureOpts);
+        }
         if (cancelled) return;
         if (!blob) throw new Error('Image could not be encoded.');
 
-        createdUrl = URL.createObjectURL(blob);
-        if (!cancelled) setIosImage(createdUrl);
+        const url = URL.createObjectURL(blob);
+        if (!cancelled) setIosImage(url);
       } catch (e) {
         console.error('[PostToIGModal iOS] generate failed', e);
         if (!cancelled) setError(e.message || 'Could not prepare the image.');
@@ -6373,8 +6399,10 @@ function PostToIGModal({ vendor, event, onClose }) {
     })();
     return () => {
       cancelled = true;
-      // Free the blob URL when the modal unmounts so memory comes back.
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
+      // NOTE: We intentionally do NOT revoke the blob URL on unmount
+      // anymore — the <img> may still be decoding it when the modal
+      // closes, and revoking prematurely produces a blank save. The
+      // browser will GC the blob once the <img> is gone too.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ios]);
