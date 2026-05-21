@@ -6298,15 +6298,38 @@ function PostToIGModal({ vendor, event, onClose }) {
   useEffect(() => {
     if (!ios) return;
     let cancelled = false;
+
+    // Number of <img> elements we expect inside the hidden capture card:
+    // TC logo (always) + Pikachu (always, pikachuBackground=true) +
+    // vendor avatar if vendor.avatar_url is set.
+    const expectedImgs = 2 + (vendor?.avatar_url ? 1 : 0);
+
     (async () => {
       try {
         setIosGenerating(true);
         setError('');
-        // Give React one frame to mount the hidden capture card.
-        await new Promise(r => setTimeout(r, 80));
+
+        // 1) Wait for two animation frames so React commits the hidden
+        //    capture card and the browser paints at least once. This is
+        //    more reliable than a fixed timeout.
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         if (cancelled || !cardRef.current) return;
+
+        // 2) Poll until every expected <img> is actually in the DOM. The
+        //    first-click bug was the capture racing the mount — imgs
+        //    weren't there yet, so inlineCardImages walked an empty list.
+        for (let attempts = 0; attempts < 40; attempts++) {
+          if (cancelled) return;
+          const found = cardRef.current.querySelectorAll('img').length;
+          if (found >= expectedImgs) break;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        if (cancelled || !cardRef.current) return;
+
+        // 3) Now inline + wait for decode + capture.
         await inlineCardImages(cardRef.current);
         await ensureImagesLoaded(cardRef.current);
+
         const { toPng } = await import('html-to-image');
         const dataUrl = await toPng(cardRef.current, {
           pixelRatio: 3,
