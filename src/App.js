@@ -73,9 +73,9 @@ const isSameOrigin = (url) => {
 
 // Convert one image URL to a base64 data URL by loading it through an
 // Image element + canvas. Same-origin URLs load without crossOrigin set;
-// cross-origin URLs (Supabase avatars) need crossOrigin="anonymous" plus
-// the source's CORS headers. Cache-bust only on cross-origin so we don't
-// double-fetch our own /public assets.
+// cross-origin URLs need crossOrigin="anonymous" plus the source's CORS
+// headers. Cache-bust EVERYTHING so iOS Safari can't reuse a potentially
+// tainted cached version of the same URL.
 const imageUrlToDataURL = (src) => new Promise((resolve, reject) => {
   const img = new Image();
   const sameOrigin = isSameOrigin(src);
@@ -95,12 +95,8 @@ const imageUrlToDataURL = (src) => new Promise((resolve, reject) => {
     }
   };
   img.onerror = (e) => reject(e);
-  if (sameOrigin) {
-    img.src = src;
-  } else {
-    const sep = src.includes('?') ? '&' : '?';
-    img.src = src + sep + '_cb=' + Date.now();
-  }
+  const sep = src.includes('?') ? '&' : '?';
+  img.src = src + sep + '_cb=' + Date.now();
   setTimeout(() => reject(new Error('image load timeout')), 6000);
 });
 
@@ -6081,7 +6077,6 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 <img
                   src="/logo-circle-transparent.png"
                   alt="Trainer Center"
-                  crossOrigin="anonymous"
                   style={{
                     width: 50, height: 50,
                     objectFit: 'contain',
@@ -6240,16 +6235,20 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             </div>
 
             {/* Bottom band — just the address now. Centered, two clean
-                lines, nothing else competing for space. */}
+                lines, nothing else competing for space. The red shadow
+                glow is fine when interactive (depth feel under the card),
+                but escapes the card's overflow clip in PNG captures
+                (preserve-3d lets it leak out), so it's off for frozen
+                cards used by downloads / modal preview / sizzle. */}
             <div style={{
               marginTop: 18,
               background: 'linear-gradient(90deg, #C8102E 0%, #8B0A1F 100%)',
               borderRadius: 12,
               padding: '12px 16px',
               textAlign: 'center',
-              boxShadow: '0 6px 22px rgba(200, 16, 46, 0.30)',
+              boxShadow: frozen ? 'none' : '0 6px 22px rgba(200, 16, 46, 0.30)',
               color: '#fff',
-              transform: 'translateZ(10px)',
+              transform: frozen ? 'none' : 'translateZ(10px)',
             }}>
               <div style={{
                 fontFamily: 'Russo One, sans-serif',
@@ -19987,7 +19986,6 @@ function EventSizzlePage({ isMobile, staff }) {
                     <img
                       src="/logo-circle-transparent.png"
                       alt="Trainer Center"
-                      crossOrigin="anonymous"
                       style={{ width: 60, height: 60, objectFit: 'contain' }}
                     />
                   </div>
