@@ -57,38 +57,54 @@ const ensureImagesLoaded = (root) => {
   }));
 };
 
-// Pre-fetch every <img> inside `root` and replace its src with a data URL.
-// Eliminates CORS-during-capture failures that were causing the TC logo
-// and vendor avatars to come out as empty rings in the downloaded PNG.
-// html-to-image does its own fetch internally but it can silently fail on
-// images served without the right CORS headers; running the fetch first
-// and inlining the result is the bulletproof path.
+// Convert one image URL to a base64 data URL by loading it through an
+// Image element + canvas. This is more reliable on iOS Safari than
+// fetch+blob, which silently fails on certain CORS configurations
+// (especially Supabase storage URLs). Image+canvas works as long as
+// the source sends Access-Control-Allow-Origin (Supabase public buckets
+// already do), and same-origin sources always work.
+const imageUrlToDataURL = (src) => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    } catch (e) {
+      reject(e);
+    }
+  };
+  img.onerror = (e) => reject(e);
+  // Cache-bust so iOS doesn't reuse a previously-tainted cached version.
+  const sep = src.includes('?') ? '&' : '?';
+  img.src = src + sep + '_cb=' + Date.now();
+  setTimeout(() => reject(new Error('image load timeout')), 6000);
+});
+
+// Pre-load every <img> inside `root` via the Image+canvas path and replace
+// its src with a data URL. Eliminates the "empty ring" downloads on iOS.
 const inlineCardImages = async (root) => {
   if (!root) return;
   const imgs = Array.from(root.querySelectorAll('img'));
   await Promise.all(imgs.map(async (img) => {
     if (!img.src || img.src.startsWith('data:')) return;
+    const originalSrc = img.src;
     try {
-      const res = await fetch(img.src, { mode: 'cors', credentials: 'omit', cache: 'no-cache' });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const blob = await res.blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      const dataUrl = await imageUrlToDataURL(originalSrc);
       img.removeAttribute('crossorigin');
       img.src = dataUrl;
-      // Wait for the new data URL to decode before continuing.
       await new Promise(resolve => {
         if (img.complete && img.naturalHeight > 0) return resolve();
         img.addEventListener('load', resolve, { once: true });
         img.addEventListener('error', resolve, { once: true });
-        setTimeout(resolve, 2000);
+        setTimeout(resolve, 1500);
       });
     } catch (e) {
-      console.warn('[inlineCardImages] failed for', img.src, e);
+      console.warn('[inlineCardImages] failed for', originalSrc, e);
     }
   }));
 };
@@ -5837,12 +5853,14 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   const RANGE = 9;
   const RZ_RANGE = 2;
 
-  // Font boost: native font sizes are tuned for full-scale (1.0) export
-  // where the card is meant to read as a poster-sized IG image. When the
-  // card is shrunk for grid display, CSS transform shrinks text too, so
-  // we partially compensate. 0.7/scale = moderate boost (1.0x at native,
-  // ~1.25x in desktop grid, ~1.7x in mobile grid).
-  const fontBoost = scale >= 0.9 ? 1 : Math.max(1, 0.7 / scale);
+  // Font boost: native font sizes are tuned for full-scale (1.0) export.
+  // When the card is shrunk for grid display, CSS transform shrinks the
+  // text too. We partially compensate, but we CAP the boost at 1.25 so
+  // the same boost applies to every shrunken card. Without the cap,
+  // very small scales (0.42 mobile) get boost ~1.67 which makes text
+  // proportionally too large for the card box — that's the "squished"
+  // look on mobile. Capping = consistent proportions everywhere.
+  const fontBoost = scale >= 0.9 ? 1 : Math.min(1.25, Math.max(1, 0.7 / scale));
   const f = (rem) => `${(rem * fontBoost).toFixed(3)}rem`;
 
   const applyTilt = useCallback((rx, ry, rz) => {
