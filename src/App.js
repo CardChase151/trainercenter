@@ -40,6 +40,23 @@ const formatTime12h = (t) => {
   return `${h12}:${m} ${ampm}`;
 };
 
+// Wait for every <img> inside `root` to finish loading (or error) before
+// resolving. html-to-image needs decoded images to capture them; without
+// this the PNG export catches blank rings before avatars settle in.
+const ensureImagesLoaded = (root) => {
+  if (!root) return Promise.resolve();
+  const imgs = Array.from(root.querySelectorAll('img'));
+  return Promise.all(imgs.map(img => {
+    if (img.complete && img.naturalHeight > 0) return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => resolve();
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+      setTimeout(done, 3000); // fallback so a stuck image never blocks the capture
+    });
+  }));
+};
+
 // Format an ISO timestamp to a relative-friendly local string
 const formatAuditTime = (ts) => {
   if (!ts) return '';
@@ -6171,6 +6188,11 @@ function PostToIGModal({ vendor, event, onClose }) {
     setBusy(true);
     setError('');
     try {
+      // Wait for every img inside the card to finish loading before we
+      // hand the DOM to html-to-image. Without this, the capture fires
+      // before the avatar / TC logo are decoded and the PNG comes out
+      // with empty rings.
+      await ensureImagesLoaded(cardRef.current);
       // Lazy-import html-to-image to keep it out of the main bundle.
       const { toPng } = await import('html-to-image');
       // pixelRatio=3 turns the 405×640 design into a ~1215×1920 PNG —
@@ -6511,6 +6533,8 @@ function BulkDownloadModal({ vendors, event, onClose }) {
             setProgress({ done: i + 1, total: vendors.length });
             continue;
           }
+          // Wait for the offscreen card's images to finish loading.
+          await ensureImagesLoaded(node);
           const blob = await toBlob(node, {
             pixelRatio: 3,
             cacheBust: true,
@@ -8467,16 +8491,18 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile
-            ? 'repeat(auto-fill, minmax(180px, 1fr))'
+            ? '1fr'
             : 'repeat(auto-fill, minmax(240px, 1fr))',
-          gap: isMobile ? '16px' : '24px',
+          gap: isMobile ? '20px' : '24px',
           padding: isMobile ? '0 4px' : 0,
         }}>
           {vendors.map(v => {
             // Card visually scaled to fit the grid cell (design is 405 wide).
             // Font sizes inside the card auto-boost when scale is small so
             // text stays readable — see fontBoost inside HoloVendorCard.
-            const cardScale = isMobile ? 0.42 : 0.56;
+            // Mobile = single column with bigger scale so phones get a clear
+            // full-width card (multi-col phone view was too cramped).
+            const cardScale = isMobile ? 0.82 : 0.56;
             return (
               <div key={v.id} style={{
                 display: 'flex', justifyContent: 'center',
