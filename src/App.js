@@ -6293,76 +6293,65 @@ function PostToIGModal({ vendor, event, onClose }) {
   const [iosGenerating, setIosGenerating] = useState(false);
   const ios = isIOS();
 
-  // Auto-generate the PNG on iOS as soon as the modal mounts so the user
-  // sees the saved-ready image right away (no extra tap needed).
+  // Auto-generate the PNG on iOS as soon as the modal mounts.
+  //
+  // Memory budget on iOS Safari is tight — the "error continues to occur"
+  // crash is the tab being killed for using too much RAM. To stay under
+  // the limit we:
+  //   1. Preload images SEQUENTIALLY (not parallel) so we never have
+  //      multiple decode buffers alive at once.
+  //   2. Skip the custom inlineCardImages canvas pipeline (each image
+  //      it touched cost an extra canvas + dataURL string in memory).
+  //   3. Use toBlob with pixelRatio 1.5 instead of toPng with 3.
+  //      Output is ~600×960 PNG — IG downscales most uploads anyway, so
+  //      this is plenty. Blob URLs are GC-able, dataURL strings aren't.
   useEffect(() => {
     if (!ios) return;
     let cancelled = false;
-
-    // Number of <img> elements we expect inside the hidden capture card:
-    // TC logo (always) + Pikachu (always, pikachuBackground=true) +
-    // vendor avatar if vendor.avatar_url is set.
-    const expectedImgs = 2 + (vendor?.avatar_url ? 1 : 0);
+    let createdUrl = null;
 
     (async () => {
       try {
         setIosGenerating(true);
         setError('');
 
-        // 0) Pre-warm the browser image cache BEFORE anything else.
-        //    Root cause of the "first click fails, second click works"
-        //    pattern: on the first capture, the source images
-        //    (/pikachuuuu.jpg, /logo-circle-transparent.png, the vendor
-        //    avatar) hadn't been fetched yet. inlineCardImages tried to
-        //    fetch them in parallel with html-to-image's own internal
-        //    fetch and the clone-DOM snapshot raced the network. Once
-        //    the browser has them in its HTTP cache, subsequent calls
-        //    are instant. Doing vanilla Image() loads here puts every
-        //    asset in cache before we run a single line of capture code.
+        // 1) Pre-warm the browser HTTP cache one image at a time so the
+        //    capture can grab each from cache instantly without doing
+        //    network races.
         const urls = [
-          '/pikachuuuu.jpg',
           '/logo-circle-transparent.png',
+          '/pikachuuuu.jpg',
           ...(vendor?.avatar_url ? [vendor.avatar_url] : []),
         ];
-        await Promise.all(urls.map(url => new Promise(resolve => {
-          const probe = new Image();
-          const done = () => resolve();
-          probe.onload = done;
-          probe.onerror = done;
-          probe.src = url;
-          setTimeout(done, 5000);
-        })));
+        for (const url of urls) {
+          if (cancelled) return;
+          await new Promise(resolve => {
+            const probe = new Image();
+            const done = () => resolve();
+            probe.onload = done;
+            probe.onerror = done;
+            probe.src = url;
+            setTimeout(done, 4000);
+          });
+        }
         if (cancelled) return;
 
-        // 1) Wait for two animation frames so React commits the hidden
-        //    capture card and the browser paints at least once. More
-        //    reliable than a fixed timeout.
+        // 2) Wait for React commit so the hidden capture card is in DOM.
         await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         if (cancelled || !cardRef.current) return;
 
-        // 2) Poll until every expected <img> is actually in the DOM.
-        for (let attempts = 0; attempts < 40; attempts++) {
-          if (cancelled) return;
-          const found = cardRef.current.querySelectorAll('img').length;
-          if (found >= expectedImgs) break;
-          await new Promise(r => setTimeout(r, 50));
-        }
-        if (cancelled || !cardRef.current) return;
-
-        // 3) Inline + wait for decode + capture.
-        await inlineCardImages(cardRef.current);
-        await ensureImagesLoaded(cardRef.current);
-
-        const { toPng } = await import('html-to-image');
-        const dataUrl = await toPng(cardRef.current, {
-          pixelRatio: 3,
-          // cacheBust off — we WANT html-to-image to use the warmed
-          // browser cache. With cacheBust:true it'd append a query
-          // string and force a fresh fetch that races the snapshot.
+        // 3) Capture as a blob. Lower pixelRatio = much less memory.
+        const { toBlob } = await import('html-to-image');
+        const blob = await toBlob(cardRef.current, {
+          pixelRatio: 1.5,
           cacheBust: false,
           backgroundColor: '#ffffff',
         });
-        if (!cancelled) setIosImage(dataUrl);
+        if (cancelled) return;
+        if (!blob) throw new Error('Image could not be encoded.');
+
+        createdUrl = URL.createObjectURL(blob);
+        if (!cancelled) setIosImage(createdUrl);
       } catch (e) {
         console.error('[PostToIGModal iOS] generate failed', e);
         if (!cancelled) setError(e.message || 'Could not prepare the image.');
@@ -6370,7 +6359,11 @@ function PostToIGModal({ vendor, event, onClose }) {
         if (!cancelled) setIosGenerating(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Free the blob URL when the modal unmounts so memory comes back.
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ios]);
 
