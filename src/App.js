@@ -57,15 +57,31 @@ const ensureImagesLoaded = (root) => {
   }));
 };
 
+// Whether `url` is on the same origin as the current page. Same-origin
+// images must NOT have crossOrigin set — setting it forces CORS handling
+// which can fail on servers that don't echo the Access-Control headers
+// (Netlify static assets don't by default). Cross-origin images need it
+// so the canvas isn't tainted.
+const isSameOrigin = (url) => {
+  try {
+    const absUrl = new URL(url, window.location.href);
+    return absUrl.origin === window.location.origin;
+  } catch {
+    return true;
+  }
+};
+
 // Convert one image URL to a base64 data URL by loading it through an
-// Image element + canvas. This is more reliable on iOS Safari than
-// fetch+blob, which silently fails on certain CORS configurations
-// (especially Supabase storage URLs). Image+canvas works as long as
-// the source sends Access-Control-Allow-Origin (Supabase public buckets
-// already do), and same-origin sources always work.
+// Image element + canvas. Same-origin URLs load without crossOrigin set;
+// cross-origin URLs (Supabase avatars) need crossOrigin="anonymous" plus
+// the source's CORS headers. Cache-bust only on cross-origin so we don't
+// double-fetch our own /public assets.
 const imageUrlToDataURL = (src) => new Promise((resolve, reject) => {
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  const sameOrigin = isSameOrigin(src);
+  if (!sameOrigin) {
+    img.crossOrigin = 'anonymous';
+  }
   img.onload = () => {
     try {
       const canvas = document.createElement('canvas');
@@ -79,9 +95,12 @@ const imageUrlToDataURL = (src) => new Promise((resolve, reject) => {
     }
   };
   img.onerror = (e) => reject(e);
-  // Cache-bust so iOS doesn't reuse a previously-tainted cached version.
-  const sep = src.includes('?') ? '&' : '?';
-  img.src = src + sep + '_cb=' + Date.now();
+  if (sameOrigin) {
+    img.src = src;
+  } else {
+    const sep = src.includes('?') ? '&' : '?';
+    img.src = src + sep + '_cb=' + Date.now();
+  }
   setTimeout(() => reject(new Error('image load timeout')), 6000);
 });
 
@@ -5874,9 +5893,14 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
   const reset = useCallback(() => {
     if (!cardRef.current) return;
     cardRef.current.style.transform = 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)';
-    if (hlTLRef.current) hlTLRef.current.style.opacity = String(REST_HIGHLIGHT);
+    // Frozen cards (modal preview, download exports, sizzle) don't get
+    // the foil-shimmer highlight — without 3D tilt motion behind it, the
+    // gradient reads as a weird blur in a static image. Interactive
+    // hover-driven cards still light up.
+    const restHL = frozen ? 0 : REST_HIGHLIGHT;
+    if (hlTLRef.current) hlTLRef.current.style.opacity = String(restHL);
     if (hlBRRef.current) hlBRRef.current.style.opacity = '0';
-  }, []);
+  }, [frozen]);
 
   useEffect(() => { reset(); }, [reset]);
 
@@ -5953,12 +5977,10 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             borderRadius: 24,
             position: 'relative',
             overflow: 'hidden',
-            // Default: clean cream card. With pikachuBackground=true (used
-            // by IG download exports only), layer a faded Pikachu behind a
-            // strong white wash so he's a hint, not a distraction.
-            background: pikachuBackground
-              ? "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(253,250,243,0.82) 100%), url('/pikachuuuu.jpg') center / 140% no-repeat"
-              : 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
+            // Card background is just the clean cream. Pikachu (when
+            // pikachuBackground=true) renders as an <img> element below
+            // so inlineCardImages can capture it for the PNG export.
+            background: 'linear-gradient(135deg, #ffffff 0%, #fdfaf3 100%)',
             transform: 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
             transformOrigin: '50% 50%',
             transformStyle: 'preserve-3d',
@@ -5980,6 +6002,27 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             pointerEvents: 'none',
             zIndex: 5,
           }} />
+
+          {/* Pikachu background — real <img> element so inlineCardImages
+              captures it reliably (CSS background-image was getting
+              dropped by html-to-image on iOS). Low opacity = the faded
+              hint effect we had with the white wash before. */}
+          {pikachuBackground && (
+            <img
+              src="/pikachuuuu.jpg"
+              alt=""
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: '-20%', left: '-20%',
+                width: '140%', height: '140%',
+                objectFit: 'cover',
+                opacity: 0.16,
+                zIndex: 0,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
 
           {/* Highlight TL */}
           <div ref={hlTLRef} style={{
