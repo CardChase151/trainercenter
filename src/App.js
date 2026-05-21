@@ -6158,14 +6158,14 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 fontFamily: 'Russo One, sans-serif',
                 fontSize: f(1.2), letterSpacing: '0.04em',
                 lineHeight: 1.1, whiteSpace: 'nowrap',
-              }}>4911 Warner Ave #210</div>
+              }}>4911 Warner Ave</div>
               <div style={{
-                fontSize: f(0.78),
+                fontSize: f(0.7),
                 color: 'rgba(255,255,255,0.85)',
-                marginTop: 4, fontWeight: 600,
+                marginTop: 4, fontWeight: 700,
                 letterSpacing: '0.08em', textTransform: 'uppercase',
                 whiteSpace: 'nowrap',
-              }}>Huntington Beach, CA</div>
+              }}>Ste 210 · Huntington Beach, CA</div>
             </div>
           </div>
         </div>
@@ -8491,18 +8491,16 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile
-            ? '1fr'
+            ? 'repeat(auto-fill, minmax(165px, 1fr))'
             : 'repeat(auto-fill, minmax(240px, 1fr))',
-          gap: isMobile ? '20px' : '24px',
+          gap: isMobile ? '14px' : '24px',
           padding: isMobile ? '0 4px' : 0,
         }}>
           {vendors.map(v => {
             // Card visually scaled to fit the grid cell (design is 405 wide).
             // Font sizes inside the card auto-boost when scale is small so
             // text stays readable — see fontBoost inside HoloVendorCard.
-            // Mobile = single column with bigger scale so phones get a clear
-            // full-width card (multi-col phone view was too cramped).
-            const cardScale = isMobile ? 0.82 : 0.56;
+            const cardScale = isMobile ? 0.42 : 0.56;
             return (
               <div key={v.id} style={{
                 display: 'flex', justifyContent: 'center',
