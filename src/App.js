@@ -16789,6 +16789,12 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => new Set()); // event ids expanded
+  // Per-event roster tab: 'approved' | 'interested' | 'no_request'.
+  // Stored as an object keyed by event id so each expanded event keeps
+  // its own selection independently. Default is 'approved'.
+  const [eventTab, setEventTab] = useState({});
+  const tabFor = (id) => eventTab[id] || 'approved';
+  const setTabFor = (id, t) => setEventTab(prev => ({ ...prev, [id]: t }));
 
   const todayStr = todayISO();
   // Split events by date: upcoming (today + future) ascending so the next
@@ -16966,94 +16972,169 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                   </div>
                 </div>
 
-                {/* Roster (only when expanded) */}
-                {isExpanded && (
-                  <div style={{ padding: isMobile ? '0 16px 14px' : '0 20px 16px' }}>
-                    {apps.length === 0 ? (
-                      <div style={{ fontSize: '0.85rem', color: '#999', fontStyle: 'italic', paddingTop: '8px' }}>No applications yet.</div>
-                    ) : null}
-                    {apps.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '6px' }}>
-                        {apps.slice().sort((a, b) => (((a.vendor||{}).name||'').localeCompare(((b.vendor||{}).name||''), undefined, { sensitivity: 'base' }))).map(a => {
-                          const checkedIn = evAttend[a.vendor_id];
-                          const v = a.vendor || {};
-                          // Per-event approver — only when approved + decided_by recorded
-                          let apprLabel = null;
-                          if (a.status === 'approved' && a.decided_by) {
-                            const p = (profilesById || {})[a.decided_by];
-                            const who = p?.name || p?.email || 'staff';
-                            const when = a.decided_at
-                              ? new Date(a.decided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                              : null;
-                            apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
-                          }
-                          // Status badge (mirrors what AllVendorsList uses, scoped to applications)
-                          const appBadge = <ApplicationStatusBadge status={a.status} />;
-                          // Decision line: approval credit, or pending tag, or "Approved · checked in"
-                          let decLine = null;
-                          if (a.status === 'approved') {
-                            const checkedInLabel = checkedIn
-                              ? ` · ${checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}`
-                              : ' · Not checked in';
-                            decLine = (
-                              <span style={{ color: '#16a34a' }}>
-                                {apprLabel || 'Approved'}{checkedInLabel}
-                              </span>
-                            );
-                          } else if (a.status === 'pending') {
-                            decLine = <span style={{ color: '#c2410c' }}>Pending decision</span>;
-                          }
-                          // Per-application actions: approve button when pending + not past.
-                          // Inline time request and vendor note shown via the card's body
-                          // and an extra-info area below.
-                          const actions = (a.status === 'pending' && !isPast)
-                            ? (
-                              <button onClick={() => onDecide(a.id, 'approved', null)} style={{
-                                fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
-                                border: 'none', padding: '6px 14px', borderRadius: '6px',
-                                fontWeight: '700', cursor: 'pointer'
-                              }}>Approve</button>
-                            )
-                            : null;
-                          // The application's time request + vendor note are application-scoped
-                          // (not vendor-scoped), so we synthesize a wrapper vendor object that
-                          // carries those onto the card without mutating the source.
-                          const cardVendor = {
-                            ...v,
-                            requested_start_time: a.requested_start_time || v.requested_start_time,
-                            requested_end_time: a.requested_end_time || v.requested_end_time,
-                            // Use the vendor's own bio if present, otherwise fall back to the
-                            // per-application note so staff can see it inline.
-                            bio: v.bio || a.vendor_note || null,
-                          };
-                          return (
-                            <VendorRichCard
-                              key={a.id}
-                              vendor={cardVendor}
-                              isMobile={isMobile}
-                              emails={emailLog[a.vendor_id] || []}
-                              eventId={ev.id}
-                              eventLabel={null /* event is already implied by the parent expandable section */}
-                              nextEvent={vendorNextEvent[a.vendor_id] || null}
-                              onClick={() => onOpenDetail && onOpenDetail(v)}
-                              statusBadge={appBadge}
-                              decisionLine={decLine}
-                              actions={actions}
-                            />
-                          );
-                        })}
+                {/* Roster (only when expanded) — 3 tabs: Approved / Interested / No request */}
+                {isExpanded && (() => {
+                  const activeTab = tabFor(ev.id);
+                  const tabBtnLocal = (active) => ({
+                    flex: 1,
+                    padding: '8px 10px',
+                    border: active ? 'none' : '1px solid #ddd',
+                    backgroundColor: active ? '#1a1a1a' : '#fff',
+                    color: active ? '#fff' : '#666',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    minWidth: 0,
+                  });
+                  // Card factory for application-backed entries (approved + interested).
+                  const renderAppCard = (a) => {
+                    const checkedIn = evAttend[a.vendor_id];
+                    const v = a.vendor || {};
+                    let apprLabel = null;
+                    if (a.status === 'approved' && a.decided_by) {
+                      const p = (profilesById || {})[a.decided_by];
+                      const who = p?.name || p?.email || 'staff';
+                      const when = a.decided_at
+                        ? new Date(a.decided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : null;
+                      apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
+                    }
+                    const appBadge = <ApplicationStatusBadge status={a.status} />;
+                    let decLine = null;
+                    if (a.status === 'approved') {
+                      const checkedInLabel = checkedIn
+                        ? ` · ${checkedIn.geo_verified ? 'Checked in (geo)' : 'Checked in (honor)'}`
+                        : ' · Not checked in';
+                      decLine = (
+                        <span style={{ color: '#16a34a' }}>
+                          {apprLabel || 'Approved'}{checkedInLabel}
+                        </span>
+                      );
+                    } else if (a.status === 'pending') {
+                      decLine = <span style={{ color: '#c2410c' }}>Pending decision</span>;
+                    }
+                    const actions = (a.status === 'pending' && !isPast)
+                      ? (
+                        <button onClick={() => onDecide(a.id, 'approved', null)} style={{
+                          fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+                          border: 'none', padding: '6px 14px', borderRadius: '6px',
+                          fontWeight: '700', cursor: 'pointer'
+                        }}>Approve</button>
+                      )
+                      : null;
+                    const cardVendor = {
+                      ...v,
+                      requested_start_time: a.requested_start_time || v.requested_start_time,
+                      requested_end_time: a.requested_end_time || v.requested_end_time,
+                      bio: v.bio || a.vendor_note || null,
+                    };
+                    return (
+                      <VendorRichCard
+                        key={a.id}
+                        vendor={cardVendor}
+                        isMobile={isMobile}
+                        emails={emailLog[a.vendor_id] || []}
+                        eventId={ev.id}
+                        eventLabel={null}
+                        nextEvent={vendorNextEvent[a.vendor_id] || null}
+                        onClick={() => onOpenDetail && onOpenDetail(v)}
+                        statusBadge={appBadge}
+                        decisionLine={decLine}
+                        actions={actions}
+                      />
+                    );
+                  };
+                  // Sort helpers — alphabetical by display name.
+                  const sortByName = (a, b) => (((a.vendor||a||{}).name||'').localeCompare(((b.vendor||b||{}).name||''), undefined, { sensitivity: 'base' }));
+                  const approvedSorted = approved.slice().sort(sortByName);
+                  const interestedSorted = pending.slice().sort(sortByName);
+                  const noRequestSorted = notApplied.slice().sort(sortByName);
+
+                  // Which list maps to cards based on the active tab.
+                  let list = null;
+                  let emptyMsg = '';
+                  if (activeTab === 'approved') {
+                    list = approvedSorted;
+                    emptyMsg = 'No vendors approved for this event yet.';
+                  } else if (activeTab === 'interested') {
+                    list = interestedSorted;
+                    emptyMsg = 'No pending applications. When vendors apply, they show up here.';
+                  } else {
+                    list = noRequestSorted;
+                    emptyMsg = isPast || ev.cancelled
+                      ? 'No "no request" list for past or cancelled events.'
+                      : 'Every approved partner has engaged with this event.';
+                  }
+
+                  return (
+                    <div style={{ padding: isMobile ? '0 16px 14px' : '0 20px 16px' }}>
+                      {/* Tab control */}
+                      <div style={{
+                        display: 'flex', gap: '6px',
+                        paddingTop: '10px', marginBottom: '12px',
+                      }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'approved'); }}
+                          style={tabBtnLocal(activeTab === 'approved')}
+                        >
+                          Approved ({approvedSorted.length})
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'interested'); }}
+                          style={tabBtnLocal(activeTab === 'interested')}
+                        >
+                          Interested ({interestedSorted.length})
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'no_request'); }}
+                          style={tabBtnLocal(activeTab === 'no_request')}
+                        >
+                          No request ({noRequestSorted.length})
+                        </button>
                       </div>
-                    )}
-                    <NotAppliedRoster
-                      event={ev}
-                      notApplied={notApplied}
-                      emailLog={emailLog}
-                      vendorNextEvent={vendorNextEvent}
-                      onOpenDetail={onOpenDetail}
-                      isMobile={isMobile}
-                    />
-                  </div>
-                )}
+
+                      {/* Cards or empty state */}
+                      {list.length === 0 ? (
+                        <div style={{
+                          fontSize: '0.85rem', color: '#999', fontStyle: 'italic',
+                          textAlign: 'center', padding: '20px 10px',
+                          backgroundColor: '#fafafa', borderRadius: '8px',
+                        }}>{emptyMsg}</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {activeTab === 'no_request'
+                            ? list.map(v => (
+                                <VendorRichCard
+                                  key={v.id}
+                                  vendor={v}
+                                  isMobile={isMobile}
+                                  emails={emailLog[v.id] || []}
+                                  eventId={ev.id}
+                                  eventLabel={null}
+                                  nextEvent={vendorNextEvent[v.id] || null}
+                                  onClick={() => onOpenDetail && onOpenDetail(v)}
+                                  statusBadge={
+                                    <span style={{
+                                      fontSize: '0.65rem', fontWeight: '800',
+                                      color: '#92400e', backgroundColor: '#fef3c7',
+                                      padding: '3px 10px', borderRadius: '999px',
+                                      textTransform: 'uppercase', letterSpacing: '0.4px',
+                                      border: '1px solid #fde68a',
+                                    }}>No request</span>
+                                  }
+                                  decisionLine={null}
+                                  actions={null}
+                                />
+                              ))
+                            : list.map(renderAppCard)
+                          }
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
