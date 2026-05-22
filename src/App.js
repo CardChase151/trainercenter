@@ -20692,6 +20692,15 @@ const PRINTABLES = [
     accent: '#1d4ed8',
   },
   {
+    key: 'vendor-handout',
+    title: 'Vendor Handout (4×6 double-sided)',
+    desc: 'Front: IG + Google QRs. Back: 5-step playbook for vendors to follow between Trade Nights.',
+    file: '/printables/vendor-handout.pdf',
+    thumb: '/printables/thumb-vendor-handout.png',
+    kind: 'pdf',
+    accent: '#7c3aed',
+  },
+  {
     key: 'qr-instagram-bare',
     title: 'Instagram QR — Code Only',
     desc: 'Just the colored Pokeball QR with TC logo center. No title or framing — drop into any layout.',

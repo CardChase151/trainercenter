@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Trainer Center HB · Vendor Handout</title>
+<style>
+  @page {
+    size: 4in 6in;
+    margin: 0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    color: #1a1a1a;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 4in;
+    height: 6in;
+    page-break-after: always;
+    padding: 0.28in 0.28in 0.22in;
+    display: flex;
+    flex-direction: column;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* ───────── FRONT ───────── */
+  .brand {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    margin-bottom: 2px;
+  }
+  .brand .accent { color: #C8102E; }
+  .address {
+    text-align: center;
+    font-size: 9px;
+    color: #666;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 0.18in;
+  }
+  .qr-row {
+    display: flex;
+    gap: 0.18in;
+    justify-content: center;
+    flex: 1;
+    align-items: center;
+  }
+  .qr-cell {
+    flex: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .qr-cell .qr-label {
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.06in;
+    color: #1a1a1a;
+  }
+  .qr-cell.ig .qr-label .em { color: #C8102E; }
+  .qr-cell.google .qr-label .em { color: #4285F4; }
+  .qr-cell .qr-img {
+    width: 1.5in;
+    height: 1.5in;
+    object-fit: contain;
+  }
+  .qr-cell .qr-handle {
+    font-size: 9px;
+    color: #666;
+    margin-top: 0.05in;
+    letter-spacing: 0.02em;
+  }
+  .flip-prompt {
+    text-align: center;
+    font-size: 9px;
+    color: #999;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 0.08in;
+  }
+
+  /* ───────── BACK ───────── */
+  .back-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+  }
+  .back-title .accent { color: #C8102E; }
+  .back-subtitle {
+    text-align: center;
+    font-size: 9px;
+    color: #777;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.16in;
+  }
+  .steps { flex: 1; display: flex; flex-direction: column; gap: 0.08in; }
+  .step {
+    display: flex;
+    gap: 0.1in;
+    align-items: flex-start;
+  }
+  .step-num {
+    width: 0.34in;
+    height: 0.34in;
+    flex-shrink: 0;
+    background: #C8102E;
+    color: #fff;
+    font-weight: 900;
+    font-size: 13px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+  .step-content { flex: 1; padding-top: 1px; }
+  .step-title {
+    font-weight: 800;
+    font-size: 11px;
+    margin-bottom: 1px;
+    line-height: 1.2;
+  }
+  .step-desc {
+    font-size: 8.5px;
+    color: #555;
+    line-height: 1.35;
+  }
+  .back-footer {
+    text-align: center;
+    font-size: 8px;
+    color: #999;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 0.06in;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ FRONT ═══════════════ -->
+<div class="page">
+  <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+  <div class="address">4911 Warner Ave #210 · Huntington Beach, CA</div>
+
+  <div class="qr-row">
+    <div class="qr-cell ig">
+      <div class="qr-label">Follow on <span class="em">IG</span></div>
+      <img class="qr-img" src="public/printables/qr-instagram-bare.png" alt="Instagram QR">
+      <div class="qr-handle">@trainercenter.pokemon</div>
+    </div>
+    <div class="qr-cell google">
+      <div class="qr-label">Review on <span class="em">Google</span></div>
+      <img class="qr-img" src="public/printables/qr-google-bare.png" alt="Google review QR">
+      <div class="qr-handle">5 yellow stars please</div>
+    </div>
+  </div>
+
+  <div class="flip-prompt">↻ Flip for your 5-step playbook</div>
+</div>
+
+<!-- ═══════════════ BACK ═══════════════ -->
+<div class="page">
+  <div class="back-title">Your 5-Step <span class="accent">Playbook</span></div>
+  <div class="back-subtitle">From tonight to the next Trade Night</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Review tonight's Trade Night</div>
+        <div class="step-desc">Drop a Google review. Mention "Beach City Trade Night" by name — helps the next collectors and vendors find us.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">Apply for the next date</div>
+        <div class="step-desc">Two clicks at pokemontrainercenter.com/vendor-day. Earlier apply = better spot in the lineup.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Share our pinned reel</div>
+        <div class="step-desc">We pin a promo reel on @trainercenter.pokemon for each upcoming Trade Night. Repost it to your story this week.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Post your vendor card</div>
+        <div class="step-desc">1-2 weeks out, share your branded vendor card from /vendor-day. Tag @trainercenter.pokemon so we can repost.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <div class="step-title">Share the reel one more time</div>
+        <div class="step-desc">A few days before event day, share that pinned reel again as a story. Last push, peak intent.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="back-footer">Trainer Center HB · See you at the next one</div>
+</div>
+
+</body>
+</html>
