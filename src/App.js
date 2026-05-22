@@ -4190,6 +4190,98 @@ function ConsultationPage({ isMobile }) {
   );
 }
 
+// ─── Games Page (/games) ──────────────────────────────────
+// Members + guests can land here to find free game experiences we host
+// or link out to. Currently anchors on Kanto Adventure (lives on
+// cardchase.org). New entries just append to the GAMES array.
+const GAMES = [
+  {
+    key: 'kanto-adventure',
+    title: 'Kanto Adventure',
+    desc: 'Digital Pokemon Kanto board game on CardChase. Roll, navigate the map, hit gym leaders, collect cards. Free to play.',
+    url: 'https://cardchase.org/KantoAdventure/',
+    cta: 'Play on CardChase',
+    accent: '#16a34a',
+    external: true,
+  },
+];
+
+function GamesPage({ isMobile }) {
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
+        <SectionHeader title="Games" subtitle="Free Pokemon games we host or link to from the community" />
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '14px',
+          marginTop: '14px',
+        }}>
+          {GAMES.map(g => (
+            <div key={g.key} style={{
+              backgroundColor: '#fff',
+              border: '1px solid #eee',
+              borderRadius: '14px',
+              padding: '18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              height: '100%',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '10px',
+                  backgroundColor: `${g.accent}15`, color: g.accent,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Grid3x3 size={22} />
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1a1a1a' }}>{g.title}</div>
+                  <div style={{
+                    fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', color: g.accent, marginTop: '2px',
+                  }}>
+                    {g.external ? 'External · Free' : 'On this site'}
+                  </div>
+                </div>
+              </div>
+              <p style={{
+                fontSize: '0.88rem', color: '#555', lineHeight: 1.5, margin: 0,
+              }}>{g.desc}</p>
+              <a
+                href={g.url}
+                target={g.external ? '_blank' : undefined}
+                rel={g.external ? 'noopener noreferrer' : undefined}
+                style={{
+                  marginTop: 'auto',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  padding: '10px 14px',
+                  backgroundColor: g.accent, color: '#fff',
+                  borderRadius: '10px',
+                  fontSize: '0.88rem', fontWeight: 800,
+                  textDecoration: 'none', fontFamily: 'inherit',
+                }}
+              >
+                {g.cta} {g.external && <ExternalLink size={14} />}
+              </a>
+            </div>
+          ))}
+        </div>
+
+        <p style={{
+          fontSize: '0.82rem', color: '#888', textAlign: 'center',
+          marginTop: '28px', lineHeight: 1.5,
+        }}>
+          More coming soon. Have a game you want to see here? <Link to="/#visit-us" style={{ color: '#C8102E', fontWeight: 700 }}>Let Chef know.</Link>
+        </p>
+      </div>
+    </PageWrapper>
+  );
+}
+
 // ─── Grading Page ─────────────────────────────────────────
 function GradingPage({ isMobile }) {
   const steps = [
@@ -17773,6 +17865,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
         { label: 'Buy / Sell', to: '/buy-sell' },
         { label: 'Consultation', to: '/consultation' },
         { label: 'Grading', to: '/grading' },
+        { label: 'Games', to: '/games' },
         { label: 'Blog', to: '/blog' },
         ...(remindersIn === 'guest' ? [reminderItem] : []),
         // Check in — only relevant once you're a member (i.e. you can check
@@ -22258,6 +22351,7 @@ function App() {
         <Route path="/vendors/respond" element={<VendorRespondPage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
         <Route path="/grading" element={<GradingPage isMobile={isMobile} />} />
+        <Route path="/games" element={<GamesPage isMobile={isMobile} />} />
         <Route path="/reminders" element={<RemindersPage isMobile={isMobile} />} />
         <Route path="/buy-sell" element={<BuySellPage isMobile={isMobile} />} />
         <Route path="/calendar" element={<CalendarPage isMobile={isMobile} isAdmin={isAdmin} staff={staff} />} />
