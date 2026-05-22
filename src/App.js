@@ -20776,6 +20776,16 @@ const PRINTABLES = [
     accent: '#0d9488',
     group: 'docs',
   },
+  {
+    key: 'ig-game-plan',
+    title: 'Instagram Game Plan',
+    desc: 'Trainer Center IG content strategy + posting cadence. Reference doc for what to post when, and how to grow the @trainercenter.pokemon presence.',
+    file: '/printables/ig-game-plan.pdf',
+    thumb: '/printables/thumb-ig-game-plan.png',
+    kind: 'pdf',
+    accent: '#be185d',
+    group: 'docs',
+  },
 ];
 
 // Shared card UI used by both the QR Codes section and the Files section
