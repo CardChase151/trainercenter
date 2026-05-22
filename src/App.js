@@ -20291,6 +20291,387 @@ function StatTile({ label, value, sub, accent, small }) {
 // that route customers to our review/social profiles. Each item has
 // a one-click Print (renders into a hidden iframe and triggers the
 // browser print dialog without a page nav) and a Download button.
+// ─── Pokeball-styled QR code generator ────────────────────
+// Renders a printable QR card on a canvas, branded with TC's red/black
+// Pokeball split: dark modules in the top half are brand red, dark
+// modules in the bottom half are ink. Center logo sits in a white
+// padded circle (error correction H tolerates ~30% obstruction, so
+// the ~20% logo footprint is safe). The whole card includes a title
+// row ("Trainer Center HB" with "Center" in red), a half-red/half-
+// black rounded frame around the QR, and an Instagram glyph + handle
+// underneath. Inspired by Chase's Python prototype.
+const POKEBALL_QR_PRESETS = [
+  { label: 'Vendor Day',  url: 'https://pokemontrainercenter.com/vendor-day' },
+  { label: 'Home',        url: 'https://pokemontrainercenter.com' },
+  { label: 'Calendar',    url: 'https://pokemontrainercenter.com/calendar' },
+  { label: 'Instagram',   url: 'https://instagram.com/trainercenter.pokemon' },
+  { label: 'CardChase',   url: 'https://cardchase.org' },
+  { label: 'Reminders',   url: 'https://pokemontrainercenter.com/reminders' },
+];
+
+async function drawPokeballQRCard(canvas, url, logoImage) {
+  // 1) Generate the QR matrix at H error correction so we can overlay
+  //    the center logo without breaking scannability.
+  const QRCodeMod = await import('qrcode');
+  const QRCode = QRCodeMod.default || QRCodeMod;
+  const qr = QRCode.create(url, { errorCorrectionLevel: 'H' });
+  const matrix = qr.modules;
+  const size = matrix.size;
+
+  // 2) Design dimensions (in real pixels — print-resolution).
+  const MODULE_PX = 22;
+  const qrPx = size * MODULE_PX;
+
+  const qrPad = 50;
+  const qrFrame = 26;
+  const blockW = qrPx + 2 * qrPad + 2 * qrFrame;
+  const blockH = blockW;
+  const frameRadius = 60;
+
+  const titleFontSize = 110;
+  const handleFontSize = 48;
+  const glyphSize = 56;
+  const glyphGap = 18;
+
+  const sideMargin = 75;
+  const topMargin = 90;
+  const gapTitleQR = 60;
+  const gapQRHandle = 60;
+  const bottomMargin = 80;
+
+  const BRAND_RED = '#C8102E';
+  const INK = '#1a1a1a';
+  const WHITE = '#ffffff';
+
+  // 3) Pre-measure text so we can size the canvas to fit everything.
+  const ctx = canvas.getContext('2d');
+  const titleSegs = [
+    { text: 'Trainer ', color: INK },
+    { text: 'Center ',  color: BRAND_RED },
+    { text: 'HB',       color: INK },
+  ];
+  ctx.font = `900 ${titleFontSize}px "Russo One", "Inter", sans-serif`;
+  const segWidths = titleSegs.map(s => ctx.measureText(s.text).width);
+  const titleTotal = segWidths.reduce((a, b) => a + b, 0);
+
+  const handleText = '@trainercenter.pokemon';
+  ctx.font = `800 ${handleFontSize}px "Inter", sans-serif`;
+  const handleW = ctx.measureText(handleText).width;
+  const handleRowW = glyphSize + glyphGap + handleW;
+
+  const contentW = Math.max(titleTotal, blockW, handleRowW);
+  const canvasW = contentW + 2 * sideMargin;
+  const canvasH =
+    topMargin + titleFontSize + gapTitleQR + blockH +
+    gapQRHandle + Math.max(glyphSize, handleFontSize) + bottomMargin;
+
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+
+  // 4) White background + subtle outer border (sticker-like edge).
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(0, 0, canvasW, canvasH);
+  ctx.strokeStyle = '#e8e8e8';
+  ctx.lineWidth = 4;
+  roundRectStroke(ctx, 12, 12, canvasW - 24, canvasH - 24, 70);
+
+  // 5) Title row — three colored segments rendered side by side, centered.
+  ctx.font = `900 ${titleFontSize}px "Russo One", "Inter", sans-serif`;
+  ctx.textBaseline = 'top';
+  let titleX = (canvasW - titleTotal) / 2;
+  const titleY = topMargin;
+  titleSegs.forEach((seg, i) => {
+    ctx.fillStyle = seg.color;
+    ctx.fillText(seg.text, titleX, titleY);
+    titleX += segWidths[i];
+  });
+
+  // 6) Frame block (centered horizontally) — base layer with red ring.
+  const blockX = (canvasW - blockW) / 2;
+  const blockY = topMargin + titleFontSize + gapTitleQR;
+
+  // Draw the QR background inside the frame area.
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(blockX + qrFrame, blockY + qrFrame, qrPx + 2 * qrPad, qrPx + 2 * qrPad);
+
+  // 7) Pokeball-split frame: draw the whole stroke in red, then overpaint
+  //    the bottom half with an ink-colored arc using clipping.
+  ctx.strokeStyle = BRAND_RED;
+  ctx.lineWidth = qrFrame;
+  roundRectStroke(ctx, blockX + qrFrame / 2, blockY + qrFrame / 2,
+                  blockW - qrFrame, blockH - qrFrame, frameRadius);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(blockX, blockY + blockH / 2, blockW, blockH / 2);
+  ctx.clip();
+  ctx.strokeStyle = INK;
+  roundRectStroke(ctx, blockX + qrFrame / 2, blockY + qrFrame / 2,
+                  blockW - qrFrame, blockH - qrFrame, frameRadius);
+  ctx.restore();
+
+  // 8) Draw the QR modules — top half red, bottom half ink.
+  const qrX = blockX + qrFrame + qrPad;
+  const qrY = blockY + qrFrame + qrPad;
+  const splitRow = size / 2;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (matrix.get(r, c)) {
+        ctx.fillStyle = (r + 0.5) < splitRow ? BRAND_RED : INK;
+        ctx.fillRect(
+          qrX + c * MODULE_PX,
+          qrY + r * MODULE_PX,
+          MODULE_PX - 1,
+          MODULE_PX - 1
+        );
+      }
+    }
+  }
+
+  // 9) Center logo. Clear a padded white circle first so the logo
+  //    sits on white instead of on top of data modules.
+  const cx = qrX + qrPx / 2;
+  const cy = qrY + qrPx / 2;
+  const logoR = qrPx * 0.20 / 2;
+  const padR = logoR + qrPx * 0.025;
+  ctx.fillStyle = WHITE;
+  ctx.beginPath();
+  ctx.arc(cx, cy, padR, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (logoImage && logoImage.complete && logoImage.naturalWidth > 0) {
+    const target = logoR * 2;
+    const ratio = logoImage.naturalWidth / logoImage.naturalHeight;
+    let lw = target;
+    let lh = target;
+    if (ratio > 1) lh = target / ratio;
+    else lw = target * ratio;
+    ctx.drawImage(logoImage, cx - lw / 2, cy - lh / 2, lw, lh);
+  } else {
+    // Fallback button so the slot never looks empty if the logo failed
+    // to load — mirrors the Python script's behavior.
+    ctx.fillStyle = INK;
+    ctx.beginPath(); ctx.arc(cx, cy, logoR, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = WHITE;
+    ctx.beginPath(); ctx.arc(cx, cy, logoR * 0.52, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.beginPath(); ctx.arc(cx, cy, logoR * 0.26, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 10) IG glyph (hand-drawn camera) + handle text underneath.
+  const handleY = blockY + blockH + gapQRHandle;
+  const handleX = (canvasW - handleRowW) / 2;
+  const gy = handleY + (Math.max(glyphSize, handleFontSize) - glyphSize) / 2;
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 6;
+  roundRectStroke(ctx, handleX, gy, glyphSize, glyphSize, 14);
+  const gcx = handleX + glyphSize / 2;
+  const gcy = gy + glyphSize / 2;
+  ctx.beginPath();
+  ctx.arc(gcx, gcy, glyphSize * 0.27, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.arc(handleX + glyphSize - 12, gy + 12, glyphSize * 0.075, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = `800 ${handleFontSize}px "Inter", sans-serif`;
+  ctx.fillStyle = INK;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(handleText, handleX + glyphSize + glyphGap, gy + glyphSize / 2);
+}
+
+function roundRectStroke(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function PokeballQRModal({ onClose }) {
+  const canvasRef = useRef(null);
+  const logoRef = useRef(null);
+  const [url, setUrl] = useState(POKEBALL_QR_PRESETS[0].url);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Preload the TC logo once so subsequent renders re-use it.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => { logoRef.current = img; };
+    img.onerror = () => { logoRef.current = null; };
+    img.src = '/logo-circle-transparent.png';
+  }, []);
+
+  // Regenerate the preview whenever the URL changes (debounced).
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        setError('');
+        setBusy(true);
+        if (canvasRef.current) {
+          await drawPokeballQRCard(canvasRef.current, url, logoRef.current);
+        }
+      } catch (e) {
+        console.error('[PokeballQRModal] render failed', e);
+        if (!cancelled) setError(e.message || 'Could not generate this QR.');
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [url]);
+
+  const handleDownload = () => {
+    if (!canvasRef.current) return;
+    canvasRef.current.toBlob(blob => {
+      if (!blob) return;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      // Slugify the URL for the filename so saves are recognizable.
+      const safe = url.replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 60) || 'qr';
+      a.download = `tc-pokeball-qr-${safe}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    }, 'image/png');
+  };
+
+  const inputCss = {
+    width: '100%', padding: '11px 13px', fontSize: '0.92rem',
+    border: '1px solid #ddd', borderRadius: '8px',
+    boxSizing: 'border-box', fontFamily: 'inherit',
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', zIndex: 9999,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="modal-safe-bottom smooth-scroll"
+        style={{
+          backgroundColor: '#fff', borderRadius: '18px',
+          padding: '22px',
+          maxWidth: '640px', width: '100%',
+          maxHeight: '90vh', overflow: 'auto',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>Pokeball QR Generator</h3>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#888', padding: 4, display: 'flex',
+          }} aria-label="Close"><X size={20} /></button>
+        </div>
+
+        <p style={{ fontSize: '0.82rem', color: '#666', margin: '0 0 14px', lineHeight: 1.45 }}>
+          Pick a destination or paste any URL. The preview updates live. Download for print or share.
+        </p>
+
+        {/* Preset buttons */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          {POKEBALL_QR_PRESETS.map(p => {
+            const active = p.url === url;
+            return (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => setUrl(p.url)}
+                style={{
+                  padding: '7px 12px',
+                  border: active ? '1px solid #C8102E' : '1px solid #ddd',
+                  backgroundColor: active ? '#C8102E' : '#fff',
+                  color: active ? '#fff' : '#1a1a1a',
+                  borderRadius: '8px',
+                  fontSize: '0.78rem', fontWeight: '700',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >{p.label}</button>
+            );
+          })}
+        </div>
+
+        <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+          Destination URL
+        </label>
+        <input
+          type="url"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="https://..."
+          style={{ ...inputCss, marginBottom: '14px' }}
+        />
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+            color: '#dc2626', borderRadius: '8px',
+            padding: '10px 12px', fontSize: '0.85rem',
+            marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <AlertCircle size={16} />{error}
+          </div>
+        )}
+
+        {/* Live preview — canvas at native resolution, scaled down via CSS */}
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px solid #f1f1f1',
+          borderRadius: '12px', padding: '14px',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          marginBottom: '14px',
+          minHeight: '320px',
+        }}>
+          <canvas
+            ref={canvasRef}
+            style={{
+              maxWidth: '100%', maxHeight: '420px',
+              height: 'auto', width: 'auto',
+              opacity: busy ? 0.6 : 1,
+              transition: 'opacity 0.15s',
+            }}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={busy}
+          style={{
+            width: '100%', padding: '12px 14px',
+            backgroundColor: busy ? '#999' : '#1a1a1a',
+            color: '#fff', border: 'none', borderRadius: '10px',
+            fontSize: '0.92rem', fontWeight: '800',
+            cursor: busy ? 'wait' : 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            fontFamily: 'inherit',
+          }}
+        >
+          <UploadIcon size={14} style={{ transform: 'rotate(180deg)' }} />
+          Download PNG
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const PRINTABLES = [
   {
     key: 'daily-social-media',
@@ -20357,6 +20738,7 @@ function StaffPrintablesPage({ isMobile, staff }) {
   const isAdmin = !!staff?.isAdmin;
   const printFrameRef = useRef(null);
   const [busy, setBusy] = useState(null); // key currently triggering print
+  const [qrGenOpen, setQrGenOpen] = useState(false);
 
   // Print flow: drop the file into a hidden iframe, wait for it to
   // render, then call the iframe's print() so the user gets the print
@@ -20462,6 +20844,92 @@ function StaffPrintablesPage({ isMobile, staff }) {
           gap: '14px',
           marginTop: '14px',
         }}>
+          {/* Live generator card — opens the Pokeball QR modal for any URL. */}
+          <div style={{
+            backgroundColor: '#fff',
+            border: '2px solid #C8102E', borderRadius: '14px',
+            padding: '16px',
+            display: 'flex', flexDirection: 'column', gap: '12px',
+            height: '100%',
+          }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '12px',
+                background: 'linear-gradient(to bottom, #C8102E 0% 50%, #1a1a1a 50% 100%)',
+                color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: '0.6rem', letterSpacing: '0.1em',
+              }}>
+                <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                  <span>QR</span><span style={{ marginTop: '3px' }}>GEN</span>
+                </span>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
+                  marginBottom: '2px',
+                }}>Pokeball QR Generator</div>
+                <div style={{
+                  fontSize: '0.78rem', color: '#666', lineHeight: 1.45,
+                }}>Live custom QR for any URL. Branded Trainer Center red/black split, center TC logo, IG handle. Print or download.</div>
+                <div style={{
+                  fontSize: '0.6rem', fontWeight: '800', letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: '#C8102E', marginTop: '6px',
+                }}>Live · PNG</div>
+              </div>
+            </div>
+            <div style={{
+              backgroundColor: '#fafafa', border: '1px solid #f3f4f6',
+              borderRadius: '10px',
+              padding: '12px',
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              height: '220px',
+              flexShrink: 0,
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <div style={{
+                fontFamily: 'Russo One, sans-serif',
+                fontSize: '0.85rem', letterSpacing: '0.05em',
+                color: '#1a1a1a',
+              }}>
+                Trainer <span style={{ color: '#C8102E' }}>Center</span> HB
+              </div>
+              <div style={{
+                width: '90px', height: '90px', borderRadius: '14px',
+                background: 'linear-gradient(to bottom, #C8102E 0% 50%, #1a1a1a 50% 100%)',
+                border: '4px solid #1a1a1a',
+                position: 'relative',
+              }}>
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 30, height: 30, borderRadius: '50%',
+                  backgroundColor: '#fff',
+                }} />
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#999', fontStyle: 'italic' }}>
+                Tap below to generate
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+              <button
+                type="button"
+                onClick={() => setQrGenOpen(true)}
+                style={{
+                  flex: 1,
+                  backgroundColor: '#C8102E', color: '#fff',
+                  border: 'none', padding: '10px 14px',
+                  borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Open generator
+              </button>
+            </div>
+          </div>
           {PRINTABLES.map(item => {
             const isImage = item.kind === 'image';
             return (
@@ -20565,6 +21033,10 @@ function StaffPrintablesPage({ isMobile, staff }) {
         title="print-frame"
         style={{ position: 'fixed', width: 0, height: 0, border: 0, top: '-10000px', left: '-10000px' }}
       />
+
+      {qrGenOpen && (
+        <PokeballQRModal onClose={() => setQrGenOpen(false)} />
+      )}
     </PageWrapper>
   );
 }
