@@ -20681,6 +20681,7 @@ const PRINTABLES = [
     thumb: '/printables/thumb-daily-social-media.png',
     kind: 'pdf',
     accent: '#C8102E',
+    group: 'docs',
   },
   {
     key: 'vendor-card',
@@ -20690,6 +20691,7 @@ const PRINTABLES = [
     thumb: '/printables/thumb-vendor-card.png',
     kind: 'pdf',
     accent: '#1d4ed8',
+    group: 'docs',
   },
   {
     key: 'vendor-handout',
@@ -20699,6 +20701,7 @@ const PRINTABLES = [
     thumb: '/printables/thumb-vendor-handout.png',
     kind: 'pdf',
     accent: '#7c3aed',
+    group: 'docs',
   },
   {
     key: 'qr-instagram-bare',
@@ -20707,6 +20710,7 @@ const PRINTABLES = [
     file: '/printables/qr-instagram-bare.png',
     kind: 'image',
     accent: '#be185d',
+    group: 'qr',
   },
   {
     key: 'qr-google-bare',
@@ -20715,6 +20719,7 @@ const PRINTABLES = [
     file: '/printables/qr-google-bare.png',
     kind: 'image',
     accent: '#34A853',
+    group: 'qr',
   },
   {
     key: 'qr-instagram-card',
@@ -20723,6 +20728,7 @@ const PRINTABLES = [
     file: '/printables/qr-instagram-card.png',
     kind: 'image',
     accent: '#be185d',
+    group: 'qr',
   },
   {
     key: 'qr-google-card',
@@ -20731,6 +20737,7 @@ const PRINTABLES = [
     file: '/printables/qr-google-card.png',
     kind: 'image',
     accent: '#34A853',
+    group: 'qr',
   },
   {
     key: 'qr-dual-portrait',
@@ -20739,6 +20746,7 @@ const PRINTABLES = [
     file: '/printables/qr-dual-portrait.png',
     kind: 'image',
     accent: '#1d4ed8',
+    group: 'qr',
   },
   {
     key: 'qr-dual-landscape',
@@ -20747,6 +20755,7 @@ const PRINTABLES = [
     file: '/printables/qr-dual-landscape.png',
     kind: 'image',
     accent: '#1d4ed8',
+    group: 'qr',
   },
   {
     key: 'qr-cardchase',
@@ -20755,6 +20764,7 @@ const PRINTABLES = [
     file: '/printables/qr-cardchase.png',
     kind: 'image',
     accent: '#7c3aed',
+    group: 'qr',
   },
   {
     key: 'tc-attendance-planning',
@@ -20764,8 +20774,99 @@ const PRINTABLES = [
     thumb: '/printables/thumb-tc-attendance-planning.png',
     kind: 'pdf',
     accent: '#0d9488',
+    group: 'docs',
   },
 ];
+
+// Shared card UI used by both the QR Codes section and the Files section
+// of /staff/printables so the two groups stay visually identical.
+function PrintableCard({ item, busy, printItem, IconForKind }) {
+  const isImage = item.kind === 'image';
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+      padding: '16px',
+      display: 'flex', flexDirection: 'column', gap: '12px',
+      // Fill the grid row so every card is the same height and the
+      // action buttons line up across the row.
+      height: '100%',
+    }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+        <IconForKind kind={item.kind} accent={item.accent} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{
+            fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
+            marginBottom: '2px',
+          }}>{item.title}</div>
+          <div style={{
+            fontSize: '0.78rem', color: '#666', lineHeight: 1.45,
+          }}>{item.desc}</div>
+          <div style={{
+            fontSize: '0.6rem', fontWeight: '800', letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: item.accent, marginTop: '6px',
+          }}>
+            {item.kind === 'pdf' ? 'PDF' : 'QR · PNG'}
+          </div>
+        </div>
+      </div>
+
+      {(item.thumb || isImage) && (
+        <div style={{
+          backgroundColor: '#f9fafb', border: '1px solid #f3f4f6',
+          borderRadius: '10px',
+          padding: '12px',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          height: '220px',
+          flexShrink: 0,
+        }}>
+          <img
+            src={item.thumb || item.file}
+            alt={item.title}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              display: 'block',
+              borderRadius: isImage ? '0' : '6px',
+              boxShadow: isImage ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
+            }}
+          />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+        <button
+          type="button"
+          disabled={busy === item.key}
+          onClick={() => printItem(item)}
+          style={{
+            flex: 1,
+            backgroundColor: '#1a1a1a', color: '#fff',
+            border: 'none', padding: '10px 14px',
+            borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
+            cursor: busy === item.key ? 'wait' : 'pointer', fontFamily: 'inherit',
+            opacity: busy === item.key ? 0.7 : 1,
+          }}
+        >
+          {busy === item.key ? 'Loading…' : 'Print'}
+        </button>
+        <a
+          href={item.file}
+          download
+          style={{
+            flex: 1, textAlign: 'center',
+            backgroundColor: '#fff', color: '#1a1a1a',
+            border: '1px solid #1a1a1a', padding: '10px 14px',
+            borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
+            textDecoration: 'none', fontFamily: 'inherit',
+          }}
+        >
+          Download
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function StaffPrintablesPage({ isMobile, staff }) {
   const isAdmin = !!staff?.isAdmin;
@@ -20871,11 +20972,24 @@ function StaffPrintablesPage({ isMobile, staff }) {
 
         <SectionHeader title="Printables" subtitle="Shop-floor documents + QR codes — print or download" />
 
+        {/* SECTION: QR CODES */}
+        <div style={{
+          marginTop: '14px',
+          marginBottom: '6px',
+          paddingBottom: '6px',
+          borderBottom: '1px solid #eee',
+          display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', letterSpacing: '0.02em' }}>QR Codes</div>
+          <div style={{ fontSize: '0.78rem', color: '#888' }}>Pokeball-styled QR PNGs + the live generator.</div>
+        </div>
+
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
           gap: '14px',
-          marginTop: '14px',
+          marginTop: '10px',
+          marginBottom: '32px',
         }}>
           {/* Live generator card — opens the Pokeball QR modal for any URL. */}
           <div style={{
@@ -20963,99 +21077,31 @@ function StaffPrintablesPage({ isMobile, staff }) {
               </button>
             </div>
           </div>
-          {PRINTABLES.map(item => {
-            const isImage = item.kind === 'image';
-            return (
-              <div key={item.key} style={{
-                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
-                padding: '16px',
-                display: 'flex', flexDirection: 'column', gap: '12px',
-                // Fill the grid row so every card is the same height and
-                // the action buttons line up across the row.
-                height: '100%',
-              }}>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <IconForKind kind={item.kind} accent={item.accent} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{
-                      fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
-                      marginBottom: '2px',
-                    }}>{item.title}</div>
-                    <div style={{
-                      fontSize: '0.78rem', color: '#666', lineHeight: 1.45,
-                    }}>{item.desc}</div>
-                    <div style={{
-                      fontSize: '0.6rem', fontWeight: '800', letterSpacing: '0.08em',
-                      textTransform: 'uppercase', color: item.accent, marginTop: '6px',
-                    }}>
-                      {item.kind === 'pdf' ? 'PDF' : 'QR · PNG'}
-                    </div>
-                  </div>
-                </div>
+          {PRINTABLES.filter(item => item.group === 'qr').map(item => (
+            <PrintableCard key={item.key} item={item} busy={busy} printItem={printItem} IconForKind={IconForKind} />
+          ))}
+        </div>
 
-                {/* Preview thumbnail — fixed-height frame so every card has
-                    the same visual footprint. PDFs render large, QRs stay
-                    centered at their natural size; either way the frame
-                    height is identical, so the action buttons line up. */}
-                {(item.thumb || isImage) && (
-                  <div style={{
-                    backgroundColor: '#f9fafb', border: '1px solid #f3f4f6',
-                    borderRadius: '10px',
-                    padding: '12px',
-                    display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    height: '220px',
-                    flexShrink: 0,
-                  }}>
-                    <img
-                      src={item.thumb || item.file}
-                      alt={item.title}
-                      style={{
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        objectFit: 'contain',
-                        display: 'block',
-                        borderRadius: isImage ? '0' : '6px',
-                        boxShadow: isImage ? 'none' : '0 1px 3px rgba(0,0,0,0.08)',
-                      }}
-                    />
-                  </div>
-                )}
+        {/* SECTION: FILES */}
+        <div style={{
+          marginBottom: '6px',
+          paddingBottom: '6px',
+          borderBottom: '1px solid #eee',
+          display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', letterSpacing: '0.02em' }}>Files</div>
+          <div style={{ fontSize: '0.78rem', color: '#888' }}>PDF handouts + planning docs for the shop floor.</div>
+        </div>
 
-                {/* marginTop:auto pushes the button row to the bottom of
-                    the card so every card's buttons align at the same Y. */}
-                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
-                  <button
-                    type="button"
-                    disabled={busy === item.key}
-                    onClick={() => printItem(item)}
-                    style={{
-                      flex: 1,
-                      backgroundColor: '#1a1a1a', color: '#fff',
-                      border: 'none', padding: '10px 14px',
-                      borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
-                      cursor: busy === item.key ? 'wait' : 'pointer', fontFamily: 'inherit',
-                      opacity: busy === item.key ? 0.7 : 1,
-                    }}
-                  >
-                    {busy === item.key ? 'Loading…' : 'Print'}
-                  </button>
-                  <a
-                    href={item.file}
-                    download
-                    style={{
-                      flex: 1, textAlign: 'center',
-                      backgroundColor: '#fff', color: '#1a1a1a',
-                      border: '1px solid #1a1a1a', padding: '10px 14px',
-                      borderRadius: '10px', fontSize: '0.85rem', fontWeight: '800',
-                      textDecoration: 'none', fontFamily: 'inherit',
-                    }}
-                  >
-                    Download
-                  </a>
-                </div>
-              </div>
-            );
-          })}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '14px',
+          marginTop: '10px',
+        }}>
+          {PRINTABLES.filter(item => item.group === 'docs').map(item => (
+            <PrintableCard key={item.key} item={item} busy={busy} printItem={printItem} IconForKind={IconForKind} />
+          ))}
         </div>
 
       </div>
