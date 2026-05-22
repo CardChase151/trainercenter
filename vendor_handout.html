@@ -2,12 +2,31 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Trainer Center HB · Vendor Handout</title>
+<title>Trainer Center HB · Vendor Handout (business card multi-up)</title>
+<!--
+  Business-card sized vendor handout, multi-up on 8.5x11 letter paper.
+
+  Layout: 10 cards per sheet (2 columns x 5 rows). Each card is 3.5" x 2"
+  (US standard business card, horizontal orientation). Two PDF pages:
+
+    Page 1 = FRONT sheet  (10 identical fronts)
+    Page 2 = BACK sheet   (10 identical backs)
+
+  How to print + cut:
+    1. Print double-sided (duplex) on card stock.
+    2. Both sides use the same margins/grid, so cut lines align edge-
+       to-edge through both sheets at once when stacked.
+    3. Cut along the light dashed lines: 3 vertical cuts (at x = 0.75",
+       4.25", 7.75") and 6 horizontal cuts (every 2" from y = 0.5").
+       Actually, just trim the outer margin and slice the 2x5 grid =
+       1 outer crop + 1 vertical cut + 4 horizontal cuts.
+
+  Because all 10 cards on each side are identical, mirror/flip
+  orientation during duplex doesn't matter — every front card lines up
+  with every back card at the same grid cell.
+-->
 <style>
-  @page {
-    size: 4in 6in;
-    margin: 0;
-  }
+  @page { size: 8.5in 11in; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -16,207 +35,478 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .page {
-    width: 4in;
-    height: 6in;
+
+  /* Letter sheet that the print driver hands one PDF page per. */
+  .sheet {
+    width: 8.5in;
+    height: 11in;
     page-break-after: always;
-    padding: 0.28in 0.28in 0.22in;
+    padding: 0.5in 0.75in;
+  }
+  .sheet:last-child { page-break-after: auto; }
+
+  /* 10-up grid: 2 cols x 5 rows. No gutter between cards so when she
+     cuts, the cut line is shared between adjacent cards. */
+  .grid {
+    width: 7in;
+    height: 10in;
+    display: grid;
+    grid-template-columns: 3.5in 3.5in;
+    grid-template-rows: repeat(5, 2in);
+  }
+
+  /* Each business card. Dashed cut-line border. */
+  .card {
+    width: 3.5in;
+    height: 2in;
+    border: 0.5pt dashed #cccccc;
+    padding: 0.1in 0.13in;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
   }
-  .page:last-child { page-break-after: auto; }
 
-  /* ───────── FRONT ───────── */
-  .brand {
+  /* ─────────── FRONT CARD LAYOUT ─────────── */
+  .front .brand {
     text-align: center;
-    font-size: 18px;
+    font-size: 11px;
     font-weight: 900;
     letter-spacing: 0.03em;
-    margin-bottom: 2px;
+    line-height: 1.1;
   }
-  .brand .accent { color: #C8102E; }
-  .address {
+  .front .brand .accent { color: #C8102E; }
+  .front .address {
     text-align: center;
-    font-size: 9px;
+    font-size: 7px;
     color: #666;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    margin-bottom: 0.18in;
+    margin-top: 1px;
   }
-  .qr-row {
+  .front .qr-row {
     display: flex;
-    gap: 0.18in;
+    gap: 0.1in;
     justify-content: center;
     flex: 1;
     align-items: center;
+    margin-top: 0.04in;
   }
-  .qr-cell {
+  .front .qr-cell {
     flex: 1;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
   }
-  .qr-cell .qr-label {
-    font-size: 10px;
+  .front .qr-cell .label {
+    font-size: 6.5px;
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    margin-bottom: 0.06in;
-    color: #1a1a1a;
+    margin-bottom: 1px;
   }
-  .qr-cell.ig .qr-label .em { color: #C8102E; }
-  .qr-cell.google .qr-label .em { color: #4285F4; }
-  .qr-cell .qr-img {
-    width: 1.5in;
-    height: 1.5in;
+  .front .qr-cell .label .em-red { color: #C8102E; }
+  .front .qr-cell .label .em-blue { color: #4285F4; }
+  .front .qr-cell img {
+    width: 0.78in;
+    height: 0.78in;
     object-fit: contain;
+    display: block;
   }
-  .qr-cell .qr-handle {
-    font-size: 9px;
-    color: #666;
-    margin-top: 0.05in;
+  .front .qr-cell .handle {
+    font-size: 6px;
+    color: #777;
+    margin-top: 1px;
     letter-spacing: 0.02em;
   }
-  .flip-prompt {
+  .front .flip {
     text-align: center;
-    font-size: 9px;
-    color: #999;
-    letter-spacing: 0.08em;
+    font-size: 6px;
+    color: #aaa;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    margin-top: 0.08in;
+    margin-top: 0.02in;
   }
 
-  /* ───────── BACK ───────── */
-  .back-title {
+  /* ─────────── BACK CARD LAYOUT ─────────── */
+  .back .title {
     text-align: center;
-    font-size: 16px;
+    font-size: 10px;
     font-weight: 900;
     letter-spacing: 0.02em;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
+    line-height: 1.1;
   }
-  .back-title .accent { color: #C8102E; }
-  .back-subtitle {
+  .back .title .accent { color: #C8102E; }
+  .back .sub {
     text-align: center;
-    font-size: 9px;
-    color: #777;
-    letter-spacing: 0.06em;
+    font-size: 5.5px;
+    color: #888;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    margin-bottom: 0.16in;
+    margin-bottom: 0.06in;
   }
-  .steps { flex: 1; display: flex; flex-direction: column; gap: 0.08in; }
-  .step {
+  .back .steps {
+    flex: 1;
     display: flex;
-    gap: 0.1in;
-    align-items: flex-start;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1px;
   }
-  .step-num {
-    width: 0.34in;
-    height: 0.34in;
-    flex-shrink: 0;
+  .back .step {
+    display: flex;
+    align-items: center;
+    gap: 0.06in;
+    line-height: 1.2;
+  }
+  .back .step-num {
+    width: 0.16in;
+    height: 0.16in;
     background: #C8102E;
     color: #fff;
     font-weight: 900;
-    font-size: 13px;
+    font-size: 7px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+    flex-shrink: 0;
   }
-  .step-content { flex: 1; padding-top: 1px; }
-  .step-title {
-    font-weight: 800;
-    font-size: 11px;
-    margin-bottom: 1px;
-    line-height: 1.2;
+  .back .step-text {
+    flex: 1;
+    font-size: 7.5px;
+    font-weight: 700;
+    color: #1a1a1a;
   }
-  .step-desc {
-    font-size: 8.5px;
-    color: #555;
-    line-height: 1.35;
-  }
-  .back-footer {
-    text-align: center;
-    font-size: 8px;
-    color: #999;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-top: 0.06in;
+  .back .step-text .dim {
+    font-weight: 500;
+    color: #666;
   }
 </style>
 </head>
 <body>
 
-<!-- ═══════════════ FRONT ═══════════════ -->
-<div class="page">
-  <div class="brand">Trainer <span class="accent">Center</span> HB</div>
-  <div class="address">4911 Warner Ave #210 · Huntington Beach, CA</div>
-
-  <div class="qr-row">
-    <div class="qr-cell ig">
-      <div class="qr-label">Follow on <span class="em">IG</span></div>
-      <img class="qr-img" src="public/printables/qr-instagram-bare.png" alt="Instagram QR">
-      <div class="qr-handle">@trainercenter.pokemon</div>
+<!-- ═══════════════ PAGE 1 — FRONTS ═══════════════ -->
+<div class="sheet">
+  <div class="grid">
+    <!-- 10 identical front cards. Template repeats. -->
+    <!-- ROW 1 -->
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
     </div>
-    <div class="qr-cell google">
-      <div class="qr-label">Review on <span class="em">Google</span></div>
-      <img class="qr-img" src="public/printables/qr-google-bare.png" alt="Google review QR">
-      <div class="qr-handle">5 yellow stars please</div>
+
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <!-- ROW 2 -->
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <!-- ROW 3 -->
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <!-- ROW 4 -->
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <!-- ROW 5 -->
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
+    </div>
+
+    <div class="card front">
+      <div class="brand">Trainer <span class="accent">Center</span> HB</div>
+      <div class="address">4911 Warner Ave #210 · Huntington Beach</div>
+      <div class="qr-row">
+        <div class="qr-cell">
+          <div class="label">Follow on <span class="em-red">IG</span></div>
+          <img src="public/printables/qr-instagram-bare.png">
+          <div class="handle">@trainercenter.pokemon</div>
+        </div>
+        <div class="qr-cell">
+          <div class="label">Review on <span class="em-blue">Google</span></div>
+          <img src="public/printables/qr-google-bare.png">
+          <div class="handle">5 yellow stars please</div>
+        </div>
+      </div>
+      <div class="flip">↻ Flip for the 5-step playbook</div>
     </div>
   </div>
-
-  <div class="flip-prompt">↻ Flip for your 5-step playbook</div>
 </div>
 
-<!-- ═══════════════ BACK ═══════════════ -->
-<div class="page">
-  <div class="back-title">Your 5-Step <span class="accent">Playbook</span></div>
-  <div class="back-subtitle">From tonight to the next Trade Night</div>
-
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-content">
-        <div class="step-title">Review tonight's Trade Night</div>
-        <div class="step-desc">Drop a Google review. Mention "Beach City Trade Night" by name — helps the next collectors and vendors find us.</div>
+<!-- ═══════════════ PAGE 2 — BACKS ═══════════════ -->
+<div class="sheet">
+  <div class="grid">
+    <!-- 10 identical back cards. -->
+    <!-- ROW 1 -->
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-content">
-        <div class="step-title">Apply for the next date</div>
-        <div class="step-desc">Two clicks at pokemontrainercenter.com/vendor-day. Earlier apply = better spot in the lineup.</div>
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-content">
-        <div class="step-title">Share our pinned reel</div>
-        <div class="step-desc">We pin a promo reel on @trainercenter.pokemon for each upcoming Trade Night. Repost it to your story this week.</div>
+    <!-- ROW 2 -->
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-content">
-        <div class="step-title">Post your vendor card</div>
-        <div class="step-desc">1-2 weeks out, share your branded vendor card from /vendor-day. Tag @trainercenter.pokemon so we can repost.</div>
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">5</div>
-      <div class="step-content">
-        <div class="step-title">Share the reel one more time</div>
-        <div class="step-desc">A few days before event day, share that pinned reel again as a story. Last push, peak intent.</div>
+    <!-- ROW 3 -->
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
+      </div>
+    </div>
+
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
+      </div>
+    </div>
+
+    <!-- ROW 4 -->
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
+      </div>
+    </div>
+
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
+      </div>
+    </div>
+
+    <!-- ROW 5 -->
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
+      </div>
+    </div>
+
+    <div class="card back">
+      <div class="title">Your 5-Step <span class="accent">Playbook</span></div>
+      <div class="sub">Tonight → next Trade Night</div>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">Review on Google <span class="dim">— mention "Beach City Trade Night"</span></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">Apply for the next date <span class="dim">— /vendor-day</span></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">Share our pinned reel <span class="dim">— repost to story</span></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">Post your vendor card <span class="dim">— 1-2 weeks out</span></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">Share the reel one more time <span class="dim">— days before</span></div></div>
       </div>
     </div>
   </div>
-
-  <div class="back-footer">Trainer Center HB · See you at the next one</div>
 </div>
 
 </body>

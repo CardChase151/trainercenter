@@ -20693,8 +20693,8 @@ const PRINTABLES = [
   },
   {
     key: 'vendor-handout',
-    title: 'Vendor Handout (4×6 double-sided)',
-    desc: 'Front: IG + Google QRs. Back: 5-step playbook for vendors to follow between Trade Nights.',
+    title: 'Vendor Cards (10-up business card sheet)',
+    desc: 'Two 8.5×11 sheets: front (10 cards with QRs) + back (10 cards with the 5-step playbook). Print duplex on card stock, cut along the grid — 10 finished business cards per print.',
     file: '/printables/vendor-handout.pdf',
     thumb: '/printables/thumb-vendor-handout.png',
     kind: 'pdf',
