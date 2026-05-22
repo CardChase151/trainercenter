@@ -20684,8 +20684,8 @@ const PRINTABLES = [
   },
   {
     key: 'vendor-card',
-    title: 'Vendor Card (4×6)',
-    desc: 'Tabletop card vendors keep at their station with our QR codes.',
+    title: 'Sign In Pack',
+    desc: 'Vendor sign-in handout with our QR codes and the rundown of how the night works.',
     file: '/printables/vendor-card.pdf',
     thumb: '/printables/thumb-vendor-card.png',
     kind: 'pdf',
