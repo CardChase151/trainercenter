@@ -3818,12 +3818,12 @@ function HomePage({ isMobile, authUser }) {
           <p style={{
             fontSize: isMobile ? 'clamp(1rem, 4vw, 1.3rem)' : '1.6rem',
             color: 'rgba(255,255,255,0.9)',
-            maxWidth: '600px',
+            maxWidth: '700px',
             margin: '0 auto 40px',
             textAlign: 'center',
             textShadow: '0 1px 8px rgba(0,0,0,0.3)'
           }}>
-            Huntington Beach's trusted Pokemon only store.
+            The Pokemon Trainer Center in Huntington Beach. America's first Pokemon-only store.
           </p>
           {/* Marquee Banner */}
           <div style={{
