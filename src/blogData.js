@@ -228,7 +228,7 @@ const BLOG_DATA = [
   {
     slug: 'what-to-look-for-in-a-vendor',
     title: 'What to Look for in a Card Vendor (and What to Avoid)',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'Whether you are buying from a local shop, a vendor at a convention, or someone online, not every seller has your best interest in mind. Here is how to tell the good ones from the ones to walk away from.' },
       { type: 'h2', text: 'Green Flags' },

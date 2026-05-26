@@ -1,5 +1,5 @@
 {
-  "next": 9,
+  "next": 10,
   "total": 12,
   "blogs": [
     {
@@ -54,7 +54,7 @@
       "num": 9,
       "file": "09-what-to-look-for-in-a-vendor.md",
       "title": "What to Look for in a Card Vendor (and What to Avoid)",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 10,
