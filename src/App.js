@@ -21263,6 +21263,16 @@ function PokeballQRModal({ onClose }) {
 
 const PRINTABLES = [
   {
+    key: 'beach-city-tradenight-checkin',
+    title: 'Beach City Trade Night — Check-In Poster',
+    desc: 'Landscape 8.5×11. Big "Tap to Check In" + scan QR side-by-side. QR points to the shop-door token so it works for every event automatically.',
+    file: '/printables/beach-city-tradenight-checkin.pdf',
+    thumb: '/printables/thumb-beach-city-tradenight-checkin.png',
+    kind: 'pdf',
+    accent: '#0284c7',
+    group: 'docs',
+  },
+  {
     key: 'daily-social-media',
     title: 'Daily Social Media',
     desc: 'What to post, where, and when. Clip to the counter for the shift.',
