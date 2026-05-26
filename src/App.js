@@ -8020,12 +8020,12 @@ function JustCheckedInOverlay({ event, inviter, onContinue }) {
 function CheckinHeader({ step, event }) {
   const titles = {
     1: 'Step 1: Did a vendor invite you?',
-    2: 'Step 2: Quick account',
+    2: 'Step 2: Sign up or sign in',
     3: "You're checked in",
   };
   const subs = {
     1: 'Pick them below so they get credit. If no one invited you, scroll down for "I\'m just walking in."',
-    2: 'Save your picks with a quick account.',
+    2: 'Lock in your 3 votes for tonight.',
     3: 'Award your 3 points any time before close.',
   };
   return (
