@@ -7946,29 +7946,37 @@ function JustCheckedInOverlay({ event, inviter, onContinue }) {
 }
 
 function CheckinHeader({ step, event }) {
+  const titles = {
+    1: 'Step 1: Did a vendor invite you?',
+    2: 'Step 2: Quick account',
+    3: "You're checked in",
+  };
   const subs = {
-    1: "Tap the vendor who invited you. That's it for now.",
-    2: "Select your favorites tonight. Quick account so your picks save.",
-    3: "You're in. Award your 3 points any time before close.",
+    1: 'Pick them below so they get credit. If no one invited you, scroll down for "I\'m just walking in."',
+    2: 'Save your picks with a quick account.',
+    3: 'Award your 3 points any time before close.',
   };
   return (
     <div style={{
       background:
         'radial-gradient(ellipse at top right, rgba(255,26,140,0.85), transparent 60%),' +
         'linear-gradient(135deg, #1a1a1a 0%, #C8102E 100%)',
-      padding: '36px 24px 28px',
+      padding: '32px 24px 26px',
       textAlign: 'center',
       color: '#fff',
       position: 'relative',
       overflow: 'hidden',
     }}>
-      <div style={{ fontSize: '11px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.9)', textTransform: 'uppercase', fontWeight: 800, marginBottom: '8px' }}>
-        Welcome in
+      <div style={{ fontSize: '11px', letterSpacing: '0.22em', color: 'rgba(255,255,255,0.95)', textTransform: 'uppercase', fontWeight: 800, marginBottom: '6px' }}>
+        2 Steps to Check In
       </div>
-      <h1 style={{ fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
-        You're at {event.title || 'Trade Night'}.
+      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', marginBottom: '14px', fontWeight: 600 }}>
+        {event.title || 'Trade Night'}
+      </div>
+      <h1 style={{ fontSize: '26px', fontWeight: 900, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+        {titles[step]}
       </h1>
-      <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
+      <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.4 }}>
         {subs[step]}
       </p>
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '5px', background: 'linear-gradient(90deg, #FF1A8C, #fff, #ffd13f)' }} />
@@ -7989,23 +7997,8 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
   return (
     <div style={{ animation: 'fadeSlide 0.35s ease-out' }}>
       <div style={{ padding: '24px 24px 0' }}>
-        <button
-          onClick={onPickNone}
-          style={{
-            width: '100%', background: '#fff', border: '1.5px solid #d1d5db',
-            borderRadius: '12px', padding: '14px 16px',
-            fontSize: '14px', fontWeight: 700, color: '#1a1a1a',
-            cursor: 'pointer', marginBottom: '14px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}
-        >
-          <span>No vendor invited me — I'm just walking in</span>
-          <span style={{ color: '#888', fontSize: '18px' }}>→</span>
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', color: '#888', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 12px' }}>
-          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
-          <span style={{ padding: '0 12px' }}>or — find your vendor</span>
-          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+        <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.14em', color: '#666', fontWeight: 800, marginBottom: '10px' }}>
+          Find your vendor
         </div>
         <div style={{ position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#888' }} />
@@ -8021,10 +8014,10 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
             }}
           />
         </div>
-        <div style={{ background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '12px', maxHeight: '230px', overflowY: 'auto', marginTop: '6px' }}>
+        <div style={{ background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '12px', maxHeight: '320px', overflowY: 'auto', marginTop: '6px' }}>
           {filtered.length === 0 && (
             <div style={{ padding: '14px 16px', color: '#888', fontSize: '13px', fontStyle: 'italic' }}>
-              No matches. Use the "No vendor invited me" button above if you don't see them.
+              No matches. Use the "No vendor invited me" button below if you don't see them.
             </div>
           )}
           {filtered.map(v => (
@@ -8047,9 +8040,30 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
             </div>
           ))}
         </div>
-        <p style={{ fontSize: '12px', color: '#888', margin: '12px 0 24px', lineHeight: 1.5 }}>
+        <p style={{ fontSize: '12px', color: '#888', margin: '12px 0 18px', lineHeight: 1.5 }}>
           Picking your inviter <strong style={{ color: '#525252' }}>boosts their guest count</strong>. Vendor with the most invites wins incentives.
         </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', color: '#888', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 12px' }}>
+          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+          <span style={{ padding: '0 12px' }}>or</span>
+          <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+        </div>
+
+        <button
+          onClick={onPickNone}
+          style={{
+            width: '100%', background: '#fff', border: '1.5px solid #d1d5db',
+            borderRadius: '12px', padding: '14px 16px',
+            fontSize: '14px', fontWeight: 700, color: '#1a1a1a',
+            cursor: 'pointer', marginBottom: '24px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            fontFamily: 'inherit',
+          }}
+        >
+          <span>No vendor invited me — I'm just walking in</span>
+          <span style={{ color: '#888', fontSize: '18px' }}>→</span>
+        </button>
       </div>
     </div>
   );
