@@ -4,7 +4,7 @@ import BLOG_DATA from './blogData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -18365,15 +18365,20 @@ function StaffInstagramPage({ isMobile, staff }) {
 function EventTimeMapPage({ isMobile, staff }) {
   const { eventId } = useParams();
   const isAdmin = !!staff?.isAdmin;
+  const currentUserId = staff?.userId || staff?.id || null;
 
   const [event, setEvent] = useState(null);
   const [apps, setApps] = useState([]);
   const [attendance, setAttendance] = useState({}); // vendor_id -> row
+  const [profilesById, setProfilesById] = useState({}); // for VendorNotesModal author labels
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sort, setSort] = useState('start'); // start | name | duration
+  const [sort, setSort] = useState('datetime'); // datetime | start | name | duration
   const [now, setNow] = useState(() => new Date());
   const [checkinBusy, setCheckinBusy] = useState(null); // vendor_id
+  const [cancelBusy, setCancelBusy] = useState(null);   // app_id
+  const [callTimeBusy, setCallTimeBusy] = useState(null); // app_id
+  const [notesVendor, setNotesVendor] = useState(null); // vendor row for modal
 
   const refreshAttendance = useCallback(async () => {
     if (!eventId) return;
@@ -18392,18 +18397,24 @@ function EventTimeMapPage({ isMobile, staff }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const [evRes, appsRes] = await Promise.all([
+      const [evRes, appsRes, profRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
         supabase.from('vendor_applications')
-          .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor_note, vendor:vendors(*)')
+          .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor_note, confirmation_call_at, vendor:vendors(*)')
           .eq('event_id', eventId)
-          .eq('status', 'approved'),
+          .in('status', ['approved', 'vendor_cancelled']),
+        supabase.from('profiles').select('id, name, email'),
       ]);
       if (cancelled) return;
       if (evRes.error) { setError(evRes.error.message); setLoading(false); return; }
       if (appsRes.error) { setError(appsRes.error.message); setLoading(false); return; }
       setEvent(evRes.data || null);
       setApps(appsRes.data || []);
+      if (!profRes.error && profRes.data) {
+        const map = {};
+        profRes.data.forEach(p => { map[p.id] = p; });
+        setProfilesById(map);
+      }
       await refreshAttendance();
       setLoading(false);
     })();
@@ -18466,6 +18477,73 @@ function EventTimeMapPage({ isMobile, staff }) {
       delete next[vendorId];
       return next;
     });
+  };
+
+  // Cancel a vendor's participation for THIS event (status →
+  // vendor_cancelled). The row stays visible with a strikethrough so we
+  // can see who fell out without losing the rest of the day's plan.
+  const cancelApp = async (appId) => {
+    if (!appId || cancelBusy) return;
+    if (!window.confirm('Mark this vendor as cancelled for this event?')) return;
+    setCancelBusy(appId);
+    const prev = apps;
+    setApps(apps.map(a => a.id === appId ? { ...a, status: 'vendor_cancelled' } : a));
+    const { error: upErr } = await supabase
+      .from('vendor_applications')
+      .update({ status: 'vendor_cancelled' })
+      .eq('id', appId);
+    setCancelBusy(null);
+    if (upErr) {
+      setApps(prev);
+      alert(`Could not cancel: ${upErr.message}`);
+    }
+  };
+
+  // Undo a cancel — flip status back to approved.
+  const uncancelApp = async (appId) => {
+    if (!appId || cancelBusy) return;
+    setCancelBusy(appId);
+    const prev = apps;
+    setApps(apps.map(a => a.id === appId ? { ...a, status: 'approved' } : a));
+    const { error: upErr } = await supabase
+      .from('vendor_applications')
+      .update({ status: 'approved' })
+      .eq('id', appId);
+    setCancelBusy(null);
+    if (upErr) {
+      setApps(prev);
+      alert(`Could not restore: ${upErr.message}`);
+    }
+  };
+
+  // Save the scheduled confirmation call. `localValue` is the raw
+  // datetime-local input string (browser interprets in user's local zone,
+  // which for Chase is PST). Empty string clears the field.
+  const saveCallTime = async (appId, localValue) => {
+    if (!appId) return;
+    setCallTimeBusy(appId);
+    const iso = localValue ? new Date(localValue).toISOString() : null;
+    const prev = apps;
+    setApps(apps.map(a => a.id === appId ? { ...a, confirmation_call_at: iso } : a));
+    const { error: upErr } = await supabase
+      .from('vendor_applications')
+      .update({ confirmation_call_at: iso })
+      .eq('id', appId);
+    setCallTimeBusy(null);
+    if (upErr) {
+      setApps(prev);
+      alert(`Could not save call time: ${upErr.message}`);
+    }
+  };
+
+  // Format a TIMESTAMPTZ as a datetime-local input string in *local* time
+  // (browser zone). Returns '' for null. The browser then displays it
+  // using its own locale — for Chase that's always PST.
+  const toLocalInputValue = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   const handlePrintChecklist = () => {
@@ -18654,6 +18732,9 @@ function EventTimeMapPage({ isMobile, staff }) {
     const e = hasSlot ? Math.min(windowEnd, eRaw) : windowEnd;
     return {
       app_id: a.id,
+      status: a.status,
+      isCancelled: a.status === 'vendor_cancelled',
+      confirmationCallAt: a.confirmation_call_at,
       vendor: v,
       name: v.name || '(no name)',
       avatar_url: v.avatar_url,
@@ -18665,14 +18746,24 @@ function EventTimeMapPage({ isMobile, staff }) {
     };
   });
 
-  // Sort
+  // Sort. Cancelled rows always sink to the bottom regardless of sort key.
   const sortedSlots = slots.slice().sort((a, b) => {
+    if (a.isCancelled !== b.isCancelled) return a.isCancelled ? 1 : -1;
+    if (sort === 'datetime') {
+      // nulls last, then ascending call time, then name as tiebreaker
+      const av = a.confirmationCallAt ? Date.parse(a.confirmationCallAt) : Infinity;
+      const bv = b.confirmationCallAt ? Date.parse(b.confirmationCallAt) : Infinity;
+      return av - bv || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    }
     if (sort === 'name') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     if (sort === 'duration') return (b.end - b.start) - (a.end - a.start);
     return a.start - b.start || a.name.localeCompare(b.name);
   });
 
-  // Hourly coverage: count concurrent vendors at each hour bucket.
+  // Hourly coverage: count concurrent vendors at each hour bucket. Cancelled
+  // vendors don't contribute (they're not coming).
+  const activeSlots = slots.filter(s => !s.isCancelled);
+  const cancelledCount = slots.length - activeSlots.length;
   const startHour = Math.floor(windowStart / 60);
   const endHour = Math.ceil(windowEnd / 60);
   const hours = [];
@@ -18680,12 +18771,12 @@ function EventTimeMapPage({ isMobile, staff }) {
   const coverage = hours.map(h => {
     const hStart = h * 60;
     const hEnd = (h + 1) * 60;
-    const count = slots.filter(s => s.start < hEnd && s.end > hStart).length;
+    const count = activeSlots.filter(s => s.start < hEnd && s.end > hStart).length;
     return { hour: h, count };
   });
   const peak = coverage.reduce((acc, c) => c.count > acc.count ? c : acc, { hour: 0, count: 0 });
-  const totalSlots = slots.length;
-  const withoutTime = slots.filter(s => !s.hasSlot).length;
+  const totalSlots = activeSlots.length;
+  const withoutTime = activeSlots.filter(s => !s.hasSlot).length;
   const avgConcurrent = coverage.length > 0
     ? (coverage.reduce((sum, c) => sum + c.count, 0) / coverage.length).toFixed(1)
     : 0;
@@ -18871,6 +18962,7 @@ function EventTimeMapPage({ isMobile, staff }) {
         }}>
           <StatTile label="Vendors approved" value={totalSlots} />
           <StatTile label="Checked in" value={`${Object.keys(attendance).length} / ${totalSlots}`} accent={Object.keys(attendance).length === totalSlots && totalSlots > 0 ? '#15803d' : '#1a1a1a'} />
+          <StatTile label="Cancelled" value={cancelledCount} accent={cancelledCount > 0 ? '#b91c1c' : '#1a1a1a'} />
           <StatTile label="Peak concurrent" value={peak.count} accent="#C8102E" sub={peak.count > 0 ? `at ${fmt12(peak.hour * 60)}` : '—'} />
           <StatTile label="Avg concurrent" value={avgConcurrent} />
         </div>
@@ -18889,6 +18981,7 @@ function EventTimeMapPage({ isMobile, staff }) {
         <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sort by</span>
           {[
+            { key: 'datetime', label: 'Call date & time' },
             { key: 'start',    label: 'Start time' },
             { key: 'name',     label: 'Name' },
             { key: 'duration', label: 'Duration' },
@@ -19099,6 +19192,8 @@ function EventTimeMapPage({ isMobile, staff }) {
               const att = attendance[s.vendor.id];
               const isCheckedIn = !!att;
               const isBusy = checkinBusy === s.vendor.id;
+              const isCancelling = cancelBusy === s.app_id;
+              const isSavingTime = callTimeBusy === s.app_id;
               const arriveLabel = att?.checked_in_at
                 ? new Date(att.checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
                 : null;
@@ -19108,10 +19203,11 @@ function EventTimeMapPage({ isMobile, staff }) {
                   gap: '10px',
                   flexDirection: isMobile ? 'column' : 'row',
                   alignItems: isMobile ? 'stretch' : 'center',
-                  backgroundColor: isCheckedIn ? '#f0fdf4' : 'transparent',
+                  backgroundColor: s.isCancelled ? '#fafafa' : (isCheckedIn ? '#f0fdf4' : 'transparent'),
                   borderRadius: '8px',
-                  padding: isCheckedIn ? '4px' : '0',
-                  transition: 'background-color 0.15s',
+                  padding: (s.isCancelled || isCheckedIn) ? '4px' : '0',
+                  opacity: s.isCancelled ? 0.55 : 1,
+                  transition: 'background-color 0.15s, opacity 0.15s',
                 }}>
                   {/* Name label */}
                   <div style={{
@@ -19127,9 +19223,13 @@ function EventTimeMapPage({ isMobile, staff }) {
                       <div style={{
                         fontSize: '0.85rem', fontWeight: '700', color: '#1a1a1a',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        textDecoration: s.isCancelled ? 'line-through' : 'none',
                       }}>{s.name}</div>
                       {s.hasSlot ? (
-                        <div style={{ fontSize: '0.7rem', color: '#666' }}>
+                        <div style={{
+                          fontSize: '0.7rem', color: '#666',
+                          textDecoration: s.isCancelled ? 'line-through' : 'none',
+                        }}>
                           {fmt12(s.requested_start)} – {fmt12(s.requested_end)}
                         </div>
                       ) : (
@@ -19182,49 +19282,138 @@ function EventTimeMapPage({ isMobile, staff }) {
                     )}
                   </div>
 
-                  {/* Check-in control. "Here" stamps the row with the
-                      current time; clicking the green pill undoes it. */}
+                  {/* Controls column: scheduled call time + action buttons.
+                      Stacks vertically on the right of each row (mobile
+                      collapses everything anyway). */}
                   <div style={{
                     flexShrink: 0,
-                    width: isMobile ? 'auto' : '140px',
-                    display: 'flex', justifyContent: isMobile ? 'flex-end' : 'flex-start',
+                    width: isMobile ? 'auto' : '280px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
                   }}>
-                    {isCheckedIn ? (
+                    {/* Datetime input — native picker, browser-local zone
+                        (PST for Chase). Stored as UTC ISO in the DB. */}
+                    <input
+                      type="datetime-local"
+                      value={toLocalInputValue(s.confirmationCallAt)}
+                      disabled={isSavingTime || s.isCancelled}
+                      onChange={(e) => saveCallTime(s.app_id, e.target.value)}
+                      title="Scheduled confirmation call (PST)"
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        fontSize: '0.78rem',
+                        fontWeight: '600',
+                        color: s.confirmationCallAt ? '#1a1a1a' : '#999',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '6px',
+                        backgroundColor: '#fff',
+                        fontFamily: 'inherit',
+                        cursor: s.isCancelled ? 'not-allowed' : 'text',
+                      }}
+                    />
+
+                    {/* Action buttons row */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
+                      {/* Here / Undo check-in */}
+                      {isCheckedIn ? (
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => undoCheckIn(s.vendor.id)}
+                          title="Click to undo check-in"
+                          style={{
+                            flex: 1,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            backgroundColor: '#dcfce7', color: '#15803d',
+                            border: '1px solid #86efac',
+                            padding: '6px 8px', borderRadius: '6px',
+                            fontSize: '0.72rem', fontWeight: '700',
+                            cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          <CheckCircle2 size={12} />
+                          {arriveLabel}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isBusy || s.isCancelled}
+                          onClick={() => checkInNow(s.vendor.id)}
+                          style={{
+                            flex: 1,
+                            backgroundColor: s.isCancelled ? '#e5e7eb' : '#16a34a',
+                            color: s.isCancelled ? '#9ca3af' : '#fff',
+                            border: 'none',
+                            padding: '6px 10px', borderRadius: '6px',
+                            fontSize: '0.78rem', fontWeight: '800',
+                            cursor: (isBusy || s.isCancelled) ? 'not-allowed' : 'pointer',
+                            fontFamily: 'inherit',
+                            opacity: isBusy ? 0.7 : 1,
+                          }}
+                        >
+                          {isBusy ? '…' : 'Here'}
+                        </button>
+                      )}
+
+                      {/* Notes — opens VendorNotesModal */}
                       <button
                         type="button"
-                        disabled={isBusy}
-                        onClick={() => undoCheckIn(s.vendor.id)}
-                        title="Click to undo"
+                        onClick={() => setNotesVendor(s.vendor)}
+                        title="Notes"
                         style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '6px',
-                          backgroundColor: '#dcfce7', color: '#15803d',
-                          border: '1px solid #86efac',
-                          padding: '6px 10px', borderRadius: '999px',
-                          fontSize: '0.78rem', fontWeight: '700',
-                          cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                          backgroundColor: '#f3f4f6', color: '#374151',
+                          border: '1px solid #e5e7eb',
+                          padding: '6px 10px', borderRadius: '6px',
+                          fontSize: '0.72rem', fontWeight: '700',
+                          cursor: 'pointer', fontFamily: 'inherit',
                         }}
                       >
-                        <CheckCircle2 size={14} />
-                        Here · {arriveLabel}
+                        <StickyNote size={12} />
+                        Notes
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => checkInNow(s.vendor.id)}
-                        style={{
-                          backgroundColor: '#16a34a', color: '#fff',
-                          border: 'none',
-                          padding: '8px 16px', borderRadius: '8px',
-                          fontSize: '0.85rem', fontWeight: '800',
-                          cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
-                          opacity: isBusy ? 0.7 : 1,
-                          minWidth: '90px',
-                        }}
-                      >
-                        {isBusy ? '…' : 'Here'}
-                      </button>
-                    )}
+
+                      {/* Cancel / Restore — toggle vendor_cancelled status */}
+                      {s.isCancelled ? (
+                        <button
+                          type="button"
+                          disabled={isCancelling}
+                          onClick={() => uncancelApp(s.app_id)}
+                          title="Restore this vendor"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            backgroundColor: '#fff', color: '#1a1a1a',
+                            border: '1px solid #1a1a1a',
+                            padding: '6px 10px', borderRadius: '6px',
+                            fontSize: '0.72rem', fontWeight: '700',
+                            cursor: isCancelling ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          <RotateCcw size={12} />
+                          Restore
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isCancelling}
+                          onClick={() => cancelApp(s.app_id)}
+                          title="Mark cancelled for this event"
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            backgroundColor: '#fef2f2', color: '#b91c1c',
+                            border: '1px solid #fecaca',
+                            padding: '6px 10px', borderRadius: '6px',
+                            fontSize: '0.72rem', fontWeight: '700',
+                            cursor: isCancelling ? 'wait' : 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          <XCircle size={12} />
+                          Cancel
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -19304,6 +19493,15 @@ function EventTimeMapPage({ isMobile, staff }) {
           Date: <span style={{ borderBottom: '1px solid #000', display: 'inline-block', minWidth: '120px' }}>&nbsp;</span>
         </div>
       </div>
+
+      {notesVendor && (
+        <VendorNotesModal
+          vendor={notesVendor}
+          currentUserId={currentUserId}
+          profilesById={profilesById}
+          onClose={() => setNotesVendor(null)}
+        />
+      )}
     </PageWrapper>
   );
 }
