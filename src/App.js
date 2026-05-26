@@ -18525,18 +18525,13 @@ function StaffInstagramPage({ isMobile, staff }) {
 // and the notes feed inline. Big enough to be the calling workstation
 // when staff is on the phone with a vendor.
 // ────────────── shared label maps for the modal Profile section ──────────────
+// Note: STAFF_RATINGS is already defined globally (line ~12023) using { key, label, color }.
 const EXPERIENCE_LEVELS = [
   { value: 'first_show', label: 'First show' },
   { value: '1_to_5',     label: '1-5 shows' },
   { value: '5_to_10',    label: '5-10 shows' },
   { value: '10_to_50',   label: '10-50 shows' },
   { value: '50_plus',    label: '50+ shows' },
-];
-const STAFF_RATINGS = [
-  { value: 'beginner',     label: 'Beginner',     color: '#b91c1c' },
-  { value: 'novice',       label: 'Novice',       color: '#d97706' },
-  { value: 'intermediate', label: 'Intermediate', color: '#1d4ed8' },
-  { value: 'advanced',     label: 'Advanced',     color: '#15803d' },
 ];
 const TABLE_SIZES = [
   { value: 'tbd',    label: 'TBD' },
@@ -18813,10 +18808,10 @@ function TimeMapVendorDetailModal({
                     width: '100%', padding: '7px 8px', fontSize: '0.82rem', fontWeight: '600',
                     border: '1px solid #e5e7eb', borderRadius: '6px',
                     background: '#fff', fontFamily: 'inherit',
-                    color: STAFF_RATINGS.find(r => r.value === vendor.staff_experience_rating)?.color || '#1a1a1a',
+                    color: STAFF_RATING_BY_KEY[vendor.staff_experience_rating]?.color || '#1a1a1a',
                   }}>
                   <option value="">— Not rated —</option>
-                  {STAFF_RATINGS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  {STAFF_RATINGS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
                 </select>
               </div>
             </div>
