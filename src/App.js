@@ -7701,25 +7701,42 @@ function GuestCheckinPage({ isMobile }) {
     }, 350);
   };
 
-  // Step 2 — create account / sign in, write check-in, upsert member +
-  // marketing contact, fire welcome email.
-  async function handleCreateAccount({ email, password, firstName, lastName }) {
+  // Step 2 — sign in (existing account) OR sign up + member create +
+  // welcome email. Mode is set by the toggle on the form. Sign-in mode is
+  // strict: a bad password just shows an error, no accidental account
+  // creation.
+  async function handleCreateAccount({ mode, email, password, firstName, lastName }) {
     setAuthError(null);
     try {
       const cleanEmail = String(email).trim().toLowerCase();
       let createdNow = false;
-      // Try sign-in first; if it fails (no account), sign up.
-      let { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-      if (error || !data?.session) {
-        const signup = await supabase.auth.signUp({
-          email: cleanEmail, password,
-          options: { data: { source: 'door_checkin', first_name: firstName, last_name: lastName } },
-        });
-        if (signup.error) throw signup.error;
-        createdNow = true;
-        // signUp returns a session when email confirmation is disabled.
-        data = signup.data;
+      let data;
+
+      if (mode === 'signin') {
+        // Strict sign-in: error if account doesn't exist or password is wrong
+        const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (res.error || !res.data?.session) {
+          setAuthError('Email or password didn\'t match. Try again, or switch to Create account.');
+          return;
+        }
+        data = res.data;
+      } else {
+        // Signup mode — try sign-in first (handles "I clicked signup but I
+        // already have an account" gracefully), fall back to signUp.
+        const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (res.error || !res.data?.session) {
+          const signup = await supabase.auth.signUp({
+            email: cleanEmail, password,
+            options: { data: { source: 'door_checkin', first_name: firstName, last_name: lastName } },
+          });
+          if (signup.error) throw signup.error;
+          createdNow = true;
+          data = signup.data;
+        } else {
+          data = res.data;
+        }
       }
+
       const s = data.session;
       if (!s) { setAuthError("We couldn't sign you in. Try a different password."); return; }
       setSession(s);
@@ -7728,34 +7745,54 @@ function GuestCheckinPage({ isMobile }) {
       const { error: ciErr } = await writeCheckin(s.user.id, pickedInviter);
       if (ciErr) console.warn('check-in upsert error', ciErr);
 
-      // Upsert member row + welcome email + marketing contact. All fire-and-
-      // forget — we don't block the success overlay on these.
+      // Fire-and-forget side effects. In sign-in mode we skip member create
+      // (they already have one), but we still refresh marketing_contacts
+      // so the existing member's subscription record stays current.
       (async () => {
         try {
-          // Upsert by user_id so repeat check-ins don't create duplicates
-          const { data: member, error: mErr } = await supabase
-            .from('members')
-            .upsert(
-              { user_id: s.user.id, email: cleanEmail, first_name: firstName, last_name: lastName },
-              { onConflict: 'user_id' }
-            )
-            .select('id, email')
-            .single();
-          if (mErr) { console.warn('[checkin] member upsert', mErr); return; }
-          if (createdNow && member?.id) {
-            sendVendorEmail({ type: 'member_welcome', member_id: member.id });
+          if (mode === 'signup') {
+            const { data: member, error: mErr } = await supabase
+              .from('members')
+              .upsert(
+                { user_id: s.user.id, email: cleanEmail, first_name: firstName, last_name: lastName },
+                { onConflict: 'user_id' }
+              )
+              .select('id, email, first_name, last_name')
+              .single();
+            if (mErr) { console.warn('[checkin] member upsert', mErr); return; }
+            if (createdNow && member?.id) {
+              sendVendorEmail({ type: 'member_welcome', member_id: member.id });
+            }
+            await supabase.rpc('upsert_marketing_contact_from_app', {
+              p_email: cleanEmail,
+              p_first_name: firstName || null,
+              p_last_name: lastName || null,
+              p_phone: null,
+              p_source: 'door_checkin',
+              p_member_id: member?.id || null,
+              p_vendor_id: null,
+            });
+          } else {
+            // Sign-in mode: pull existing member to refresh marketing contact
+            const { data: member } = await supabase
+              .from('members')
+              .select('id, first_name, last_name, email')
+              .eq('user_id', s.user.id)
+              .maybeSingle();
+            if (member) {
+              await supabase.rpc('upsert_marketing_contact_from_app', {
+                p_email: member.email || cleanEmail,
+                p_first_name: member.first_name || null,
+                p_last_name: member.last_name || null,
+                p_phone: null,
+                p_source: 'door_checkin',
+                p_member_id: member.id,
+                p_vendor_id: null,
+              });
+            }
           }
-          await supabase.rpc('upsert_marketing_contact_from_app', {
-            p_email: cleanEmail,
-            p_first_name: firstName || null,
-            p_last_name: lastName || null,
-            p_phone: null,
-            p_source: 'door_checkin',
-            p_member_id: member?.id || null,
-            p_vendor_id: null,
-          });
         } catch (e) {
-          console.warn('[checkin] post-signup side effects failed', e);
+          console.warn('[checkin] post-signin side effects failed', e);
         }
       })();
 
@@ -8105,11 +8142,14 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
 }
 
 function CheckinStep2({ pickedInviter, onCreate, authError }) {
+  const [mode, setMode] = useState('signup'); // 'signup' | 'signin'
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const canSubmit = firstName.trim() && lastName.trim() && email.trim() && password.length >= 6;
+  const canSubmit = mode === 'signin'
+    ? (email.trim() && password.length >= 6)
+    : (firstName.trim() && lastName.trim() && email.trim() && password.length >= 6);
   const chipLabel = pickedInviter?.id
     ? `Invited by ${pickedInviter.name}`
     : 'Walked in on my own';
@@ -8141,34 +8181,69 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
           marginBottom: '14px',
         }}><Lock size={12} strokeWidth={2.5} />No spam, ever. Promise.</div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-              First name
-            </label>
-            <input
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Ash"
-              autoComplete="given-name"
-              style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
-              Last name
-            </label>
-            <input
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Ketchum"
-              autoComplete="family-name"
-              style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
-            />
-          </div>
+        {/* Signup / Signin toggle */}
+        <div style={{
+          display: 'flex',
+          background: '#f3f4f6',
+          borderRadius: '10px',
+          padding: '4px',
+          marginBottom: '14px',
+        }}>
+          {[
+            { key: 'signup', label: 'Create account' },
+            { key: 'signin', label: 'Sign in' },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setMode(opt.key)}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: 'none',
+                borderRadius: '7px',
+                background: mode === opt.key ? '#fff' : 'transparent',
+                color: mode === opt.key ? '#1a1a1a' : '#666',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: mode === opt.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                fontFamily: 'inherit',
+              }}
+            >{opt.label}</button>
+          ))}
         </div>
+
+        {mode === 'signup' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                First name
+              </label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Ash"
+                autoComplete="given-name"
+                style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+                Last name
+              </label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Ketchum"
+                autoComplete="family-name"
+                style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+              />
+            </div>
+          </div>
+        )}
 
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
@@ -8192,7 +8267,7 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            autoComplete="new-password"
+            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
           />
         </div>
@@ -8205,7 +8280,13 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
       </div>
 
       <button
-        onClick={() => onCreate({ email, password, firstName: firstName.trim(), lastName: lastName.trim() })}
+        onClick={() => onCreate({
+          mode,
+          email,
+          password,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        })}
         disabled={!canSubmit}
         style={{
           width: 'calc(100% - 48px)', margin: '18px 24px 0',
@@ -8220,9 +8301,11 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
           boxShadow: !canSubmit ? 'none' : '0 12px 28px rgba(200,16,46,0.3)',
           letterSpacing: '0.04em',
         }}
-      >Unlock my 3 votes →</button>
+      >{mode === 'signin' ? 'Sign in & lock my 3 votes →' : 'Unlock my 3 votes →'}</button>
       <p style={{ fontSize: '11px', color: '#888', textAlign: 'center', margin: '8px 24px 60px', fontStyle: 'italic' }}>
-        We'll sign you in if you have an account, or create one. Password 6+ characters.
+        {mode === 'signin'
+          ? 'Sign in with your existing account.'
+          : 'New account. Password 6+ characters.'}
       </p>
     </div>
   );
