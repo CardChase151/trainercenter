@@ -18355,6 +18355,378 @@ function StaffInstagramPage({ isMobile, staff }) {
   );
 }
 
+// ─── Time-Map combined detail modal (opens from card click) ──
+// One modal to rule them all for a time-map vendor row: shows status
+// actions (here/cancel), IG follower-count history (per-event snapshots),
+// and the notes feed inline. Big enough to be the calling workstation
+// when staff is on the phone with a vendor.
+function TimeMapVendorDetailModal({
+  slot, eventId, currentUserId, profilesById,
+  isCheckedIn, attendanceLabel, checkInBusy, cancelBusy,
+  onCheckIn, onUndoCheckIn, onCancel, onRestore, onClose,
+}) {
+  const vendor = slot.vendor;
+
+  // Follower snapshots ----------------------------------------------------
+  const [snaps, setSnaps] = useState([]);
+  const [snapLoading, setSnapLoading] = useState(true);
+  const [snapErr, setSnapErr] = useState('');
+  const [newCount, setNewCount] = useState('');
+  const [tieToEvent, setTieToEvent] = useState(true);
+  const [savingSnap, setSavingSnap] = useState(false);
+
+  const fetchSnaps = useCallback(async () => {
+    setSnapLoading(true);
+    const { data, error: e } = await supabase
+      .from('vendor_follower_snapshots')
+      .select('id, vendor_id, event_id, ig_followers, recorded_at, recorded_by, notes, events(title, event_date)')
+      .eq('vendor_id', vendor.id)
+      .order('recorded_at', { ascending: false });
+    setSnapLoading(false);
+    if (e) { setSnapErr(e.message); return; }
+    setSnaps(data || []);
+  }, [vendor.id]);
+  useEffect(() => { fetchSnaps(); }, [fetchSnaps]);
+
+  const addSnap = async () => {
+    const n = parseInt(String(newCount).replace(/[^0-9]/g, ''), 10);
+    if (!Number.isFinite(n) || n < 0) return;
+    setSavingSnap(true);
+    setSnapErr('');
+    const { error: e } = await supabase
+      .from('vendor_follower_snapshots')
+      .insert({
+        vendor_id: vendor.id,
+        event_id: tieToEvent ? eventId : null,
+        ig_followers: n,
+        recorded_by: currentUserId,
+      });
+    setSavingSnap(false);
+    if (e) { setSnapErr(e.message); return; }
+    setNewCount('');
+    fetchSnaps();
+  };
+
+  const deleteSnap = async (snap) => {
+    if (!window.confirm('Delete this follower snapshot?')) return;
+    const { error: e } = await supabase
+      .from('vendor_follower_snapshots')
+      .delete()
+      .eq('id', snap.id);
+    if (e) { setSnapErr(e.message); return; }
+    fetchSnaps();
+  };
+
+  // Notes ------------------------------------------------------------------
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+  const [notesErr, setNotesErr] = useState('');
+  const [newNote, setNewNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  const fetchNotes = useCallback(async () => {
+    setNotesLoading(true);
+    const { data, error: e } = await supabase
+      .from('vendor_notes')
+      .select('id, author_user_id, body, created_at')
+      .eq('vendor_id', vendor.id)
+      .order('created_at', { ascending: false });
+    setNotesLoading(false);
+    if (e) { setNotesErr(e.message); return; }
+    setNotes(data || []);
+  }, [vendor.id]);
+  useEffect(() => { fetchNotes(); }, [fetchNotes]);
+
+  const addNote = async () => {
+    const body = newNote.trim();
+    if (!body) return;
+    setSavingNote(true);
+    setNotesErr('');
+    const { error: e } = await supabase
+      .from('vendor_notes')
+      .insert({ vendor_id: vendor.id, author_user_id: currentUserId, body });
+    setSavingNote(false);
+    if (e) { setNotesErr(e.message); return; }
+    setNewNote('');
+    fetchNotes();
+  };
+
+  const deleteNote = async (note) => {
+    if (!window.confirm('Delete this note?')) return;
+    const { error: e } = await supabase
+      .from('vendor_notes')
+      .delete()
+      .eq('id', note.id);
+    if (e) { setNotesErr(e.message); return; }
+    fetchNotes();
+  };
+
+  const authorName = (uid) => {
+    if (!uid) return 'Unknown';
+    const p = (profilesById || {})[uid];
+    return p?.name || p?.email || 'Staff';
+  };
+  const fmtWhen = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  const igUrl = vendor.ig_handle
+    ? `https://instagram.com/${String(vendor.ig_handle).replace(/^@/, '')}`
+    : null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: '16px',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          width: '100%', maxWidth: '620px', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: '18px 22px', borderBottom: '1px solid #eee',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px',
+        }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{
+              fontSize: '1.2rem', fontWeight: '900', color: '#1a1a1a',
+              textDecoration: slot.isCancelled ? 'line-through' : 'none',
+            }}>{slot.name}</div>
+            {slot.businessName && (
+              <div style={{ fontSize: '0.82rem', color: '#666', fontWeight: '600', marginTop: '2px' }}>
+                {slot.businessName}
+              </div>
+            )}
+            {vendor.ig_handle && (
+              <a href={igUrl} target="_blank" rel="noreferrer" style={{
+                display: 'inline-block', marginTop: '4px',
+                fontSize: '0.78rem', color: '#1d4ed8', textDecoration: 'none', fontWeight: '600',
+              }}>@{String(vendor.ig_handle).replace(/^@/, '')}</a>
+            )}
+          </div>
+          <button onClick={onClose} type="button" style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px', borderRadius: '6px', color: '#666',
+          }}><X size={20} /></button>
+        </div>
+
+        {/* Body — scrollable */}
+        <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {isCheckedIn ? (
+              <button type="button" disabled={checkInBusy} onClick={onUndoCheckIn} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: '#dcfce7', color: '#15803d', border: '1px solid #86efac',
+                padding: '8px 14px', borderRadius: '8px',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: checkInBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+              }}>
+                <CheckCircle2 size={14} /> Checked in {attendanceLabel ? `· ${attendanceLabel}` : ''} (undo)
+              </button>
+            ) : (
+              <button type="button" disabled={checkInBusy || slot.isCancelled} onClick={onCheckIn} style={{
+                backgroundColor: slot.isCancelled ? '#e5e7eb' : '#16a34a',
+                color: slot.isCancelled ? '#9ca3af' : '#fff',
+                border: 'none', padding: '8px 18px', borderRadius: '8px',
+                fontSize: '0.9rem', fontWeight: '800',
+                cursor: (checkInBusy || slot.isCancelled) ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', opacity: checkInBusy ? 0.7 : 1,
+              }}>{checkInBusy ? '…' : 'Here'}</button>
+            )}
+
+            {slot.isCancelled ? (
+              <button type="button" disabled={cancelBusy} onClick={onRestore} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: '#fff', color: '#1a1a1a', border: '1px solid #1a1a1a',
+                padding: '8px 14px', borderRadius: '8px',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: cancelBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+              }}><RotateCcw size={14} /> Restore</button>
+            ) : (
+              <button type="button" disabled={cancelBusy} onClick={onCancel} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca',
+                padding: '8px 14px', borderRadius: '8px',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: cancelBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+              }}><XCircle size={14} /> Cancel</button>
+            )}
+
+            {vendor.phone && (
+              <a href={`tel:${vendor.phone}`} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: '#1a1a1a', color: '#fff',
+                padding: '8px 14px', borderRadius: '8px',
+                fontSize: '0.85rem', fontWeight: '700',
+                textDecoration: 'none', fontFamily: 'inherit',
+              }}><Phone size={14} /> Call</a>
+            )}
+          </div>
+
+          {/* Follower count section */}
+          <div>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#666',
+              textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px',
+            }}>Instagram Followers</div>
+
+            {/* Add new snapshot */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="e.g. 1240"
+                value={newCount}
+                onChange={(e) => setNewCount(e.target.value)}
+                style={{
+                  flex: 1, minWidth: '140px',
+                  padding: '8px 10px', fontSize: '0.9rem',
+                  border: '1px solid #e5e7eb', borderRadius: '6px',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#444' }}>
+                <input type="checkbox" checked={tieToEvent} onChange={(e) => setTieToEvent(e.target.checked)} />
+                Tie to this event
+              </label>
+              <button type="button" disabled={savingSnap || !newCount.trim()} onClick={addSnap} style={{
+                backgroundColor: '#1a1a1a', color: '#fff', border: 'none',
+                padding: '8px 14px', borderRadius: '6px',
+                fontSize: '0.85rem', fontWeight: '800',
+                cursor: savingSnap ? 'wait' : 'pointer', fontFamily: 'inherit',
+                opacity: (savingSnap || !newCount.trim()) ? 0.5 : 1,
+              }}>{savingSnap ? 'Saving…' : 'Save count'}</button>
+            </div>
+
+            {snapErr && <div style={{ fontSize: '0.78rem', color: '#b91c1c', marginBottom: '6px' }}>{snapErr}</div>}
+
+            {/* History list */}
+            {snapLoading ? (
+              <div style={{ fontSize: '0.8rem', color: '#888' }}>Loading…</div>
+            ) : snaps.length === 0 ? (
+              <div style={{ fontSize: '0.8rem', color: '#888' }}>No follower counts recorded yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {snaps.map((sn, i) => {
+                  const prev = snaps[i + 1];
+                  const delta = prev ? sn.ig_followers - prev.ig_followers : null;
+                  return (
+                    <div key={sn.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: '8px', padding: '8px 10px',
+                      backgroundColor: '#f9fafb', borderRadius: '6px',
+                      fontSize: '0.85rem',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flex: 1, minWidth: 0 }}>
+                        <span style={{ fontWeight: '800', color: '#1a1a1a' }}>
+                          {sn.ig_followers.toLocaleString()}
+                        </span>
+                        {delta !== null && (
+                          <span style={{
+                            fontSize: '0.72rem', fontWeight: '700',
+                            color: delta > 0 ? '#15803d' : (delta < 0 ? '#b91c1c' : '#888'),
+                          }}>{delta > 0 ? '+' : ''}{delta}</span>
+                        )}
+                        <span style={{ fontSize: '0.72rem', color: '#666' }}>
+                          {fmtWhen(sn.recorded_at)}
+                          {sn.events?.title ? ` · ${sn.events.title}` : ''}
+                        </span>
+                      </div>
+                      {sn.recorded_by === currentUserId && (
+                        <button type="button" onClick={() => deleteSnap(sn)} title="Delete" style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#999', padding: '2px',
+                        }}><Trash2 size={13} /></button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Notes section */}
+          <div>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: '800', color: '#666',
+              textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px',
+            }}>Notes</div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <textarea
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Add a note (visible to all admins)…"
+                rows={2}
+                style={{
+                  flex: 1, padding: '8px 10px', fontSize: '0.85rem',
+                  border: '1px solid #e5e7eb', borderRadius: '6px',
+                  fontFamily: 'inherit', resize: 'vertical',
+                }}
+              />
+              <button type="button" disabled={savingNote || !newNote.trim()} onClick={addNote} style={{
+                alignSelf: 'flex-start',
+                backgroundColor: '#1a1a1a', color: '#fff', border: 'none',
+                padding: '8px 14px', borderRadius: '6px',
+                fontSize: '0.85rem', fontWeight: '800',
+                cursor: savingNote ? 'wait' : 'pointer', fontFamily: 'inherit',
+                opacity: (savingNote || !newNote.trim()) ? 0.5 : 1,
+              }}>{savingNote ? '…' : 'Add'}</button>
+            </div>
+
+            {notesErr && <div style={{ fontSize: '0.78rem', color: '#b91c1c', marginBottom: '6px' }}>{notesErr}</div>}
+
+            {notesLoading ? (
+              <div style={{ fontSize: '0.8rem', color: '#888' }}>Loading…</div>
+            ) : notes.length === 0 ? (
+              <div style={{ fontSize: '0.8rem', color: '#888' }}>No notes yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {notes.map(n => (
+                  <div key={n.id} style={{
+                    padding: '10px 12px',
+                    backgroundColor: '#f9fafb',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                  }}>
+                    <div style={{ whiteSpace: 'pre-wrap', color: '#1a1a1a', lineHeight: 1.45 }}>{n.body}</div>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      marginTop: '6px',
+                    }}>
+                      <div style={{ fontSize: '0.7rem', color: '#888' }}>
+                        {authorName(n.author_user_id)} · {fmtWhen(n.created_at)}
+                      </div>
+                      {n.author_user_id === currentUserId && (
+                        <button type="button" onClick={() => deleteNote(n)} title="Delete"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: '2px' }}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Staff Event Time Map (/staff/events/:eventId/timemap) ──
 // Visual Gantt + hourly coverage for an event's approved vendor
 // lineup. Chef uses this to plan the day — see how many vendors
@@ -18378,7 +18750,7 @@ function EventTimeMapPage({ isMobile, staff }) {
   const [checkinBusy, setCheckinBusy] = useState(null); // vendor_id
   const [cancelBusy, setCancelBusy] = useState(null);   // app_id
   const [callTimeBusy, setCallTimeBusy] = useState(null); // app_id
-  const [notesVendor, setNotesVendor] = useState(null); // vendor row for modal
+  const [detailSlot, setDetailSlot] = useState(null);   // slot row for combined detail modal
 
   const refreshAttendance = useCallback(async () => {
     if (!eventId) return;
@@ -18730,13 +19102,16 @@ function EventTimeMapPage({ isMobile, staff }) {
     const hasSlot = sRaw != null && eRaw != null;
     const s = hasSlot ? Math.max(windowStart, sRaw) : windowStart;
     const e = hasSlot ? Math.min(windowEnd, eRaw) : windowEnd;
+    const displayName = `${v.first_name || ''} ${v.last_name || ''}`.trim() || v.name || '(no name)';
     return {
       app_id: a.id,
       status: a.status,
       isCancelled: a.status === 'vendor_cancelled',
       confirmationCallAt: a.confirmation_call_at,
       vendor: v,
-      name: v.name || '(no name)',
+      name: displayName,
+      businessName: v.business_name || '',
+      igHandle: v.ig_handle || '',
       avatar_url: v.avatar_url,
       requested_start: sRaw,
       requested_end: eRaw,
@@ -19191,49 +19566,61 @@ function EventTimeMapPage({ isMobile, staff }) {
               const accent = colorFor(s.vendor.id || s.app_id);
               const att = attendance[s.vendor.id];
               const isCheckedIn = !!att;
-              const isBusy = checkinBusy === s.vendor.id;
-              const isCancelling = cancelBusy === s.app_id;
               const isSavingTime = callTimeBusy === s.app_id;
-              const arriveLabel = att?.checked_in_at
-                ? new Date(att.checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-                : null;
               return (
-                <div key={s.app_id} style={{
-                  display: 'flex',
-                  gap: '10px',
-                  flexDirection: isMobile ? 'column' : 'row',
-                  alignItems: isMobile ? 'stretch' : 'center',
-                  backgroundColor: s.isCancelled ? '#fafafa' : (isCheckedIn ? '#f0fdf4' : 'transparent'),
-                  borderRadius: '8px',
-                  padding: (s.isCancelled || isCheckedIn) ? '4px' : '0',
-                  opacity: s.isCancelled ? 0.55 : 1,
-                  transition: 'background-color 0.15s, opacity 0.15s',
-                }}>
-                  {/* Name label */}
+                <div
+                  key={s.app_id}
+                  onClick={() => setDetailSlot(s)}
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    backgroundColor: s.isCancelled ? '#fafafa' : (isCheckedIn ? '#f0fdf4' : '#fff'),
+                    border: '1px solid ' + (isCheckedIn ? '#bbf7d0' : '#eef0f3'),
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    opacity: s.isCancelled ? 0.55 : 1,
+                    transition: 'background-color 0.15s, opacity 0.15s, transform 0.08s',
+                    cursor: 'pointer',
+                  }}
+                  onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.998)'; }}
+                  onMouseUp={(e) => { e.currentTarget.style.transform = 'none'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
+                >
+                  {/* Name + business */}
                   <div style={{
-                    width: isMobile ? 'auto' : '180px',
+                    width: isMobile ? 'auto' : '200px',
                     flexShrink: 0,
-                    display: 'flex', alignItems: 'center', gap: '8px',
+                    display: 'flex', alignItems: 'center', gap: '10px',
                     minWidth: 0,
                   }}>
                     <div style={{
-                      width: '4px', height: '24px', backgroundColor: accent, borderRadius: '2px', flexShrink: 0,
+                      width: '4px', alignSelf: 'stretch', backgroundColor: accent, borderRadius: '2px', flexShrink: 0,
                     }} />
-                    <div style={{ minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{
-                        fontSize: '0.85rem', fontWeight: '700', color: '#1a1a1a',
+                        fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         textDecoration: s.isCancelled ? 'line-through' : 'none',
+                        lineHeight: 1.2,
                       }}>{s.name}</div>
-                      {s.hasSlot ? (
+                      {s.businessName ? (
                         <div style={{
-                          fontSize: '0.7rem', color: '#666',
+                          fontSize: '0.72rem', color: '#666', fontWeight: '600',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           textDecoration: s.isCancelled ? 'line-through' : 'none',
+                          marginTop: '2px',
+                        }}>{s.businessName}</div>
+                      ) : null}
+                      {isCheckedIn && (
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                          fontSize: '0.65rem', fontWeight: '700', color: '#15803d',
+                          marginTop: '3px',
                         }}>
-                          {fmt12(s.requested_start)} – {fmt12(s.requested_end)}
+                          <CheckCircle2 size={10} /> Checked in
                         </div>
-                      ) : (
-                        <div style={{ fontSize: '0.7rem', color: '#92400e' }}>No requested time</div>
                       )}
                     </div>
                   </div>
@@ -19282,18 +19669,19 @@ function EventTimeMapPage({ isMobile, staff }) {
                     )}
                   </div>
 
-                  {/* Controls column: scheduled call time + action buttons.
-                      Stacks vertically on the right of each row (mobile
-                      collapses everything anyway). */}
-                  <div style={{
-                    flexShrink: 0,
-                    width: isMobile ? 'auto' : '280px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
-                  }}>
-                    {/* Datetime input — native picker, browser-local zone
-                        (PST for Chase). Stored as UTC ISO in the DB. */}
+                  {/* Call time — the only inline editable field. Click on
+                      this input shouldn't bubble up to the card click. */}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      flexShrink: 0,
+                      width: isMobile ? 'auto' : '200px',
+                      display: 'flex', flexDirection: 'column', gap: '3px',
+                    }}>
+                    <div style={{
+                      fontSize: '0.62rem', fontWeight: '800', color: '#888',
+                      textTransform: 'uppercase', letterSpacing: '0.08em',
+                    }}>Call time</div>
                     <input
                       type="datetime-local"
                       value={toLocalInputValue(s.confirmationCallAt)}
@@ -19303,7 +19691,7 @@ function EventTimeMapPage({ isMobile, staff }) {
                       style={{
                         width: '100%',
                         padding: '6px 8px',
-                        fontSize: '0.78rem',
+                        fontSize: '0.8rem',
                         fontWeight: '600',
                         color: s.confirmationCallAt ? '#1a1a1a' : '#999',
                         border: '1px solid #e5e7eb',
@@ -19313,107 +19701,6 @@ function EventTimeMapPage({ isMobile, staff }) {
                         cursor: s.isCancelled ? 'not-allowed' : 'text',
                       }}
                     />
-
-                    {/* Action buttons row */}
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'stretch' }}>
-                      {/* Here / Undo check-in */}
-                      {isCheckedIn ? (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => undoCheckIn(s.vendor.id)}
-                          title="Click to undo check-in"
-                          style={{
-                            flex: 1,
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                            backgroundColor: '#dcfce7', color: '#15803d',
-                            border: '1px solid #86efac',
-                            padding: '6px 8px', borderRadius: '6px',
-                            fontSize: '0.72rem', fontWeight: '700',
-                            cursor: isBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
-                          }}
-                        >
-                          <CheckCircle2 size={12} />
-                          {arriveLabel}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isBusy || s.isCancelled}
-                          onClick={() => checkInNow(s.vendor.id)}
-                          style={{
-                            flex: 1,
-                            backgroundColor: s.isCancelled ? '#e5e7eb' : '#16a34a',
-                            color: s.isCancelled ? '#9ca3af' : '#fff',
-                            border: 'none',
-                            padding: '6px 10px', borderRadius: '6px',
-                            fontSize: '0.78rem', fontWeight: '800',
-                            cursor: (isBusy || s.isCancelled) ? 'not-allowed' : 'pointer',
-                            fontFamily: 'inherit',
-                            opacity: isBusy ? 0.7 : 1,
-                          }}
-                        >
-                          {isBusy ? '…' : 'Here'}
-                        </button>
-                      )}
-
-                      {/* Notes — opens VendorNotesModal */}
-                      <button
-                        type="button"
-                        onClick={() => setNotesVendor(s.vendor)}
-                        title="Notes"
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                          backgroundColor: '#f3f4f6', color: '#374151',
-                          border: '1px solid #e5e7eb',
-                          padding: '6px 10px', borderRadius: '6px',
-                          fontSize: '0.72rem', fontWeight: '700',
-                          cursor: 'pointer', fontFamily: 'inherit',
-                        }}
-                      >
-                        <StickyNote size={12} />
-                        Notes
-                      </button>
-
-                      {/* Cancel / Restore — toggle vendor_cancelled status */}
-                      {s.isCancelled ? (
-                        <button
-                          type="button"
-                          disabled={isCancelling}
-                          onClick={() => uncancelApp(s.app_id)}
-                          title="Restore this vendor"
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                            backgroundColor: '#fff', color: '#1a1a1a',
-                            border: '1px solid #1a1a1a',
-                            padding: '6px 10px', borderRadius: '6px',
-                            fontSize: '0.72rem', fontWeight: '700',
-                            cursor: isCancelling ? 'wait' : 'pointer', fontFamily: 'inherit',
-                          }}
-                        >
-                          <RotateCcw size={12} />
-                          Restore
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isCancelling}
-                          onClick={() => cancelApp(s.app_id)}
-                          title="Mark cancelled for this event"
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                            backgroundColor: '#fef2f2', color: '#b91c1c',
-                            border: '1px solid #fecaca',
-                            padding: '6px 10px', borderRadius: '6px',
-                            fontSize: '0.72rem', fontWeight: '700',
-                            cursor: isCancelling ? 'wait' : 'pointer', fontFamily: 'inherit',
-                          }}
-                        >
-                          <XCircle size={12} />
-                          Cancel
-                        </button>
-                      )}
-                    </div>
                   </div>
                 </div>
               );
@@ -19494,12 +19781,23 @@ function EventTimeMapPage({ isMobile, staff }) {
         </div>
       </div>
 
-      {notesVendor && (
-        <VendorNotesModal
-          vendor={notesVendor}
+      {detailSlot && (
+        <TimeMapVendorDetailModal
+          slot={detailSlot}
+          eventId={eventId}
           currentUserId={currentUserId}
           profilesById={profilesById}
-          onClose={() => setNotesVendor(null)}
+          isCheckedIn={!!attendance[detailSlot.vendor.id]}
+          attendanceLabel={attendance[detailSlot.vendor.id]?.checked_in_at
+            ? new Date(attendance[detailSlot.vendor.id].checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+            : null}
+          checkInBusy={checkinBusy === detailSlot.vendor.id}
+          cancelBusy={cancelBusy === detailSlot.app_id}
+          onCheckIn={() => checkInNow(detailSlot.vendor.id)}
+          onUndoCheckIn={() => undoCheckIn(detailSlot.vendor.id)}
+          onCancel={() => cancelApp(detailSlot.app_id)}
+          onRestore={() => uncancelApp(detailSlot.app_id)}
+          onClose={() => setDetailSlot(null)}
         />
       )}
     </PageWrapper>
