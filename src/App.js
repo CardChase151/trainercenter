@@ -18712,12 +18712,22 @@ function TimeMapVendorDetailModal({
                 {slot.businessName}
               </div>
             )}
-            {vendor.ig_handle && (
-              <a href={igUrl} target="_blank" rel="noreferrer" style={{
-                display: 'inline-block', marginTop: '4px',
-                fontSize: '0.78rem', color: '#1d4ed8', textDecoration: 'none', fontWeight: '600',
-              }}>@{String(vendor.ig_handle).replace(/^@/, '')}</a>
-            )}
+            <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+              {vendor.ig_handle && (
+                <a href={igUrl} target="_blank" rel="noreferrer" style={{
+                  fontSize: '0.78rem', color: '#1d4ed8', textDecoration: 'none', fontWeight: '600',
+                }}>@{String(vendor.ig_handle).replace(/^@/, '')}</a>
+              )}
+              {vendor.phone && (
+                <a href={`tel:${vendor.phone}`} style={{
+                  fontSize: '0.78rem', color: '#1a1a1a', textDecoration: 'none', fontWeight: '700',
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                }}>
+                  <Phone size={11} />
+                  {String(vendor.phone).replace(/^(\d{3})(\d{3})(\d{4})$/, '($1) $2-$3')}
+                </a>
+              )}
+            </div>
           </div>
           <button onClick={onClose} type="button" style={{
             background: 'none', border: 'none', cursor: 'pointer',
