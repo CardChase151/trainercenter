@@ -19903,9 +19903,17 @@ function EventTimeMapPage({ isMobile, staff }) {
           padding: isMobile ? '12px' : '18px 22px',
           overflowX: 'auto',
         }}>
-          {/* Hour axis above lanes — matches the Gantt's percentage-based
-              positioning so labels sit over the right vertical position. */}
-          <div style={{ position: 'relative', height: '20px', marginLeft: isMobile ? 0 : '190px', marginBottom: '8px' }}>
+          {/* Hour axis above lanes — must match the Gantt bar's
+              horizontal span exactly. Margins skip past:
+                left  = row padding (12) + name col (200) + gap (10) = 222
+                right = row padding (12) + call-time col (200) + gap (10) = 222 */}
+          <div style={{
+            position: 'relative',
+            height: '20px',
+            marginLeft:  isMobile ? 0 : '222px',
+            marginRight: isMobile ? 0 : '222px',
+            marginBottom: '8px',
+          }}>
             {hours.map(h => (
               <div key={h} style={{
                 position: 'absolute', left: pctLeft(h * 60), top: 0,
