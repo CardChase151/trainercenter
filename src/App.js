@@ -18524,12 +18524,57 @@ function StaffInstagramPage({ isMobile, staff }) {
 // actions (here/cancel), IG follower-count history (per-event snapshots),
 // and the notes feed inline. Big enough to be the calling workstation
 // when staff is on the phone with a vendor.
+// ────────────── shared label maps for the modal Profile section ──────────────
+const EXPERIENCE_LEVELS = [
+  { value: 'first_show', label: 'First show' },
+  { value: '1_to_5',     label: '1-5 shows' },
+  { value: '5_to_10',    label: '5-10 shows' },
+  { value: '10_to_50',   label: '10-50 shows' },
+  { value: '50_plus',    label: '50+ shows' },
+];
+const STAFF_RATINGS = [
+  { value: 'beginner',     label: 'Beginner',     color: '#b91c1c' },
+  { value: 'novice',       label: 'Novice',       color: '#d97706' },
+  { value: 'intermediate', label: 'Intermediate', color: '#1d4ed8' },
+  { value: 'advanced',     label: 'Advanced',     color: '#15803d' },
+];
+const TABLE_SIZES = [
+  { value: 'tbd',    label: 'TBD' },
+  { value: 'half',   label: 'Half' },
+  { value: 'full',   label: 'Full' },
+  { value: 'double', label: 'Double' },
+];
+
 function TimeMapVendorDetailModal({
   slot, eventId, currentUserId, profilesById,
   isCheckedIn, attendanceLabel, checkInBusy, cancelBusy,
-  onCheckIn, onUndoCheckIn, onCancel, onRestore, onClose,
+  onCheckIn, onUndoCheckIn, onCancel, onRestore, onPatchApp, onPatchVendor, onClose,
 }) {
   const vendor = slot.vendor;
+
+  // ── Past shows with TC ──────────────────────────────────────────────
+  // Source of truth: vendor_attendance rows (they actually checked in to
+  // the event). Excludes the current event so the count means "shows
+  // before this one". Fast lookup, one query per modal open.
+  const [pastShows, setPastShows] = useState([]);
+  const [pastShowsLoading, setPastShowsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setPastShowsLoading(true);
+      const { data, error: e } = await supabase
+        .from('vendor_attendance')
+        .select('event_id, checked_in_at, events(title, event_date)')
+        .eq('vendor_id', vendor.id)
+        .neq('event_id', eventId)
+        .order('checked_in_at', { ascending: false });
+      if (cancelled) return;
+      setPastShowsLoading(false);
+      if (e) { console.warn('past shows', e); return; }
+      setPastShows(data || []);
+    })();
+    return () => { cancelled = true; };
+  }, [vendor.id, eventId]);
 
   // Follower snapshots ----------------------------------------------------
   const [snaps, setSnaps] = useState([]);
@@ -18687,6 +18732,108 @@ function TimeMapVendorDetailModal({
 
         {/* Body — scrollable */}
         <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* PROFILE SECTION — past shows + editable level/rating/table size */}
+          <div style={{ background: '#f9fafb', border: '1px solid #eef0f3', borderRadius: '10px', padding: '14px 16px' }}>
+            {/* Past shows count tile */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ fontSize: '2rem', fontWeight: '900', color: pastShows.length > 0 ? '#15803d' : '#9ca3af', lineHeight: 1 }}>
+                {pastShowsLoading ? '…' : `${pastShows.length}×`}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                {pastShows.length === 0 ? 'First time vending with us' : `Past show${pastShows.length === 1 ? '' : 's'} with TC`}
+              </div>
+            </div>
+            {pastShows.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '12px' }}>
+                {pastShows.slice(0, 6).map(ps => (
+                  <span key={ps.event_id} style={{
+                    fontSize: '0.7rem', fontWeight: '600',
+                    background: '#dcfce7', color: '#15803d',
+                    padding: '3px 8px', borderRadius: '999px',
+                  }}>
+                    {ps.events?.title || 'Event'} · {ps.events?.event_date ? new Date(ps.events.event_date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+                  </span>
+                ))}
+                {pastShows.length > 6 && (
+                  <span style={{ fontSize: '0.7rem', color: '#666', padding: '3px 8px' }}>+{pastShows.length - 6} more</span>
+                )}
+              </div>
+            )}
+
+            {/* Table size — per THIS event */}
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ fontSize: '0.62rem', fontWeight: '800', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                Table for this event
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {TABLE_SIZES.map(t => {
+                  const active = slot.requestedTableSize === t.value;
+                  return (
+                    <button key={t.value} type="button" onClick={() => onPatchApp({ requested_table_size: t.value })}
+                      style={{
+                        flex: '1 0 auto',
+                        padding: '7px 12px', fontSize: '0.78rem', fontWeight: '700',
+                        border: active ? '1px solid #1a1a1a' : '1px solid #e5e7eb',
+                        background: active ? '#1a1a1a' : '#fff',
+                        color: active ? '#fff' : '#666',
+                        borderRadius: '6px', cursor: 'pointer', fontFamily: 'inherit',
+                      }}>{t.label}</button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Experience + Staff Rating — vendor-wide */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px' }}>
+              <div>
+                <div style={{ fontSize: '0.62rem', fontWeight: '800', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  Their intake answer
+                </div>
+                <select
+                  value={vendor.experience_level || ''}
+                  onChange={(e) => onPatchVendor({ experience_level: e.target.value || null })}
+                  style={{
+                    width: '100%', padding: '7px 8px', fontSize: '0.82rem', fontWeight: '600',
+                    border: '1px solid #e5e7eb', borderRadius: '6px',
+                    background: '#fff', fontFamily: 'inherit',
+                  }}>
+                  <option value="">— Not set —</option>
+                  {EXPERIENCE_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.62rem', fontWeight: '800', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  Your staff rating
+                </div>
+                <select
+                  value={vendor.staff_experience_rating || ''}
+                  onChange={(e) => onPatchVendor({ staff_experience_rating: e.target.value || null })}
+                  style={{
+                    width: '100%', padding: '7px 8px', fontSize: '0.82rem', fontWeight: '600',
+                    border: '1px solid #e5e7eb', borderRadius: '6px',
+                    background: '#fff', fontFamily: 'inherit',
+                    color: STAFF_RATINGS.find(r => r.value === vendor.staff_experience_rating)?.color || '#1a1a1a',
+                  }}>
+                  <option value="">— Not rated —</option>
+                  {STAFF_RATINGS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Intake question — read only */}
+            {vendor.applicant_questions && vendor.applicant_questions.trim() && (
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #eef0f3' }}>
+                <div style={{ fontSize: '0.62rem', fontWeight: '800', color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  They asked on intake
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.5 }}>
+                  "{vendor.applicant_questions}"
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {isCheckedIn ? (
@@ -19072,6 +19219,30 @@ function EventTimeMapPage({ isMobile, staff }) {
     }
   };
 
+  // Patch a single vendor_applications row (e.g. requested_table_size).
+  // Optimistic on local apps state so the modal + parent re-render fast.
+  const patchApp = async (appId, patch) => {
+    const prev = apps;
+    setApps(apps.map(a => a.id === appId ? { ...a, ...patch } : a));
+    const { error: e } = await supabase
+      .from('vendor_applications').update(patch).eq('id', appId);
+    if (e) { setApps(prev); alert(`Could not save: ${e.message}`); }
+  };
+
+  // Patch the underlying vendors row (e.g. experience_level,
+  // staff_experience_rating). Updates every slot pointing at that vendor.
+  const patchVendor = async (vendorId, patch) => {
+    const prev = apps;
+    setApps(apps.map(a =>
+      a.vendor?.id === vendorId
+        ? { ...a, vendor: { ...a.vendor, ...patch } }
+        : a
+    ));
+    const { error: e } = await supabase
+      .from('vendors').update(patch).eq('id', vendorId);
+    if (e) { setApps(prev); alert(`Could not save vendor: ${e.message}`); }
+  };
+
   // Format a TIMESTAMPTZ as a datetime-local input string in *local* time
   // (browser zone). Returns '' for null. The browser then displays it
   // using its own locale — for Chase that's always PST.
@@ -19272,6 +19443,7 @@ function EventTimeMapPage({ isMobile, staff }) {
       status: a.status,
       isCancelled: a.status === 'vendor_cancelled',
       confirmationCallAt: a.confirmation_call_at,
+      requestedTableSize: a.requested_table_size || 'tbd',
       vendor: v,
       name: displayName,
       businessName: v.business_name || '',
@@ -19945,25 +20117,39 @@ function EventTimeMapPage({ isMobile, staff }) {
         </div>
       </div>
 
-      {detailSlot && (
+      {detailSlot && (() => {
+        // Re-derive from latest apps state so optimistic edits land
+        // immediately in the open modal (slot snapshot is stale otherwise).
+        const liveApp = apps.find(a => a.id === detailSlot.app_id);
+        const liveSlot = liveApp ? {
+          ...detailSlot,
+          status: liveApp.status,
+          isCancelled: liveApp.status === 'vendor_cancelled',
+          confirmationCallAt: liveApp.confirmation_call_at,
+          requestedTableSize: liveApp.requested_table_size || 'tbd',
+          vendor: liveApp.vendor || detailSlot.vendor,
+        } : detailSlot;
+        return (
         <TimeMapVendorDetailModal
-          slot={detailSlot}
+          slot={liveSlot}
           eventId={eventId}
           currentUserId={currentUserId}
           profilesById={profilesById}
-          isCheckedIn={!!attendance[detailSlot.vendor.id]}
-          attendanceLabel={attendance[detailSlot.vendor.id]?.checked_in_at
-            ? new Date(attendance[detailSlot.vendor.id].checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+          isCheckedIn={!!attendance[liveSlot.vendor.id]}
+          attendanceLabel={attendance[liveSlot.vendor.id]?.checked_in_at
+            ? new Date(attendance[liveSlot.vendor.id].checked_in_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
             : null}
-          checkInBusy={checkinBusy === detailSlot.vendor.id}
-          cancelBusy={cancelBusy === detailSlot.app_id}
-          onCheckIn={() => checkInNow(detailSlot.vendor.id)}
-          onUndoCheckIn={() => undoCheckIn(detailSlot.vendor.id)}
-          onCancel={() => cancelApp(detailSlot.app_id)}
-          onRestore={() => uncancelApp(detailSlot.app_id)}
+          checkInBusy={checkinBusy === liveSlot.vendor.id}
+          cancelBusy={cancelBusy === liveSlot.app_id}
+          onCheckIn={() => checkInNow(liveSlot.vendor.id)}
+          onUndoCheckIn={() => undoCheckIn(liveSlot.vendor.id)}
+          onCancel={() => cancelApp(liveSlot.app_id)}
+          onRestore={() => uncancelApp(liveSlot.app_id)}
+          onPatchApp={(patch) => patchApp(liveSlot.app_id, patch)}
+          onPatchVendor={(patch) => patchVendor(liveSlot.vendor.id, patch)}
           onClose={() => setDetailSlot(null)}
-        />
-      )}
+        />);
+      })()}
     </PageWrapper>
   );
 }
