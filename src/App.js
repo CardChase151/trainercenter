@@ -7701,18 +7701,22 @@ function GuestCheckinPage({ isMobile }) {
     }, 350);
   };
 
-  // Step 2 — create account / sign in, then write check-in
-  async function handleCreateAccount(email, password) {
+  // Step 2 — create account / sign in, write check-in, upsert member +
+  // marketing contact, fire welcome email.
+  async function handleCreateAccount({ email, password, firstName, lastName }) {
     setAuthError(null);
     try {
+      const cleanEmail = String(email).trim().toLowerCase();
+      let createdNow = false;
       // Try sign-in first; if it fails (no account), sign up.
-      let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      let { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (error || !data?.session) {
         const signup = await supabase.auth.signUp({
-          email, password,
-          options: { data: { source: 'door_checkin' } },
+          email: cleanEmail, password,
+          options: { data: { source: 'door_checkin', first_name: firstName, last_name: lastName } },
         });
         if (signup.error) throw signup.error;
+        createdNow = true;
         // signUp returns a session when email confirmation is disabled.
         data = signup.data;
       }
@@ -7723,6 +7727,37 @@ function GuestCheckinPage({ isMobile }) {
       // Record the check-in
       const { error: ciErr } = await writeCheckin(s.user.id, pickedInviter);
       if (ciErr) console.warn('check-in upsert error', ciErr);
+
+      // Upsert member row + welcome email + marketing contact. All fire-and-
+      // forget — we don't block the success overlay on these.
+      (async () => {
+        try {
+          // Upsert by user_id so repeat check-ins don't create duplicates
+          const { data: member, error: mErr } = await supabase
+            .from('members')
+            .upsert(
+              { user_id: s.user.id, email: cleanEmail, first_name: firstName, last_name: lastName },
+              { onConflict: 'user_id' }
+            )
+            .select('id, email')
+            .single();
+          if (mErr) { console.warn('[checkin] member upsert', mErr); return; }
+          if (createdNow && member?.id) {
+            sendVendorEmail({ type: 'member_welcome', member_id: member.id });
+          }
+          await supabase.rpc('upsert_marketing_contact_from_app', {
+            p_email: cleanEmail,
+            p_first_name: firstName || null,
+            p_last_name: lastName || null,
+            p_phone: null,
+            p_source: 'door_checkin',
+            p_member_id: member?.id || null,
+            p_vendor_id: null,
+          });
+        } catch (e) {
+          console.warn('[checkin] post-signup side effects failed', e);
+        }
+      })();
 
       // Show the full-screen confirmation overlay (proof to show door staff)
       // before handing off to the home page / voting view.
@@ -8070,8 +8105,11 @@ function CheckinStep1({ vendors, onPickVendor, onPickNone }) {
 }
 
 function CheckinStep2({ pickedInviter, onCreate, authError }) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const canSubmit = firstName.trim() && lastName.trim() && email.trim() && password.length >= 6;
   const chipLabel = pickedInviter?.id
     ? `Invited by ${pickedInviter.name}`
     : 'Walked in on my own';
@@ -8102,6 +8140,35 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
           fontSize: '11px', fontWeight: 800,
           marginBottom: '14px',
         }}><Lock size={12} strokeWidth={2.5} />No spam, ever. Promise.</div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+              First name
+            </label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Ash"
+              autoComplete="given-name"
+              style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
+              Last name
+            </label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Ketchum"
+              autoComplete="family-name"
+              style={{ width: '100%', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', fontSize: '14px', color: '#1a1a1a' }}
+            />
+          </div>
+        </div>
 
         <div style={{ marginBottom: '12px' }}>
           <label style={{ display: 'block', fontSize: '11px', color: '#888', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '4px' }}>
@@ -8138,19 +8205,19 @@ function CheckinStep2({ pickedInviter, onCreate, authError }) {
       </div>
 
       <button
-        onClick={() => onCreate(email, password)}
-        disabled={!email || password.length < 6}
+        onClick={() => onCreate({ email, password, firstName: firstName.trim(), lastName: lastName.trim() })}
+        disabled={!canSubmit}
         style={{
           width: 'calc(100% - 48px)', margin: '18px 24px 0',
-          background: !email || password.length < 6
+          background: !canSubmit
             ? '#f3f4f6'
             : 'linear-gradient(135deg, #C8102E 0%, #FF1A8C 100%)',
-          color: !email || password.length < 6 ? '#9ca3af' : '#fff',
+          color: !canSubmit ? '#9ca3af' : '#fff',
           fontSize: '16px', fontWeight: 800,
           border: 'none', borderRadius: '14px',
           padding: '16px',
-          cursor: !email || password.length < 6 ? 'not-allowed' : 'pointer',
-          boxShadow: !email || password.length < 6 ? 'none' : '0 12px 28px rgba(200,16,46,0.3)',
+          cursor: !canSubmit ? 'not-allowed' : 'pointer',
+          boxShadow: !canSubmit ? 'none' : '0 12px 28px rgba(200,16,46,0.3)',
           letterSpacing: '0.04em',
         }}
       >Unlock my 3 votes →</button>
