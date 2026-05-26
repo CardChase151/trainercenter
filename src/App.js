@@ -18831,6 +18831,30 @@ function TimeMapVendorDetailModal({
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Confirmed toggle — staff stamps when they've confirmed the
+                vendor will show (call, text, IG, whatever). Click again to
+                undo. Disabled on cancelled apps. */}
+            {slot.isConfirmed ? (
+              <button type="button" onClick={() => onPatchApp({ confirmed_at: null })} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                backgroundColor: '#dbeafe', color: '#1d4ed8', border: '1px solid #93c5fd',
+                padding: '8px 14px', borderRadius: '8px',
+                fontSize: '0.85rem', fontWeight: '700',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                <CheckCircle2 size={14} /> Confirmed{slot.confirmedAt ? ` · ${new Date(slot.confirmedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''} (undo)
+              </button>
+            ) : (
+              <button type="button" disabled={slot.isCancelled} onClick={() => onPatchApp({ confirmed_at: new Date().toISOString() })} style={{
+                backgroundColor: slot.isCancelled ? '#e5e7eb' : '#1d4ed8',
+                color: slot.isCancelled ? '#9ca3af' : '#fff',
+                border: 'none', padding: '8px 18px', borderRadius: '8px',
+                fontSize: '0.9rem', fontWeight: '800',
+                cursor: slot.isCancelled ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}>Confirmed</button>
+            )}
+
             {isCheckedIn ? (
               <button type="button" disabled={checkInBusy} onClick={onUndoCheckIn} style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -19078,7 +19102,7 @@ function EventTimeMapPage({ isMobile, staff }) {
       const [evRes, appsRes, profRes] = await Promise.all([
         supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
         supabase.from('vendor_applications')
-          .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor_note, confirmation_call_at, vendor:vendors(*)')
+          .select('id, status, requested_start_time, requested_end_time, requested_table_size, table_group_id, vendor_note, confirmation_call_at, confirmed_at, vendor:vendors(*)')
           .eq('event_id', eventId)
           .in('status', ['approved', 'vendor_cancelled']),
         supabase.from('profiles').select('id, name, email'),
@@ -19438,6 +19462,8 @@ function EventTimeMapPage({ isMobile, staff }) {
       status: a.status,
       isCancelled: a.status === 'vendor_cancelled',
       confirmationCallAt: a.confirmation_call_at,
+      confirmedAt: a.confirmed_at,
+      isConfirmed: !!a.confirmed_at,
       requestedTableSize: a.requested_table_size || 'tbd',
       vendor: v,
       name: displayName,
@@ -19470,6 +19496,7 @@ function EventTimeMapPage({ isMobile, staff }) {
   // vendors don't contribute (they're not coming).
   const activeSlots = slots.filter(s => !s.isCancelled);
   const cancelledCount = slots.length - activeSlots.length;
+  const confirmedCount = activeSlots.filter(s => s.isConfirmed).length;
   const startHour = Math.floor(windowStart / 60);
   const endHour = Math.ceil(windowEnd / 60);
   const hours = [];
@@ -19667,6 +19694,7 @@ function EventTimeMapPage({ isMobile, staff }) {
           marginBottom: '18px',
         }}>
           <StatTile label="Vendors approved" value={totalSlots} />
+          <StatTile label="Confirmed" value={`${confirmedCount} / ${totalSlots}`} accent={confirmedCount === totalSlots && totalSlots > 0 ? '#15803d' : (confirmedCount > 0 ? '#1d4ed8' : '#1a1a1a')} />
           <StatTile label="Checked in" value={`${Object.keys(attendance).length} / ${totalSlots}`} accent={Object.keys(attendance).length === totalSlots && totalSlots > 0 ? '#15803d' : '#1a1a1a'} />
           <StatTile label="Cancelled" value={cancelledCount} accent={cancelledCount > 0 ? '#b91c1c' : '#1a1a1a'} />
           <StatTile label="Peak concurrent" value={peak.count} accent="#C8102E" sub={peak.count > 0 ? `at ${fmt12(peak.hour * 60)}` : '—'} />
@@ -19944,15 +19972,24 @@ function EventTimeMapPage({ isMobile, staff }) {
                           marginTop: '2px',
                         }}>{s.businessName}</div>
                       ) : null}
-                      {isCheckedIn && (
-                        <div style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '3px',
-                          fontSize: '0.65rem', fontWeight: '700', color: '#15803d',
-                          marginTop: '3px',
-                        }}>
-                          <CheckCircle2 size={10} /> Checked in
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                        {s.isConfirmed && (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            fontSize: '0.65rem', fontWeight: '700', color: '#1d4ed8',
+                          }}>
+                            <CheckCircle2 size={10} /> Confirmed
+                          </span>
+                        )}
+                        {isCheckedIn && (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            fontSize: '0.65rem', fontWeight: '700', color: '#15803d',
+                          }}>
+                            <CheckCircle2 size={10} /> Checked in
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
