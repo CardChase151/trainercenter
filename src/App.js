@@ -21703,6 +21703,16 @@ const PRINTABLES = [
     group: 'docs',
   },
   {
+    key: 'nfc-tap-stickers',
+    title: 'NFC Tap Stickers (IG + Google)',
+    desc: 'Landscape 11×8.5 sheet with two NFC sticker designs: "Follow Us on Instagram" (Tap to Follow) + "Leave Us Your Review on Google" (Tap to Review). Print, cut, and apply to programmed NFC stickers.',
+    file: '/printables/nfc-tap-stickers.pdf',
+    thumb: '/printables/thumb-nfc-tap-stickers.png',
+    kind: 'pdf',
+    accent: '#0f766e',
+    group: 'docs',
+  },
+  {
     key: 'qr-instagram-bare',
     title: 'Instagram QR — Code Only',
     desc: 'Just the colored Pokeball QR with TC logo center. No title or framing — drop into any layout.',
