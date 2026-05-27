@@ -16344,16 +16344,25 @@ function StaffVendorsPage({ isMobile, staff }) {
     // Per-event decision only. Profile approval lives in the All Vendors tab
     // and is the prerequisite — admin UI prevents approving an event app for
     // a non-approved vendor.
+    const decidedAt = new Date().toISOString();
     const { error } = await supabase
       .from('vendor_applications')
-      .update({ status, decision_note: note || null, decided_at: new Date().toISOString(), decided_by: staff.id })
+      .update({ status, decision_note: note || null, decided_at: decidedAt, decided_by: staff.id })
       .eq('id', appId);
     if (error) {
       alert('Error: ' + error.message);
       return;
     }
     sendVendorEmail({ type: 'application_decided', application_id: appId });
-    refresh();
+    // Optimistic local update — avoids the full refetch flash that was
+    // collapsing expanded events and re-running every query on the page.
+    setEvents(prev => prev.map(ev => ({
+      ...ev,
+      vendor_applications: (ev.vendor_applications || []).map(a =>
+        a.id === appId ? { ...a, status, decision_note: note || null, decided_at: decidedAt, decided_by: staff.id } : a
+      ),
+    })));
+    setPending(prev => prev.filter(p => p.id !== appId));
   };
 
   // Staff-curated experience rating. Optimistic local update so the
@@ -17051,6 +17060,11 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
   const [eventTab, setEventTab] = useState({});
   const tabFor = (id) => eventTab[id] || 'approved';
   const setTabFor = (id, t) => setEventTab(prev => ({ ...prev, [id]: t }));
+  // Per-event sort selector for the Approved tab.
+  // 'name' (alpha) | 'decided_desc' (newest first) | 'decided_asc' (oldest first)
+  const [approvedSort, setApprovedSort] = useState({});
+  const approvedSortFor = (id) => approvedSort[id] || 'name';
+  const setApprovedSortFor = (id, s) => setApprovedSort(prev => ({ ...prev, [id]: s }));
 
   const todayStr = todayISO();
   // Split events by date: upcoming (today + future) ascending so the next
@@ -17304,8 +17318,19 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                   };
                   // Sort helpers — alphabetical by display name.
                   const sortByName = (a, b) => (((a.vendor||a||{}).name||'').localeCompare(((b.vendor||b||{}).name||''), undefined, { sensitivity: 'base' }));
-                  const approvedSorted = approved.slice().sort(sortByName);
-                  const interestedSorted = pending.slice().sort(sortByName);
+                  const activeApprovedSort = approvedSortFor(ev.id);
+                  const approvedSorted = approved.slice().sort((a, b) => {
+                    if (activeApprovedSort === 'name') return sortByName(a, b);
+                    const ta = a.decided_at ? new Date(a.decided_at).getTime() : 0;
+                    const tb = b.decided_at ? new Date(b.decided_at).getTime() : 0;
+                    return activeApprovedSort === 'decided_desc' ? tb - ta : ta - tb;
+                  });
+                  // Oldest applied first so working top-down = first-come-first-served.
+                  const interestedSorted = pending.slice().sort((a, b) => {
+                    const ta = a.applied_at ? new Date(a.applied_at).getTime() : 0;
+                    const tb = b.applied_at ? new Date(b.applied_at).getTime() : 0;
+                    return ta - tb;
+                  });
                   const noRequestSorted = notApplied.slice().sort(sortByName);
 
                   // Which list maps to cards based on the active tab.
@@ -17328,8 +17353,9 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                     <div style={{ padding: isMobile ? '0 16px 14px' : '0 20px 16px' }}>
                       {/* Tab control */}
                       <div style={{
-                        display: 'flex', gap: '6px',
+                        display: 'flex', gap: '6px', alignItems: 'center',
                         paddingTop: '10px', marginBottom: '12px',
+                        flexWrap: 'wrap',
                       }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'approved'); }}
@@ -17349,6 +17375,27 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         >
                           No request ({noRequestSorted.length})
                         </button>
+                        {activeTab === 'approved' && approvedSorted.length > 1 && (
+                          <select
+                            value={activeApprovedSort}
+                            onChange={(e) => { e.stopPropagation(); setApprovedSortFor(ev.id, e.target.value); }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              marginLeft: 'auto',
+                              fontSize: '0.8rem',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid #d1d5db',
+                              backgroundColor: '#fff',
+                              color: '#374151',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value="name">Sort: A–Z by name</option>
+                            <option value="decided_desc">Sort: Recently approved (top)</option>
+                            <option value="decided_asc">Sort: Recently approved (bottom)</option>
+                          </select>
+                        )}
                       </div>
 
                       {/* Cards or empty state */}
