@@ -3711,7 +3711,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       <h2 style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#C8102E', margin: '0 0 14px' }}>
         Tonight's vendors · {vendors.length} confirmed
       </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
         {vendors.map(v => (
           <VendorCard key={v.id} vendor={v} />
         ))}
@@ -23375,18 +23375,6 @@ function App() {
           onClose={() => setShowReminderModal(false)}
           onHideBell={dismissBellForever}
         />
-      )}
-
-      {/* Staff banner */}
-      {isAdmin && (
-        <div style={{
-          position: 'fixed', bottom: '16px', right: '16px', zIndex: 999,
-          backgroundColor: '#C8102E', color: '#fff', padding: '8px 16px',
-          borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-        }}>
-          Staff Mode - Click calendar days to add events
-        </div>
       )}
 
       <style>{`
