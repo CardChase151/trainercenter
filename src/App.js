@@ -3711,9 +3711,9 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       <h2 style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#C8102E', margin: '0 0 14px' }}>
         Tonight's vendors · {vendors.length} confirmed
       </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: isMobile ? '8px' : '16px' }}>
         {vendors.map(v => (
-          <VendorCard key={v.id} vendor={v} />
+          <VendorCard key={v.id} vendor={v} isMobile={isMobile} />
         ))}
       </div>
     </div>
@@ -7075,7 +7075,7 @@ function BulkDownloadModal({ vendors, event, onClose }) {
 }
 
 // ─── Vendor card for the vendor-day showcase ──────────────
-function VendorCard({ vendor, isOwn }) {
+function VendorCard({ vendor, isOwn, isMobile = false }) {
   const handles = [
     vendor.ig_handle && {
       platform: 'IG',
@@ -7101,37 +7101,47 @@ function VendorCard({ vendor, isOwn }) {
     <div style={{
       backgroundColor: '#fff',
       border: isOwn ? '2px solid #C8102E' : '1px solid #eee',
-      borderRadius: '16px',
-      padding: '24px 20px 20px',
+      borderRadius: isMobile ? '10px' : '16px',
+      padding: isMobile ? '10px 6px 8px' : '24px 20px 20px',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
       textAlign: 'center',
-      gap: '12px',
+      gap: isMobile ? '6px' : '12px',
       transition: 'transform 0.2s, box-shadow 0.2s',
       cursor: 'default',
       position: 'relative',
+      minWidth: 0,
     }}
     onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(0,0,0,0.08)'; }}
     onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
       {isOwn && (
         <div style={{
-          position: 'absolute', top: '8px', right: '8px',
-          fontSize: '0.62rem', fontWeight: '800', letterSpacing: '0.06em',
+          position: 'absolute', top: isMobile ? '4px' : '8px', right: isMobile ? '4px' : '8px',
+          fontSize: isMobile ? '0.55rem' : '0.62rem', fontWeight: '800', letterSpacing: '0.06em',
           color: '#C8102E', backgroundColor: '#fff0f0',
-          padding: '3px 8px', borderRadius: '999px',
+          padding: isMobile ? '2px 6px' : '3px 8px', borderRadius: '999px',
           textTransform: 'uppercase',
         }}>
           You
         </div>
       )}
-      <VendorAvatar vendor={vendor} size={104} />
+      <VendorAvatar vendor={vendor} size={isMobile ? 56 : 104} />
       <div style={{ minWidth: 0, width: '100%' }}>
-        <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: '800', color: '#1a1a1a', lineHeight: 1.2 }}>
+        <h3 style={{
+          margin: '0 0 4px',
+          fontSize: isMobile ? '0.72rem' : '1.05rem',
+          fontWeight: '800',
+          color: '#1a1a1a',
+          lineHeight: 1.2,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
           {vendorDisplayName(vendor)}
         </h3>
-        {vendor.specialty && (
+        {vendor.specialty && !isMobile && (
           <span style={{
             display: 'inline-block', fontSize: '0.7rem', fontWeight: '700',
             color: '#C8102E', backgroundColor: '#fff0f0', padding: '3px 10px',
@@ -7140,7 +7150,7 @@ function VendorCard({ vendor, isOwn }) {
             {vendor.specialty}
           </span>
         )}
-        {(vendor.requested_start_time || vendor.requested_end_time) && (
+        {(vendor.requested_start_time || vendor.requested_end_time) && !isMobile && (
           <div style={{
             marginTop: '6px',
             display: 'inline-flex', alignItems: 'center', gap: '4px',
@@ -7153,7 +7163,7 @@ function VendorCard({ vendor, isOwn }) {
           </div>
         )}
       </div>
-      {vendor.bio && (
+      {vendor.bio && !isMobile && (
         <p style={{
           margin: 0, fontSize: '0.85rem', color: '#555', lineHeight: 1.5,
           fontStyle: 'italic'
@@ -7162,20 +7172,22 @@ function VendorCard({ vendor, isOwn }) {
         </p>
       )}
       {handles.length > 0 && (
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
+        <div style={{ display: 'flex', gap: isMobile ? '4px' : '6px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
           {handles.map(h => (
             <a key={h.platform} href={h.href} target="_blank" rel="noopener noreferrer" style={{
-              fontSize: '0.72rem', fontWeight: '700',
-              padding: '5px 10px', borderRadius: '6px',
+              fontSize: isMobile ? '0.6rem' : '0.72rem', fontWeight: '700',
+              padding: isMobile ? '3px 7px' : '5px 10px', borderRadius: isMobile ? '4px' : '6px',
               color: '#fff', textDecoration: 'none',
               background: h.bg,
               display: 'inline-flex', alignItems: 'center', gap: '4px',
               maxWidth: '100%',
             }}>
               <span>{h.platform}</span>
-              <span style={{ opacity: 0.85, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                @{h.handle.replace(/^@/, '')}
-              </span>
+              {!isMobile && (
+                <span style={{ opacity: 0.85, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  @{h.handle.replace(/^@/, '')}
+                </span>
+              )}
             </a>
           ))}
         </div>
