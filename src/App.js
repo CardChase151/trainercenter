@@ -428,10 +428,15 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Forgot-password sub-state: holds the request status so we can flip the
+  // forgot-phase card from "enter your email" to "check your inbox" without
+  // changing the surrounding phase machine.
+  const [forgotSent, setForgotSent] = useState(false);
 
   const switchMode = (next) => {
     setMode(next);
     setError('');
+    setForgotSent(false);
     // Toggling into signup with no intent yet → show the fork. Toggling
     // back to login → bypass the fork entirely.
     if (next === 'signup' && !intent && allowSignup) {
@@ -439,6 +444,23 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     } else {
       setPhase('form');
     }
+  };
+
+  const requestPasswordReset = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setLoading(true);
+    setError('');
+    const cleanEmail = email.trim().toLowerCase();
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (resetErr) {
+      setError(resetErr.message);
+      return;
+    }
+    setForgotSent(true);
   };
 
   const pickIntent = (chosen) => {
@@ -666,6 +688,63 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     );
   }
 
+  // ─── Phase: forgot password (request reset email) ───────
+  if (phase === 'forgot') {
+    const accent = '#C8102E';
+    return (
+      <div style={overlayStyle} onClick={onClose}>
+        <div style={cardStyle} onClick={e => e.stopPropagation()}>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 4px 0' }}>Reset your password</h2>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px 0' }}>
+            {forgotSent
+              ? "Check your inbox for a reset link. Click it and you'll be able to set a new password."
+              : "Enter the email on your account and we'll send you a link to set a new password."}
+          </p>
+
+          {!forgotSent ? (
+            <form onSubmit={requestPasswordReset}>
+              <input type="email" required placeholder="you@example.com"
+                value={email} onChange={e => setEmail(e.target.value)}
+                autoComplete="email"
+                style={{
+                  width: '100%', padding: '12px 14px', fontSize: '0.95rem',
+                  border: '1px solid #ddd', borderRadius: 10,
+                  marginBottom: 14, boxSizing: 'border-box', outline: 'none',
+                }}
+              />
+              {error && (
+                <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{error}</p>
+              )}
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: 14, backgroundColor: accent, color: '#fff',
+                border: 'none', borderRadius: 10, fontWeight: 800, fontSize: '0.95rem',
+                cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1,
+                fontFamily: 'inherit',
+              }}>{loading ? 'Sending…' : 'Send reset link'}</button>
+            </form>
+          ) : (
+            <div style={{
+              padding: 14, borderRadius: 10,
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+              color: '#166534', fontSize: '0.88rem', fontWeight: 600,
+              marginBottom: 4,
+            }}>
+              Sent to <strong>{email}</strong>. If you don&apos;t see it in a minute, check spam.
+            </div>
+          )}
+
+          <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#666', margin: '18px 0 0 0' }}>
+            <button type="button" onClick={() => { setError(''); setForgotSent(false); setPhase('form'); }} style={{
+              background: 'none', border: 'none', padding: 0,
+              color: '#C8102E', fontWeight: 800, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '0.85rem',
+            }}>Back to log in</button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Phase: email + password form (login OR signup) ─────
   const isSignup = mode === 'signup';
   const accent = '#C8102E';
@@ -729,6 +808,16 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
             }}>{showPw ? 'Hide' : 'Show'}</button>
           </div>
 
+          {!isSignup && (
+            <div style={{ textAlign: 'right', margin: '-6px 0 12px 0' }}>
+              <button type="button" onClick={() => { setError(''); setForgotSent(false); setPhase('forgot'); }} style={{
+                background: 'none', border: 'none', padding: 0,
+                color: '#C8102E', fontWeight: 700, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '0.82rem',
+              }}>Forgot password?</button>
+            </div>
+          )}
+
           {error && (
             <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{error}</p>
           )}
@@ -755,6 +844,185 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
             }}>Wrong path? Pick again</button>
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Reset Password Page ──────────────────────────────────
+// Landing page for the link in the password-reset email. supabase-js
+// auto-consumes the recovery token in the URL hash and fires a
+// PASSWORD_RECOVERY auth event; we wait for either that event or an
+// existing session before unlocking the form. Once the user picks a new
+// password we call updateUser, sign them out so the recovery session
+// can't be reused, and bounce them back to the home page with a fresh
+// login modal.
+function ResetPasswordPage({ isMobile }) {
+  const navigate = useNavigate();
+  const [ready, setReady] = useState(false);
+  const [tokenError, setTokenError] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    // The link puts a recovery token in the URL hash; supabase-js parses
+    // it on load. If we already have a session by the time we mount, we're
+    // good. Otherwise wait briefly for the PASSWORD_RECOVERY event.
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session) {
+        setReady(true);
+      }
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        setReady(true);
+      }
+    });
+    // If neither path resolves quickly, surface a clear error so the user
+    // knows the link is stale instead of staring at a spinner.
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setReady(prev => {
+          if (!prev) setTokenError('This reset link is invalid or expired. Request a new one and try again.');
+          return prev;
+        });
+      }
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setLoading(true);
+    const { error: updateErr } = await supabase.auth.updateUser({ password });
+    if (updateErr) {
+      setError(updateErr.message);
+      setLoading(false);
+      return;
+    }
+    // Sign out the recovery session so the link can't be reused. The user
+    // will log in with their new password on the next screen.
+    await supabase.auth.signOut();
+    setLoading(false);
+    setDone(true);
+    setTimeout(() => navigate('/'), 1800);
+  };
+
+  const accent = '#C8102E';
+  const wrapStyle = {
+    minHeight: '100vh', backgroundColor: '#f7f7f7',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: isMobile ? 20 : 40,
+  };
+  const cardStyle = {
+    backgroundColor: '#fff', borderRadius: 16, padding: 28,
+    width: '100%', maxWidth: 460,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.08)',
+  };
+
+  if (done) {
+    return (
+      <div style={wrapStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px 0' }}>Password updated</h1>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: 0 }}>You can now log in with your new password. Redirecting…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tokenError) {
+    return (
+      <div style={wrapStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px 0' }}>Link expired</h1>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0 0 18px 0' }}>{tokenError}</p>
+          <button onClick={() => navigate('/')} style={{
+            width: '100%', padding: 14, backgroundColor: accent, color: '#fff',
+            border: 'none', borderRadius: 10, fontWeight: 800, fontSize: '0.95rem',
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>Back to home</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div style={wrapStyle}>
+        <div style={cardStyle}>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: 0 }}>Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={wrapStyle}>
+      <div style={cardStyle}>
+        <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px 0' }}>Set a new password</h1>
+        <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 18px 0' }}>Pick something at least 6 characters long.</p>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            <input type={showPw ? 'text' : 'password'} required minLength={6}
+              placeholder="New password"
+              value={password} onChange={e => setPassword(e.target.value)}
+              autoComplete="new-password"
+              style={{
+                width: '100%', padding: '12px 14px', fontSize: '0.95rem',
+                border: '1px solid #ddd', borderRadius: 10,
+                boxSizing: 'border-box', outline: 'none', paddingRight: 68,
+              }}
+            />
+            <button type="button" onClick={() => setShowPw(s => !s)} style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '0.78rem', fontWeight: 700, color: '#666',
+              padding: '6px 10px', borderRadius: 6, fontFamily: 'inherit',
+            }}>{showPw ? 'Hide' : 'Show'}</button>
+          </div>
+          <input type={showPw ? 'text' : 'password'} required minLength={6}
+            placeholder="Confirm new password"
+            value={confirm} onChange={e => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            style={{
+              width: '100%', padding: '12px 14px', fontSize: '0.95rem',
+              border: '1px solid #ddd', borderRadius: 10,
+              marginBottom: 14, boxSizing: 'border-box', outline: 'none',
+            }}
+          />
+
+          {error && (
+            <p style={{ color: '#C8102E', fontSize: '0.85rem', margin: '0 0 12px 0' }}>{error}</p>
+          )}
+
+          <button type="submit" disabled={loading} style={{
+            width: '100%', padding: 14, backgroundColor: accent, color: '#fff',
+            border: 'none', borderRadius: 10, fontWeight: 800, fontSize: '0.95rem',
+            cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1,
+            fontFamily: 'inherit',
+          }}>{loading ? 'Saving…' : 'Save new password'}</button>
+        </form>
       </div>
     </div>
   );
@@ -23322,6 +23590,7 @@ function App() {
       {/* Routes */}
       <Routes>
         <Route path="/" element={<HomePage isMobile={isMobile} authUser={staffUser} />} />
+        <Route path="/reset-password" element={<ResetPasswordPage isMobile={isMobile} />} />
         <Route path="/unsubscribe" element={<UnsubscribePage isMobile={isMobile} />} />
         <Route path="/vendors/respond" element={<VendorRespondPage isMobile={isMobile} />} />
         <Route path="/consultation" element={<ConsultationPage isMobile={isMobile} />} />
