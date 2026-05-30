@@ -809,7 +809,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
           </div>
 
           {!isSignup && (
-            <div style={{ textAlign: 'right', margin: '-6px 0 12px 0' }}>
+            <div style={{ textAlign: 'center', margin: '-6px 0 12px 0' }}>
               <button type="button" onClick={() => { setError(''); setForgotSent(false); setPhase('forgot'); }} style={{
                 background: 'none', border: 'none', padding: 0,
                 color: '#C8102E', fontWeight: 700, cursor: 'pointer',
