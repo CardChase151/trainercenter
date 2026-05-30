@@ -10253,6 +10253,304 @@ function DashboardCard({ icon, title, subtitle, to, accent = '#C8102E', accentBg
 //   3. Logged in, no vendor row → onboarding form (collect full profile)
 //   4. Vendor (with admin) → vendor dashboard + Manage Vendors banner
 //   5. Vendor (no admin) → normal vendor dashboard
+// ─── VendorMandatorySurveyGate ──────────────────────────────────────
+// Renders a full-screen modal overlay if this vendor has a past approved
+// event without a submitted survey. Returns null otherwise.
+// On submit, it inserts the row and calls onCompleted so the dashboard
+// re-checks. The vendor cannot dismiss this without submitting.
+function VendorMandatorySurveyGate({ vendor, isMobile, onCompleted }) {
+  const [pendingEvent, setPendingEvent] = React.useState(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [q1, setQ1] = React.useState(null);
+  const [q2, setQ2] = React.useState(null);
+  const [q2Text, setQ2Text] = React.useState('');
+  const [q3, setQ3] = React.useState(null);
+  const [q3Text, setQ3Text] = React.useState('');
+  const [q4, setQ4] = React.useState(null);
+  const [q5, setQ5] = React.useState(null);
+  const [q5Text, setQ5Text] = React.useState('');
+  const [q6Amount, setQ6Amount] = React.useState('');
+  const [q6Compare, setQ6Compare] = React.useState(null);
+  const [q6CompareText, setQ6CompareText] = React.useState('');
+  const [q7, setQ7] = React.useState('');
+  const [q8, setQ8] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!vendor?.id) return;
+    let cancelled = false;
+    (async () => {
+      const today = todayISO();
+      const [appsRes, surveysRes] = await Promise.all([
+        supabase
+          .from('vendor_applications')
+          .select('event_id, status, event:events(id, title, event_date)')
+          .eq('vendor_id', vendor.id)
+          .eq('status', 'approved'),
+        supabase
+          .from('vendor_event_surveys')
+          .select('event_id')
+          .eq('vendor_id', vendor.id),
+      ]);
+      if (cancelled) return;
+      const surveyed = new Set((surveysRes.data || []).map(r => r.event_id));
+      const pending = (appsRes.data || [])
+        .filter(a => a.event && a.event.event_date < today && !surveyed.has(a.event_id))
+        .map(a => a.event)
+        .sort((a, b) => b.event_date.localeCompare(a.event_date))[0] || null;
+      setPendingEvent(pending);
+      setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [vendor?.id]);
+
+  if (!loaded || !pendingEvent) return null;
+
+  const eventDateLabel = new Date(pendingEvent.event_date + 'T12:00:00')
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const canSubmit =
+    q1 != null && q2 != null && q3 != null && q4 != null && q5 != null &&
+    (q6Amount.trim() !== '' || q6Compare != null);
+
+  async function handleSubmit() {
+    if (!canSubmit || submitting) return;
+    setErrorMsg(null);
+    setSubmitting(true);
+    const amt = q6Amount.trim() === '' ? null : Number(q6Amount.replace(/[$,]/g, ''));
+    const row = {
+      vendor_id: vendor.id,
+      event_id: pendingEvent.id,
+      q1_overall: q1,
+      q2_community: q2,
+      q2_community_text: q2Text.trim() || null,
+      q3_community_vs: q3,
+      q3_community_vs_text: q3Text.trim() || null,
+      q4_vendors: q4,
+      q5_vendors_vs: q5,
+      q5_vendors_vs_text: q5Text.trim() || null,
+      q6_sales_amount: Number.isFinite(amt) ? amt : null,
+      q6_sales_compare: q6Compare,
+      q6_sales_compare_text: q6CompareText.trim() || null,
+      q7_provide: q7.trim() || null,
+      q8_other: q8.trim() || null,
+    };
+    const { error } = await supabase.from('vendor_event_surveys').insert(row);
+    if (error) {
+      setSubmitting(false);
+      setErrorMsg(error.message || 'Could not submit survey. Try again.');
+      return;
+    }
+    setSubmitting(false);
+    onCompleted?.();
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10000,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: isMobile ? '12px' : '40px 24px',
+      overflowY: 'auto',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: '14px',
+        maxWidth: '720px', width: '100%',
+        padding: isMobile ? '20px 18px' : '28px 32px',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+      }}>
+        {/* Mandatory banner */}
+        <div style={{
+          border: '2.5px solid #C8102E', borderRadius: '10px',
+          background: 'linear-gradient(180deg, #fff5f5 0%, #fff 100%)',
+          padding: '14px 18px', marginBottom: '18px',
+        }}>
+          <div style={{ fontSize: '11px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>
+            Action Required
+          </div>
+          <div style={{ fontSize: '18px', fontWeight: 800, color: '#000', marginBottom: '6px', letterSpacing: '-0.3px' }}>
+            We need your feedback.
+          </div>
+          <div style={{ fontSize: '14px', color: '#333', lineHeight: 1.5 }}>
+            Quick mandatory survey for <strong>{pendingEvent.title}</strong> ({eventDateLabel}) before you can use your dashboard. Takes about 2 minutes. Your honest answers shape what we change for the next event.
+          </div>
+          <div style={{ fontSize: '12px', color: '#777', marginTop: '8px', fontStyle: 'italic' }}>
+            Can't close until submitted. We only ask once per event.
+          </div>
+        </div>
+
+        <SurveyScaleQuestion
+          num="Question 1"
+          required
+          label="On a scale of 1–10, how was your overall personal experience?"
+          helper="Just your general feeling — the night as a whole."
+          value={q1} onChange={setQ1}
+          lowLabel="Rough night" highLabel="Loved it"
+        />
+        <SurveyScaleQuestion
+          num="Question 2 · Community"
+          required
+          label="1–10, how much did you enjoy the type of people who came to the event?"
+          helper="The crowd, the energy, the conversations."
+          value={q2} onChange={setQ2}
+          textValue={q2Text} setTextValue={setQ2Text}
+        />
+        <SurveyScaleQuestion
+          num="Question 3 · Community vs other events"
+          required
+          label="1–10, how does our crowd compare to other shows you've vended?"
+          value={q3} onChange={setQ3}
+          textValue={q3Text} setTextValue={setQ3Text}
+          lowLabel="Way worse" highLabel="Way better"
+        />
+        <SurveyScaleQuestion
+          num="Question 4 · Vendor neighbors"
+          required
+          label="1–10, how were your interactions with the other vendors here?"
+          value={q4} onChange={setQ4}
+        />
+        <SurveyScaleQuestion
+          num="Question 5 · Vendor neighbors vs other events"
+          required
+          label="1–10, how does that compare to other events you've worked?"
+          value={q5} onChange={setQ5}
+          textValue={q5Text} setTextValue={setQ5Text}
+        />
+
+        {/* Q6 — A or B */}
+        <div style={surveyCardStyle}>
+          <div style={surveyNumStyle}>Question 6 · Sales · Required</div>
+          <div style={surveyLabelStyle}>Pick one. Both help us, but specifics are always better.</div>
+          <div style={surveyHelperStyle}>Just your revenue from the night, separate from what you bought to restock.</div>
+          <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row', marginTop: '8px' }}>
+            <div style={{ flex: 1, border: '1.5px solid #C8102E', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>Option A · Preferred</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>Total sales / cash earned</div>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>Best signal. Stays private to TC HB owners.</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 700, color: '#333' }}>$</span>
+                <input type="number" step="0.01" min="0" value={q6Amount}
+                  onChange={e => setQ6Amount(e.target.value)}
+                  onFocus={() => setQ6Compare(null)}
+                  placeholder="0.00"
+                  style={{
+                    flex: 1, padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px',
+                    fontSize: '14px', fontFamily: 'inherit',
+                  }} />
+              </div>
+            </div>
+            <div style={{ flex: 1, border: '1.5px solid #C8102E', borderRadius: '8px', padding: '12px 14px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>Option B</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>1–10, how does May 29 compare to other shows for sales?</div>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>If you'd rather not share the dollar figure.</div>
+              <ScaleRow value={q6Compare} onChange={v => { setQ6Compare(v); setQ6Amount(''); }} />
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>Tell us why (optional):</div>
+              <textarea value={q6CompareText} onChange={e => setQ6CompareText(e.target.value)}
+                placeholder="Type here…"
+                rows={2}
+                style={surveyTextareaStyle} />
+            </div>
+          </div>
+        </div>
+
+        {/* Q7 */}
+        <div style={surveyCardStyle}>
+          <div style={surveyNumStyle}>Question 7 · What can we provide</div>
+          <div style={surveyLabelStyle}>We already cover tables, cloths, lights, canopies, food, everything. Anything else we should provide to make your night easier?</div>
+          <div style={surveyHelperStyle}>Hardware, supplies, signage, drinks, anything. Optional but really helpful.</div>
+          <textarea value={q7} onChange={e => setQ7(e.target.value)}
+            placeholder="Type here…" rows={3}
+            style={surveyTextareaStyle} />
+        </div>
+
+        {/* Q8 */}
+        <div style={surveyCardStyle}>
+          <div style={surveyNumStyle}>Question 8 · Anything else</div>
+          <div style={surveyLabelStyle}>Any other feedback for us? Good, bad, or weird — we read everything.</div>
+          <textarea value={q8} onChange={e => setQ8(e.target.value)}
+            placeholder="Type here…" rows={3}
+            style={surveyTextareaStyle} />
+        </div>
+
+        {errorMsg && (
+          <div style={{ color: '#C8102E', fontSize: '13px', marginTop: '10px', fontWeight: 600 }}>
+            {errorMsg}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button onClick={handleSubmit} disabled={!canSubmit || submitting}
+            style={{
+              background: (!canSubmit || submitting) ? '#aaa' : '#C8102E',
+              color: '#fff', padding: '12px 24px', borderRadius: '6px',
+              fontWeight: 800, fontSize: '14px', letterSpacing: '0.5px', textTransform: 'uppercase',
+              border: 'none', cursor: (!canSubmit || submitting) ? 'not-allowed' : 'pointer',
+            }}>
+            {submitting ? 'Submitting…' : 'Submit Survey'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const surveyCardStyle = { background: '#fafafa', border: '1px solid #e5e5e5', borderRadius: '8px', padding: '14px 16px', marginBottom: '12px' };
+const surveyNumStyle = { fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' };
+const surveyLabelStyle = { fontSize: '14px', fontWeight: 700, color: '#000', marginBottom: '4px', lineHeight: 1.35 };
+const surveyHelperStyle = { fontSize: '12px', color: '#666', marginBottom: '6px', lineHeight: 1.4 };
+const surveyTextareaStyle = {
+  width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px',
+  fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', marginTop: '4px',
+};
+
+function ScaleRow({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: '3px', marginTop: '4px' }}>
+      {[1,2,3,4,5,6,7,8,9,10].map(n => {
+        const selected = value === n;
+        return (
+          <button key={n} type="button" onClick={() => onChange(n)}
+            style={{
+              flex: 1, padding: '8px 0',
+              border: selected ? '1.5px solid #C8102E' : '1px solid #ccc',
+              background: selected ? '#C8102E' : '#fff',
+              color: selected ? '#fff' : '#555',
+              borderRadius: '4px', fontWeight: 800, fontSize: '13px',
+              cursor: 'pointer',
+            }}>
+            {n}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SurveyScaleQuestion({ num, label, helper, value, onChange, lowLabel, highLabel, textValue, setTextValue, required }) {
+  return (
+    <div style={surveyCardStyle}>
+      <div style={surveyNumStyle}>{num}{required ? ' · Required' : ''}</div>
+      <div style={surveyLabelStyle}>{label}</div>
+      {helper && <div style={surveyHelperStyle}>{helper}</div>}
+      <ScaleRow value={value} onChange={onChange} />
+      {(lowLabel || highLabel) && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#888', marginTop: '4px', padding: '0 2px' }}>
+          <span>{lowLabel || ''}</span><span>{highLabel || ''}</span>
+        </div>
+      )}
+      {setTextValue && (
+        <>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>Tell us why (optional):</div>
+          <textarea value={textValue} onChange={e => setTextValue(e.target.value)}
+            placeholder="Type here…" rows={2}
+            style={surveyTextareaStyle} />
+        </>
+      )}
+    </div>
+  );
+}
+
 function VendorDashboardPage({ isMobile }) {
   // Single source of truth for auth + roles. No local session/vendor
   // listeners -- they live at App root via AuthContext now, so navigating
@@ -10494,6 +10792,7 @@ function VendorDashboardPage({ isMobile }) {
 
   return (
     <PageWrapper isMobile={isMobile}>
+      <VendorMandatorySurveyGate vendor={vendor} isMobile={isMobile} onCompleted={() => window.location.reload()} />
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
 
