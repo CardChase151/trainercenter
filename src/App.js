@@ -17777,6 +17777,20 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
   const [expanded, setExpanded] = useState(() => new Set()); // event ids expanded
   // When set, opens the post-event survey results modal for { vendor, event }.
   const [resultsTarget, setResultsTarget] = useState(null);
+  // Set of "vendorId:eventId" keys for surveys that have been submitted.
+  // Drives the grey-vs-red color on the Results button on past-event cards.
+  const [submittedSurveys, setSubmittedSurveys] = useState(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('vendor_event_surveys')
+        .select('vendor_id, event_id');
+      if (cancelled) return;
+      setSubmittedSurveys(new Set((data || []).map(r => `${r.vendor_id}:${r.event_id}`)));
+    })();
+    return () => { cancelled = true; };
+  }, [resultsTarget]); // refetch after the modal closes so a just-submitted survey lights up
   // Per-event roster tab: 'approved' | 'interested' | 'no_request'.
   // Stored as an object keyed by event id so each expanded event keeps
   // its own selection independently. Default is 'approved'.
@@ -18018,14 +18032,19 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         }}>Approve</button>
                       );
                     } else if (a.status === 'approved' && isPast) {
+                      const hasSurvey = submittedSurveys.has(`${a.vendor_id}:${ev.id}`);
                       actions = (
                         <button onClick={(e) => { e.stopPropagation(); setResultsTarget({ vendor: v, event: ev }); }} style={{
-                          fontSize: '0.8rem', backgroundColor: '#C8102E', color: '#fff',
+                          fontSize: '0.8rem',
+                          backgroundColor: hasSurvey ? '#C8102E' : '#9ca3af',
+                          color: '#fff',
                           border: 'none', padding: '6px 14px', borderRadius: '6px',
                           fontWeight: '700', cursor: 'pointer',
                           display: 'inline-flex', alignItems: 'center', gap: '5px',
-                        }}>
-                          <BarChart3 size={12} /> Results
+                          opacity: hasSurvey ? 1 : 0.85,
+                        }}
+                        title={hasSurvey ? 'View survey results' : 'No survey submitted yet'}>
+                          <BarChart3 size={12} /> Results{hasSurvey ? '' : ' (none)'}
                         </button>
                       );
                     }
