@@ -17720,7 +17720,7 @@ function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
               {vendor?.name || vendor?.business_name || 'Vendor'}
               {isFirstEvent && (
                 <span style={{
-                  background: '#C8102E', color: '#fff',
+                  background: '#16a34a', color: '#fff',
                   fontSize: '9px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
                   padding: '3px 8px', borderRadius: '4px',
                 }}>
@@ -17814,6 +17814,23 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
   const [expanded, setExpanded] = useState(() => new Set()); // event ids expanded
   // When set, opens the post-event survey results modal for { vendor, event }.
   const [resultsTarget, setResultsTarget] = useState(null);
+  // Map of vendor_id → event_id of their EARLIEST approved event across all
+  // events we have on record. Pairs with vendor.experience_level === 'first_show'
+  // to render the "First Event With Us" badge on that one event only.
+  const firstApprovedEventByVendor = React.useMemo(() => {
+    const map = new Map();
+    for (const ev of events) {
+      for (const a of (ev.vendor_applications || [])) {
+        if (a.status !== 'approved') continue;
+        const prev = map.get(a.vendor_id);
+        if (!prev || ev.event_date < prev.event_date) {
+          map.set(a.vendor_id, { event_id: ev.id, event_date: ev.event_date });
+        }
+      }
+    }
+    return map;
+  }, [events]);
+
   // Set of "vendorId:eventId" keys for surveys that have been submitted.
   // Drives the grey-vs-red color on the Results button on past-event cards.
   const [submittedSurveys, setSubmittedSurveys] = useState(() => new Set());
@@ -18070,19 +18087,34 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                       );
                     } else if (a.status === 'approved' && isPast) {
                       const hasSurvey = submittedSurveys.has(`${a.vendor_id}:${ev.id}`);
+                      const isFirstEventWithUs =
+                        (v.experience_level === 'first_show') &&
+                        firstApprovedEventByVendor.get(a.vendor_id)?.event_id === ev.id;
                       actions = (
-                        <button onClick={(e) => { e.stopPropagation(); setResultsTarget({ vendor: v, event: ev }); }} style={{
-                          fontSize: '0.8rem',
-                          backgroundColor: hasSurvey ? '#C8102E' : '#9ca3af',
-                          color: '#fff',
-                          border: 'none', padding: '6px 14px', borderRadius: '6px',
-                          fontWeight: '700', cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', gap: '5px',
-                          opacity: hasSurvey ? 1 : 0.85,
-                        }}
-                        title={hasSurvey ? 'View survey results' : 'No survey submitted yet'}>
-                          <BarChart3 size={12} /> Results{hasSurvey ? '' : ' (none)'}
-                        </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {isFirstEventWithUs && (
+                            <span style={{
+                              background: '#16a34a', color: '#fff',
+                              fontSize: '9px', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+                              padding: '3px 7px', borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                            }} title="Self-declared first-time vendor on their first event with us">
+                              First Event
+                            </span>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); setResultsTarget({ vendor: v, event: ev }); }} style={{
+                            fontSize: '0.8rem',
+                            backgroundColor: hasSurvey ? '#C8102E' : '#9ca3af',
+                            color: '#fff',
+                            border: 'none', padding: '6px 14px', borderRadius: '6px',
+                            fontWeight: '700', cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            opacity: hasSurvey ? 1 : 0.85,
+                          }}
+                          title={hasSurvey ? 'View survey results' : 'No survey submitted yet'}>
+                            <BarChart3 size={12} /> Results{hasSurvey ? '' : ' (none)'}
+                          </button>
+                        </div>
                       );
                     }
                     const cardVendor = {
