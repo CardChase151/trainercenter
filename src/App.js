@@ -17628,11 +17628,155 @@ function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpen
   );
 }
 
+// ─── VendorSurveyResultsModal ───────────────────────────────────────
+// Shows the post-event survey a vendor submitted (vendor_event_surveys
+// row keyed by vendor_id + event_id). Empty state if they didn't fill
+// it out yet. Used by the past-event roster's "Results" button.
+function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
+  const [loaded, setLoaded] = React.useState(false);
+  const [row, setRow] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!vendor?.id || !event?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('vendor_event_surveys')
+        .select('*')
+        .eq('vendor_id', vendor.id)
+        .eq('event_id', event.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) console.warn('[VendorSurveyResultsModal]', error);
+      setRow(data || null);
+      setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [vendor?.id, event?.id]);
+
+  const eventDateLabel = event?.event_date
+    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    : '';
+
+  const QBlock = ({ num, label, scale, text, scaleSuffix }) => (
+    <div style={{ background: '#fafafa', border: '1px solid #e5e5e5', borderRadius: '8px', padding: '12px 14px', marginBottom: '10px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>{num}</div>
+      <div style={{ fontSize: '13px', fontWeight: 700, color: '#000', lineHeight: 1.35, marginBottom: '6px' }}>{label}</div>
+      {scale != null && (
+        <div style={{ display: 'inline-block', background: '#C8102E', color: '#fff', fontWeight: 800, fontSize: '13px', padding: '4px 10px', borderRadius: '4px' }}>
+          {scale}{scaleSuffix || '/10'}
+        </div>
+      )}
+      {text && (
+        <div style={{ marginTop: '8px', fontSize: '13px', color: '#333', lineHeight: 1.5, padding: '8px 10px', background: '#fff', borderRadius: '4px', border: '1px solid #e5e5e5', whiteSpace: 'pre-wrap' }}>{text}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 10001,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: isMobile ? '12px' : '40px 24px',
+      overflowY: 'auto',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: '14px',
+        maxWidth: '720px', width: '100%',
+        padding: isMobile ? '20px 18px' : '24px 28px',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '12px' }}>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>Post-Event Survey</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#000', letterSpacing: '-0.2px' }}>{vendor?.name || vendor?.business_name || 'Vendor'}</div>
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{event?.title} · {eventDateLabel}</div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: '22px', color: '#888', padding: '2px 6px', lineHeight: 1,
+          }}>×</button>
+        </div>
+
+        {!loaded && (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#888' }}>
+            <Loader2 size={20} className="spin" /> Loading survey…
+          </div>
+        )}
+
+        {loaded && !row && (
+          <div style={{
+            padding: '32px 24px', textAlign: 'center',
+            background: '#fafafa', border: '1px dashed #ccc', borderRadius: '8px',
+            color: '#666', fontSize: '14px', lineHeight: 1.5,
+          }}>
+            <strong style={{ color: '#000', display: 'block', marginBottom: '6px' }}>No survey on file yet.</strong>
+            This vendor hasn't logged into the dashboard since the event, or hasn't submitted the mandatory survey. It will pop for them on next login.
+          </div>
+        )}
+
+        {loaded && row && (
+          <>
+            <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', fontStyle: 'italic' }}>
+              Submitted {new Date(row.submitted_at).toLocaleString()}
+            </div>
+            <QBlock num="Q1 · Overall" label="On a scale of 1–10, how was your overall personal experience?" scale={row.q1_overall} />
+            <QBlock num="Q2 · Community" label="1–10, how much did you enjoy the type of people who came?" scale={row.q2_community} text={row.q2_community_text} />
+            <QBlock num="Q3 · Community vs other events" label="1–10, how does our crowd compare to other shows?" scale={row.q3_community_vs} text={row.q3_community_vs_text} />
+            <QBlock num="Q4 · Vendor neighbors" label="1–10, how were your interactions with other vendors?" scale={row.q4_vendors} />
+            <QBlock num="Q5 · Vendor neighbors vs other events" label="1–10, how does that compare to other events?" scale={row.q5_vendors_vs} text={row.q5_vendors_vs_text} />
+            {/* Q6 — A or B */}
+            <div style={{ background: '#fafafa', border: '1px solid #e5e5e5', borderRadius: '8px', padding: '12px 14px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>Q6 · Sales</div>
+              {row.q6_sales_amount != null && (
+                <>
+                  <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>Total sales / cash earned</div>
+                  <div style={{ display: 'inline-block', background: '#16a34a', color: '#fff', fontWeight: 800, fontSize: '14px', padding: '5px 12px', borderRadius: '4px' }}>
+                    ${Number(row.q6_sales_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </>
+              )}
+              {row.q6_sales_amount == null && row.q6_sales_compare != null && (
+                <>
+                  <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>1–10, sales vs other shows</div>
+                  <div style={{ display: 'inline-block', background: '#C8102E', color: '#fff', fontWeight: 800, fontSize: '13px', padding: '4px 10px', borderRadius: '4px' }}>
+                    {row.q6_sales_compare}/10
+                  </div>
+                  {row.q6_sales_compare_text && (
+                    <div style={{ marginTop: '8px', fontSize: '13px', color: '#333', lineHeight: 1.5, padding: '8px 10px', background: '#fff', borderRadius: '4px', border: '1px solid #e5e5e5', whiteSpace: 'pre-wrap' }}>{row.q6_sales_compare_text}</div>
+                  )}
+                </>
+              )}
+            </div>
+            {(row.q7_provide || row.q8_other) ? null : null}
+            {row.q7_provide && (
+              <QBlock num="Q7 · What can we provide" label="Anything else we should provide to make your night easier?" text={row.q7_provide} />
+            )}
+            {row.q8_other && (
+              <QBlock num="Q8 · Anything else" label="Any other feedback for us?" text={row.q8_other} />
+            )}
+          </>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+          <button onClick={onClose} style={{
+            background: '#1a1a1a', color: '#fff', padding: '8px 18px', borderRadius: '6px',
+            fontWeight: 700, fontSize: '13px', border: 'none', cursor: 'pointer',
+          }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => new Set()); // event ids expanded
+  // When set, opens the post-event survey results modal for { vendor, event }.
+  const [resultsTarget, setResultsTarget] = useState(null);
   // Per-event roster tab: 'approved' | 'interested' | 'no_request'.
   // Stored as an object keyed by event id so each expanded event keeps
   // its own selection independently. Default is 'approved'.
@@ -17864,15 +18008,27 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                     } else if (a.status === 'pending') {
                       decLine = <span style={{ color: '#c2410c' }}>Pending decision</span>;
                     }
-                    const actions = (a.status === 'pending' && !isPast)
-                      ? (
-                        <button onClick={() => onDecide(a.id, 'approved', null)} style={{
+                    let actions = null;
+                    if (a.status === 'pending' && !isPast) {
+                      actions = (
+                        <button onClick={(e) => { e.stopPropagation(); onDecide(a.id, 'approved', null); }} style={{
                           fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
                           border: 'none', padding: '6px 14px', borderRadius: '6px',
                           fontWeight: '700', cursor: 'pointer'
                         }}>Approve</button>
-                      )
-                      : null;
+                      );
+                    } else if (a.status === 'approved' && isPast) {
+                      actions = (
+                        <button onClick={(e) => { e.stopPropagation(); setResultsTarget({ vendor: v, event: ev }); }} style={{
+                          fontSize: '0.8rem', backgroundColor: '#C8102E', color: '#fff',
+                          border: 'none', padding: '6px 14px', borderRadius: '6px',
+                          fontWeight: '700', cursor: 'pointer',
+                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        }}>
+                          <BarChart3 size={12} /> Results
+                        </button>
+                      );
+                    }
                     const cardVendor = {
                       ...v,
                       requested_start_time: a.requested_start_time || v.requested_start_time,
@@ -18028,6 +18184,15 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
           event={cancelling}
           onClose={() => setCancelling(null)}
           onCancelled={() => { setCancelling(null); onChange(); }}
+        />
+      )}
+
+      {resultsTarget && (
+        <VendorSurveyResultsModal
+          vendor={resultsTarget.vendor}
+          event={resultsTarget.event}
+          isMobile={isMobile}
+          onClose={() => setResultsTarget(null)}
         />
       )}
     </div>
