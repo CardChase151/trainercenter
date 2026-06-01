@@ -17635,24 +17635,50 @@ function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpen
 function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
   const [loaded, setLoaded] = React.useState(false);
   const [row, setRow] = React.useState(null);
+  // "First event with us" badge logic:
+  //   - vendor self-declared "first_show" on the application AND
+  //   - this event is the earliest approved event for this vendor.
+  // Otherwise we don't tag it (even if they said first-time, that was
+  // true at the time but only counts on the actual first event).
+  const [isFirstEvent, setIsFirstEvent] = React.useState(false);
 
   React.useEffect(() => {
     if (!vendor?.id || !event?.id) return;
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase
-        .from('vendor_event_surveys')
-        .select('*')
-        .eq('vendor_id', vendor.id)
-        .eq('event_id', event.id)
-        .maybeSingle();
+      const [surveyRes, firstAppRes, vendorRes] = await Promise.all([
+        supabase
+          .from('vendor_event_surveys')
+          .select('*')
+          .eq('vendor_id', vendor.id)
+          .eq('event_id', event.id)
+          .maybeSingle(),
+        supabase
+          .from('vendor_applications')
+          .select('event_id, event:events(id, event_date)')
+          .eq('vendor_id', vendor.id)
+          .eq('status', 'approved'),
+        // experience_level may not be on the vendor obj passed in
+        supabase
+          .from('vendors')
+          .select('experience_level')
+          .eq('id', vendor.id)
+          .maybeSingle(),
+      ]);
       if (cancelled) return;
-      if (error) console.warn('[VendorSurveyResultsModal]', error);
-      setRow(data || null);
+      if (surveyRes.error) console.warn('[VendorSurveyResultsModal]', surveyRes.error);
+      setRow(surveyRes.data || null);
+
+      const declaredFirstTime = (vendorRes.data?.experience_level || vendor.experience_level) === 'first_show';
+      const apps = (firstAppRes.data || []).filter(a => a.event && a.event.event_date);
+      apps.sort((a, b) => a.event.event_date.localeCompare(b.event.event_date));
+      const earliestEventId = apps[0]?.event?.id;
+      setIsFirstEvent(declaredFirstTime && earliestEventId === event.id);
+
       setLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, [vendor?.id, event?.id]);
+  }, [vendor?.id, event?.id, vendor?.experience_level]);
 
   const eventDateLabel = event?.event_date
     ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -17690,7 +17716,18 @@ function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '12px' }}>
           <div>
             <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '2px' }}>Post-Event Survey</div>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#000', letterSpacing: '-0.2px' }}>{vendor?.name || vendor?.business_name || 'Vendor'}</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#000', letterSpacing: '-0.2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {vendor?.name || vendor?.business_name || 'Vendor'}
+              {isFirstEvent && (
+                <span style={{
+                  background: '#C8102E', color: '#fff',
+                  fontSize: '9px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  padding: '3px 8px', borderRadius: '4px',
+                }}>
+                  First Event With Us
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{event?.title} · {eventDateLabel}</div>
           </div>
           <button onClick={onClose} style={{
