@@ -1,5 +1,5 @@
 {
-  "next": 10,
+  "next": 11,
   "total": 12,
   "blogs": [
     {
@@ -60,7 +60,7 @@
       "num": 10,
       "file": "10-parents-guide.md",
       "title": "Parents: How to Support Your Kid's Pokemon Hobby",
-      "status": "queued"
+      "status": "published"
     },
     {
       "num": 11,

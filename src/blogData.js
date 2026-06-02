@@ -250,7 +250,7 @@ const BLOG_DATA = [
   {
     slug: 'parents-guide',
     title: 'Parents: How to Support Your Kid\'s Pokemon Hobby',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'Your kid is obsessed with Pokemon cards. They talk about pull rates, trade values, and something called an "illustration rare." You have no idea what any of that means. That is fine. You do not need to become an expert to be a great support system.' },
       { type: 'h2', text: 'You Do Not Have to Be Into It' },
