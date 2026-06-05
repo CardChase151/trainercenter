@@ -10831,6 +10831,45 @@ function VendorDashboardPage({ isMobile }) {
           </div>
         )}
 
+        {/* ── Primary CTA: Browse & Apply to Dates ────────────
+            The whole point of the dashboard for an approved partner is to
+            pick the Vendor Days they want. Make it the loud first thing,
+            above the journey strip. */}
+        {isApproved && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <button
+              onClick={() => navigate('/vendors/events')}
+              className="tap-row"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                backgroundColor: '#C8102E', border: 'none', borderRadius: '14px',
+                padding: isMobile ? '18px 18px' : '22px 24px',
+                boxShadow: '0 6px 18px rgba(200,16,46,0.25)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '50%',
+                  backgroundColor: 'rgba(255,255,255,0.18)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <CalendarIcon size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: isMobile ? '1.05rem' : '1.15rem', fontWeight: 900, color: '#fff', marginBottom: '2px' }}>
+                    Browse &amp; Apply to Dates
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)' }}>
+                    Pick the Vendor Days you want to vend.
+                  </div>
+                </div>
+              </div>
+              <ArrowRight size={22} color="#fff" />
+            </button>
+          </div>
+        )}
+
         {/* ── Partnership journey strip ───────────────────────
             5-step lifecycle visualizer. Step 1 reflects the vendor's
             current partner status; steps 2-5 are the recurring rhythm
@@ -10907,21 +10946,6 @@ function VendorDashboardPage({ isMobile }) {
               subtitle={`${todayEvent.title || 'Vendor Day'} · ${new Date(todayEvent.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
               icon={<CheckCircle2 size={18} />}
               onClick={() => setCheckingInEventId(todayEvent.id)}
-              isMobile={isMobile}
-            />
-          </div>
-        )}
-
-        {/* View events & apply — opens the events sub-page with apply flow. */}
-        {isApproved && (
-          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
-            <DashboardActionRow
-              accentBg="#fff0f0"
-              accentFg="#C8102E"
-              title="View events & apply"
-              subtitle="See upcoming Vendor Days, apply, manage your applications"
-              icon={<CalendarIcon size={18} />}
-              onClick={() => navigate('/vendors/events')}
               isMobile={isMobile}
             />
           </div>
@@ -11175,16 +11199,17 @@ function VendorUploadPickerPage({ isMobile }) {
 // event cycle. Pending or suspended vendors see steps 2-5 dimmed.
 function PartnershipJourney({ vendorStatus, isMobile }) {
   const STEPS = [
-    { num: 1, label: 'Partner status', desc: 'Apply to partner with Trainer Center HB.' },
-    { num: 2, label: 'Pick events', desc: 'Apply for the Vendor Days you want to be at.' },
-    { num: 3, label: 'Promote before', desc: 'DM the next event in line to 3-10 people each cycle, plus 1 IG post tagging Trainer Center HB.' },
-    { num: 4, label: 'Capture during', desc: 'Take photos and a short clip from your table.' },
-    { num: 5, label: 'Upload after', desc: 'Post freely on your IG and tag Trainer Center HB as often as you like. Then upload here so it shows on our public Vendors page.' },
+    { num: 1, label: 'Partner status', short: 'Status', desc: 'Apply to partner with Trainer Center HB.' },
+    { num: 2, label: 'Pick events', short: 'Events', desc: 'Apply for the Vendor Days you want to be at.' },
+    { num: 3, label: 'Promote before', short: 'Promote', desc: 'DM the next event in line to 3-10 people each cycle, plus 1 IG post tagging Trainer Center HB.' },
+    { num: 4, label: 'Capture during', short: 'Capture', desc: 'Take photos and a short clip from your table.' },
+    { num: 5, label: 'Upload after', short: 'Upload', desc: 'Post freely on your IG and tag Trainer Center HB as often as you like. Then upload here so it shows on our public Vendors page.' },
   ];
   const isApproved = vendorStatus === 'approved';
   const isPending = vendorStatus === 'pending';
   const isSuspended = vendorStatus === 'suspended';
   const [showWhy, setShowWhy] = useState(false);
+  const [openStep, setOpenStep] = useState(null); // mobile: tapped step reveals its detail
 
   // Step 1 takes the partner-status color. Steps 2-5 are dimmed unless approved.
   const step1Color = isApproved ? '#16a34a' : isSuspended ? '#dc2626' : '#c2410c';
@@ -11203,6 +11228,112 @@ function PartnershipJourney({ vendorStatus, isMobile }) {
       opacity: dimmed ? 0.55 : 1,
     };
   };
+
+  // ── Mobile: condensed horizontal strip. The 5 full step-cards stack into a
+  //    tall tower on phones, so collapse to a compact numbered row; tap a step
+  //    to reveal its detail below. Desktop keeps the fuller layout.
+  if (isMobile) {
+    const activeStep = STEPS.find(x => x.num === openStep);
+    return (
+      <div style={{ maxWidth: '1100px', margin: '0 auto 20px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '10px', marginBottom: '10px',
+        }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666' }}>
+            Partnership steps
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowWhy(s => !s)}
+            aria-label="Why this matters"
+            className="icon-tap"
+            style={{
+              width: '24px', height: '24px', borderRadius: '50%',
+              backgroundColor: showWhy ? '#1a1a1a' : '#fff',
+              color: showWhy ? '#fff' : '#666',
+              border: '1px solid #ddd', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.9rem', fontWeight: 900, fontFamily: 'inherit', flexShrink: 0,
+            }}
+            title="Why this matters"
+          >
+            i
+          </button>
+        </div>
+
+        {showWhy && (
+          <div style={{
+            backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '12px',
+            padding: '14px 16px', marginBottom: '10px',
+            fontSize: '0.85rem', color: '#333', lineHeight: 1.6,
+          }}>
+            <p style={{ margin: '0 0 8px' }}>
+              <strong>Why this matters.</strong> Traffic from our site gets funneled to promote you over time. The IG algo rewards behind-the-scenes DMs more than public likes, so we ask for at least <strong>3-10 DMs per month</strong> for the next event.
+            </p>
+            <p style={{ margin: 0 }}>
+              Tagging us and uploading after places you on{' '}
+              <Link to="/vendors" style={{ color: '#C8102E', fontWeight: '700' }}>our public Vendors page</Link>.
+            </p>
+          </div>
+        )}
+
+        <div style={{
+          display: 'flex', gap: '2px', alignItems: 'flex-start',
+          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+          padding: '12px 6px',
+        }}>
+          {STEPS.map((s, i) => {
+            const isFirst = i === 0;
+            const dimmed = !isFirst && !isApproved;
+            const circleColor = isFirst ? step1Color : dimmed ? '#e5e7eb' : '#1a1a1a';
+            const isOpen = openStep === s.num;
+            return (
+              <button
+                key={s.num}
+                type="button"
+                onClick={() => setOpenStep(isOpen ? null : s.num)}
+                style={{
+                  flex: 1, minWidth: 0, padding: '4px 2px',
+                  background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
+                  opacity: dimmed ? 0.6 : 1,
+                }}
+              >
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  backgroundColor: circleColor, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 800, flexShrink: 0,
+                  outline: isOpen ? `2px solid ${circleColor}` : 'none', outlineOffset: '2px',
+                }}>
+                  {s.num}
+                </div>
+                <div style={{ fontSize: '0.6rem', fontWeight: 700, color: dimmed ? '#9ca3af' : '#444', textAlign: 'center', lineHeight: 1.2 }}>
+                  {s.short}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {activeStep && (
+          <div style={{
+            marginTop: '8px', backgroundColor: '#fafafa', border: '1px solid #eee',
+            borderRadius: '10px', padding: '10px 14px',
+            fontSize: '0.82rem', color: '#444', lineHeight: 1.5,
+          }}>
+            {openStep === 1 ? (
+              <><strong style={{ color: step1Color }}>{step1Pill}.</strong>{' '}
+                {isPending ? 'Awaiting Trainer Center HB review.' : isSuspended ? 'Reach out to Chef to re-activate.' : 'You are an approved partner.'}</>
+            ) : (
+              <><strong>{activeStep.label}.</strong> {activeStep.desc}</>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto 24px' }}>
@@ -14362,7 +14493,7 @@ function EmailProgressDots({ emails = [], eventId, eventLabel }) {
   );
 }
 
-function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent, onOpenNotes, onRatingChange }) {
+function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, isMobile, emails, eventId, eventLabel, nextEvent, onOpenNotes, onRatingChange, onOpenFit }) {
   const ratingMeta = STAFF_RATING_BY_KEY[vendor.staff_experience_rating];
   const ratingColor = ratingMeta?.color || '#d1d5db';
   const ratingBg = ratingMeta ? `${ratingMeta.color}15` : '#fff';
@@ -14423,6 +14554,14 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
             {statusBadge}
+            {onOpenFit && (
+              <FitStatusBadge
+                status={v.staff_fit_status}
+                reason={v.staff_fit_reason}
+                editable
+                onOpen={() => onOpenFit(vendor)}
+              />
+            )}
           </div>
         </div>
 
@@ -14534,6 +14673,230 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
             <EmailProgressDots emails={emails} eventId={eventId} eventLabel={eventLabel} />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Fit-status badge (Favorite Vendor / Not a Fit) ───────
+// Inline badge shown on staff vendor cards. Click to open FitStatusModal.
+// If status is unset and `editable` is true, renders a small "+ Mark fit"
+// affordance instead so admins can set it from scratch.
+const FIT_STATUS_META = {
+  favorite: { label: 'Favorite Vendor', color: '#16a34a', bg: '#dcfce7', glyph: '★' },
+  not_fit:  { label: 'Not a Fit',       color: '#dc2626', bg: '#fee2e2', glyph: '✕' },
+};
+
+function FitStatusBadge({ status, reason, onOpen, editable }) {
+  if (!status) {
+    if (!editable) return null;
+    return (
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onOpen && onOpen(); }}
+        title="Mark this vendor as Favorite or Not a Fit"
+        style={{
+          fontSize: '0.7rem', fontWeight: 700,
+          color: '#6b7280', backgroundColor: '#fff',
+          border: '1px dashed #d1d5db', padding: '3px 8px',
+          borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >+ Mark fit</button>
+    );
+  }
+  const m = FIT_STATUS_META[status];
+  if (!m) return null;
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onOpen && onOpen(); }}
+      title={reason ? `Tap to view WHY${editable ? ' or edit' : ''}` : 'Tap for details'}
+      style={{
+        fontSize: '0.72rem', fontWeight: 800,
+        color: m.color, backgroundColor: m.bg,
+        border: `1px solid ${m.color}55`,
+        padding: '3px 9px', borderRadius: '4px',
+        cursor: 'pointer', fontFamily: 'inherit',
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        letterSpacing: '0.2px',
+      }}
+    >
+      <span>{m.glyph}</span>
+      <span>{m.label}</span>
+    </button>
+  );
+}
+
+// ─── Fit-status modal (view + edit) ────────────────────────
+// Two phases: 'view' shows the WHY read-only; 'edit' shows the form.
+// Confirmation prompt fires when an admin clicks Edit on an existing entry
+// so they don't accidentally overwrite a teammate's note.
+function FitStatusModal({ vendor, onClose, onSave }) {
+  const hasExisting = !!vendor.staff_fit_status;
+  const [phase, setPhase] = useState(hasExisting ? 'view' : 'edit');
+  const [status, setStatus] = useState(vendor.staff_fit_status || '');
+  const [reason, setReason] = useState(vendor.staff_fit_reason || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const beginEdit = () => {
+    if (hasExisting) {
+      const ok = window.confirm(
+        'Are you sure you want to edit this? You will overwrite the current Fit status and the WHY note.'
+      );
+      if (!ok) return;
+    }
+    setPhase('edit');
+  };
+
+  const clearStatus = () => {
+    const ok = window.confirm(
+      'Clear the Fit status entirely? The badge will disappear from this vendor.'
+    );
+    if (!ok) return;
+    handleSave(null, '');
+  };
+
+  const handleSave = async (forceStatus, forceReason) => {
+    setSaving(true);
+    setError('');
+    const nextStatus = forceStatus === undefined ? (status || null) : forceStatus;
+    const nextReason = forceReason === undefined ? (reason.trim() || null) : (forceReason || null);
+    if (nextStatus && !nextReason) {
+      setError('Add a short WHY so future staff know the reasoning.');
+      setSaving(false);
+      return;
+    }
+    const ok = await onSave({ status: nextStatus, reason: nextReason });
+    setSaving(false);
+    if (ok) onClose();
+    else setError('Could not save. Try again.');
+  };
+
+  const overlay = {
+    position: 'fixed', inset: 0, zIndex: 10000,
+    background: 'rgba(0,0,0,0.55)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '24px',
+  };
+  const card = {
+    background: '#fff', borderRadius: 14, padding: 24,
+    width: '100%', maxWidth: 460,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+  };
+
+  const meta = FIT_STATUS_META[vendor.staff_fit_status];
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
+              Fit status · {vendor.name || '(no name)'}
+            </div>
+            <h3 style={{ margin: '4px 0 0', fontSize: '1.05rem', fontWeight: 800, color: '#1a1a1a' }}>
+              {phase === 'edit' ? 'Set fit status' : (meta?.label || 'Unset')}
+            </h3>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer', fontSize: 22,
+            color: '#9ca3af', padding: 0, lineHeight: 1,
+          }}>×</button>
+        </div>
+
+        {phase === 'view' && (
+          <>
+            <div style={{
+              padding: 14, borderRadius: 8,
+              background: meta ? `${meta.color}10` : '#f4f4f5',
+              border: meta ? `1px solid ${meta.color}33` : '1px solid #e4e4e7',
+              color: '#1a1a1a', fontSize: '0.9rem',
+              whiteSpace: 'pre-wrap',
+              minHeight: 60,
+            }}>
+              {vendor.staff_fit_reason || <span style={{ color: '#888', fontStyle: 'italic' }}>No WHY recorded.</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button onClick={clearStatus} style={{
+                fontSize: '0.82rem', fontWeight: 700,
+                background: '#fff', color: '#6b7280',
+                border: '1px solid #d1d5db', padding: '8px 14px',
+                borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+              }}>Clear status</button>
+              <button onClick={beginEdit} style={{
+                fontSize: '0.82rem', fontWeight: 800,
+                background: '#1a1a1a', color: '#fff',
+                border: 'none', padding: '8px 14px',
+                borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+              }}>Edit</button>
+            </div>
+          </>
+        )}
+
+        {phase === 'edit' && (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {['favorite', 'not_fit'].map(s => {
+                const m = FIT_STATUS_META[s];
+                const on = status === s;
+                return (
+                  <button key={s} type="button" onClick={() => setStatus(s)} style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 8,
+                    background: on ? m.bg : '#fff',
+                    color: on ? m.color : '#6b7280',
+                    border: `1px solid ${on ? m.color : '#d1d5db'}`,
+                    fontSize: '0.85rem', fontWeight: 800,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}>{m.glyph} {m.label}</button>
+                );
+              })}
+            </div>
+            <label style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Why
+            </label>
+            <textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="A sentence or two — future staff will read this."
+              rows={4}
+              style={{
+                width: '100%', marginTop: 6, padding: '10px 12px',
+                fontSize: '0.9rem', fontFamily: 'inherit',
+                border: '1px solid #d1d5db', borderRadius: 8,
+                resize: 'vertical', boxSizing: 'border-box', outline: 'none',
+              }}
+            />
+            {error && (
+              <p style={{ color: '#dc2626', fontSize: '0.82rem', margin: '8px 0 0' }}>{error}</p>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => hasExisting ? setPhase('view') : onClose()}
+                disabled={saving}
+                style={{
+                  fontSize: '0.82rem', fontWeight: 700,
+                  background: '#fff', color: '#6b7280',
+                  border: '1px solid #d1d5db', padding: '8px 14px',
+                  borderRadius: 8, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit',
+                }}
+              >Cancel</button>
+              <button
+                onClick={() => handleSave()}
+                disabled={saving || !status}
+                style={{
+                  fontSize: '0.82rem', fontWeight: 800,
+                  background: status ? '#C8102E' : '#e5e7eb',
+                  color: status ? '#fff' : '#9ca3af',
+                  border: 'none', padding: '8px 14px',
+                  borderRadius: 8,
+                  cursor: saving || !status ? 'default' : 'pointer',
+                  opacity: saving ? 0.7 : 1, fontFamily: 'inherit',
+                }}
+              >{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -16839,6 +17202,8 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [refreshKey, setRefreshKey] = useState(0);
   // Vendor detail modal — clicking any vendor card opens this with full info.
   const [detailVendor, setDetailVendor] = useState(null);
+  // Fit-status modal — clicking the Favorite/Not-a-Fit badge on any card.
+  const [fitVendor, setFitVendor] = useState(null);
   // Comms broadcast modal — Chef-composed email blast to vendor audiences.
 
   const isAdmin = !!staff?.isAdmin;
@@ -16965,6 +17330,31 @@ function StaffVendorsPage({ isMobile, staff }) {
         ? { ...p, vendor: { ...p.vendor, staff_experience_rating: prevValue } }
         : p));
     }
+  };
+
+  // Save Favorite Vendor / Not a Fit. Returns true on success so the modal
+  // can close itself. Optimistic local update + revert on failure, same
+  // shape as setVendorRating.
+  const setVendorFit = async (vendorId, { status, reason }) => {
+    const prev = allVendors.find(v => v.id === vendorId);
+    const prevStatus = prev?.staff_fit_status ?? null;
+    const prevReason = prev?.staff_fit_reason ?? null;
+    setAllVendors(p => p.map(v => v.id === vendorId ? { ...v, staff_fit_status: status, staff_fit_reason: reason } : v));
+    setPending(p => p.map(a => a.vendor && a.vendor.id === vendorId
+      ? { ...a, vendor: { ...a.vendor, staff_fit_status: status, staff_fit_reason: reason } }
+      : a));
+    const { error } = await supabase
+      .from('vendors')
+      .update({ staff_fit_status: status, staff_fit_reason: reason })
+      .eq('id', vendorId);
+    if (error) {
+      setAllVendors(p => p.map(v => v.id === vendorId ? { ...v, staff_fit_status: prevStatus, staff_fit_reason: prevReason } : v));
+      setPending(p => p.map(a => a.vendor && a.vendor.id === vendorId
+        ? { ...a, vendor: { ...a.vendor, staff_fit_status: prevStatus, staff_fit_reason: prevReason } }
+        : a));
+      return false;
+    }
+    return true;
   };
 
   const setVendorStatus = async (vendorId, status) => {
@@ -17119,20 +17509,21 @@ function StaffVendorsPage({ isMobile, staff }) {
               onOpenDetail={setDetailVendor}
               onOpenNotes={setNotesVendor}
               onRatingChange={setVendorRating}
+              onOpenFit={setFitVendor}
               isMobile={isMobile}
             />
           )}
 
           {!loading && tab === 'pending' && (
-            <PendingApplicationsList items={pending} onDecide={decideApplication} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} isMobile={isMobile} />
+            <PendingApplicationsList items={pending} onDecide={decideApplication} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} onOpenFit={setFitVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} vendorNextEvent={vendorNextEvent} onDecide={decideApplication} onOpenDetail={setDetailVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} vendorNextEvent={vendorNextEvent} onDecide={decideApplication} onOpenDetail={setDetailVendor} onOpenFit={setFitVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
-            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} isMobile={isMobile} />
+            <AllVendorsList vendors={allVendors} profilesById={profilesById} emailLog={emailLog} events={events} vendorNextEvent={vendorNextEvent} onStatusChange={setVendorStatus} onOpenDetail={setDetailVendor} onOpenNotes={setNotesVendor} onRatingChange={setVendorRating} onOpenFit={setFitVendor} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'members' && (
@@ -17155,6 +17546,14 @@ function StaffVendorsPage({ isMobile, staff }) {
           currentUserId={staff?.id}
           profilesById={profilesById}
           onClose={() => setNotesVendor(null)}
+        />
+      )}
+
+      {fitVendor && (
+        <FitStatusModal
+          vendor={fitVendor}
+          onClose={() => setFitVendor(null)}
+          onSave={({ status, reason }) => setVendorFit(fitVendor.id, { status, reason })}
         />
       )}
 
@@ -17309,7 +17708,7 @@ const voteTH = { textAlign: 'left', padding: '6px 8px', fontSize: '0.75rem', fon
 const voteTD = { padding: '8px', verticalAlign: 'top' };
 
 // ─── Pending applications tab ─────────────────────────────
-function PendingApplicationsList({ items, onDecide, onOpenNotes, onRatingChange, isMobile }) {
+function PendingApplicationsList({ items, onDecide, onOpenNotes, onRatingChange, onOpenFit, isMobile }) {
   const [search, setSearch] = useState('');
   if (items.length === 0) {
     return (
@@ -17349,7 +17748,7 @@ function PendingApplicationsList({ items, onDecide, onOpenNotes, onRatingChange,
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map(app => (
-            <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} onOpenNotes={onOpenNotes} onRatingChange={onRatingChange} isMobile={isMobile} />
+            <PendingApplicationCard key={app.id} app={app} onDecide={onDecide} onOpenNotes={onOpenNotes} onRatingChange={onRatingChange} onOpenFit={onOpenFit} isMobile={isMobile} />
           ))}
         </div>
       )}
@@ -17357,7 +17756,7 @@ function PendingApplicationsList({ items, onDecide, onOpenNotes, onRatingChange,
   );
 }
 
-function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, isMobile }) {
+function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, onOpenFit, isMobile }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const v = app.vendor || {};
@@ -17564,7 +17963,7 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, is
 // signup-track drip dots (T-21 → T-1) line up automatically — Chef
 // can see who's been emailed about the open slot and who's been
 // silent. Collapsed by default because the list can be long.
-function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpenDetail, isMobile }) {
+function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpenDetail, onOpenFit, isMobile }) {
   const [open, setOpen] = useState(false);
   if (notApplied.length === 0) return null;
   const sorted = notApplied.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
@@ -17609,6 +18008,7 @@ function NotAppliedRoster({ event, notApplied, emailLog, vendorNextEvent, onOpen
               eventLabel={null}
               nextEvent={vendorNextEvent[v.id] || null}
               onClick={() => onOpenDetail && onOpenDetail(v)}
+              onOpenFit={onOpenFit}
               statusBadge={
                 <span style={{
                   fontSize: '0.65rem', fontWeight: '800',
@@ -17807,7 +18207,7 @@ function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
   );
 }
 
-function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onOpenFit, onChange, staff, isMobile }) {
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
   const [search, setSearch] = useState('');
@@ -18133,6 +18533,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         eventLabel={null}
                         nextEvent={vendorNextEvent[a.vendor_id] || null}
                         onClick={() => onOpenDetail && onOpenDetail(v)}
+                        onOpenFit={onOpenFit}
                         statusBadge={appBadge}
                         decisionLine={decLine}
                         actions={actions}
@@ -18241,6 +18642,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                                   eventLabel={null}
                                   nextEvent={vendorNextEvent[v.id] || null}
                                   onClick={() => onOpenDetail && onOpenDetail(v)}
+                                  onOpenFit={onOpenFit}
                                   statusBadge={
                                     <span style={{
                                       fontSize: '0.65rem', fontWeight: '800',
@@ -18637,7 +19039,7 @@ function ApplicationStatusBadge({ status }) {
 // ─── Newly applying vendors (vendors.status === 'pending') ─
 // Brand-new signups awaiting partner approval. Distinct from "Pending requests"
 // which are already-approved vendors applying to a specific event date.
-function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, isMobile }) {
+function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, onOpenFit, isMobile }) {
   const [search, setSearch] = useState('');
   const fmtDate = (iso) => {
     if (!iso) return '';
@@ -18677,6 +19079,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpe
           onClick={() => onOpenDetail && onOpenDetail(v)}
           onOpenNotes={onOpenNotes}
           onRatingChange={onRatingChange}
+          onOpenFit={onOpenFit}
           statusBadge={
             <span style={{ fontSize: '0.7rem', color: '#92400e', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '999px', fontWeight: '700' }}>
               Applied {fmtDate(v.created_at)}
@@ -18709,7 +19112,7 @@ function NewlyApplyingVendorsList({ vendors, onStatusChange, onOpenDetail, onOpe
   );
 }
 
-function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, isMobile }) {
+function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], vendorNextEvent = {}, onStatusChange, onOpenDetail, onOpenNotes, onRatingChange, onOpenFit, isMobile }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | approved | pending | suspended
 
@@ -18834,6 +19237,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
             onClick={() => onOpenDetail && onOpenDetail(v)}
             onOpenNotes={onOpenNotes}
             onRatingChange={onRatingChange}
+            onOpenFit={onOpenFit}
             statusBadge={badgeFor(v.status)}
             decisionLine={decisionFor(v)}
             actions={
