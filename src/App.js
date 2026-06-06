@@ -11046,7 +11046,11 @@ function VendorEventsListPage({ isMobile }) {
   }
   if (!vendor) return null;
 
-  const visibleEvents = events.filter(ev => !(ev.event_date < todayISO() && !applications[ev.id]));
+  // Only show today + upcoming, non-cancelled events. Past dates and cancelled
+  // Vendor Days drop off the vendor's dashboard entirely (post-event content
+  // upload lives on its own /vendors/upload route, so this doesn't affect it).
+  const vToday = todayISO();
+  const visibleEvents = events.filter(ev => !ev.cancelled && ev.event_date >= vToday);
 
   return (
     <PageWrapper isMobile={isMobile}>
@@ -17248,11 +17252,14 @@ function StaffVendorsPage({ isMobile, staff }) {
       if (visitsRes.error) console.error('[StaffVendors] visits', visitsRes.error);
       if (profRes.error) console.error('[StaffVendors] profiles', profRes.error);
       if (emailRes.error) console.error('[StaffVendors] email_log', emailRes.error);
-      // Drop pending applications whose event was cancelled (e.g. a moved
-      // Vendor Day). They stay in the DB for history, but a cancelled date
-      // is not something staff needs to review, so it should not pad the
-      // pending queue/count. Live events (incl. the rescheduled one) stay.
-      setPending((pendRes.data || []).filter(a => !a.event?.cancelled));
+      // Drop pending applications whose event is dead for review purposes:
+      // cancelled (e.g. a moved Vendor Day) OR already past. They stay in the
+      // DB for history, but neither needs a staff decision, so they should not
+      // pad the pending queue/count. Only today + upcoming live events remain.
+      const pendingToday = todayISO();
+      setPending((pendRes.data || []).filter(a =>
+        a.event && !a.event.cancelled && a.event.event_date >= pendingToday
+      ));
       setAllVendors(vendRes.data || []);
       setEvents(evRes.data || []);
       // Group email log by vendor_id so cards can grab their slice with one lookup.
