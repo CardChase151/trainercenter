@@ -17248,7 +17248,11 @@ function StaffVendorsPage({ isMobile, staff }) {
       if (visitsRes.error) console.error('[StaffVendors] visits', visitsRes.error);
       if (profRes.error) console.error('[StaffVendors] profiles', profRes.error);
       if (emailRes.error) console.error('[StaffVendors] email_log', emailRes.error);
-      setPending(pendRes.data || []);
+      // Drop pending applications whose event was cancelled (e.g. a moved
+      // Vendor Day). They stay in the DB for history, but a cancelled date
+      // is not something staff needs to review, so it should not pad the
+      // pending queue/count. Live events (incl. the rescheduled one) stay.
+      setPending((pendRes.data || []).filter(a => !a.event?.cancelled));
       setAllVendors(vendRes.data || []);
       setEvents(evRes.data || []);
       // Group email log by vendor_id so cards can grab their slice with one lookup.
