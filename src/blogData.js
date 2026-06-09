@@ -283,7 +283,7 @@ const BLOG_DATA = [
   {
     slug: 'pokemon-that-hold-value',
     title: 'Top Pokemon That Hold Value Over Time',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'Not every Pokemon card is an investment. Most cards from any given set are worth less than the pack they came in. But certain Pokemon have proven over decades that they hold value regardless of what the market does. Here are the ones that consistently stay at the top.' },
       { type: 'h2', text: 'Charizard' },
