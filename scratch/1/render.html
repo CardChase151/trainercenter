@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@font-face{ font-family:'Poke'; src:url('../PokeText.ttf'); }
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:#000;overflow:hidden;}
+#stage{position:relative;width:1080px;height:1920px;overflow:hidden;
+  background:var(--stage-bg, radial-gradient(120% 90% at 50% 32%, #15235c 0%, #0a1230 42%, #05070f 100%));
+  font-family:'Poke',monospace;}
+
+/* Prof. Oak's lab — intro establishing shot */
+#lab{position:absolute;inset:0;z-index:1;background:url('lab_disp.jpg') center/cover;
+  will-change:transform,opacity;}
+#lab:after{content:"";position:absolute;inset:0;
+  background:var(--lab-tint, radial-gradient(120% 90% at 50% 30%, rgba(21,35,92,.18), rgba(5,7,15,.62)));}
+
+/* perspective floor grid */
+#grid{position:absolute;left:-20%;right:-20%;bottom:0;height:62%;width:140%;
+  background-image:
+    linear-gradient(to right, var(--grid-col, rgba(96,150,255,.22)) 2px, transparent 2px),
+    linear-gradient(to bottom, var(--grid-col, rgba(96,150,255,.22)) 2px, transparent 2px);
+  background-size:84px 84px;
+  transform:perspective(620px) rotateX(64deg);transform-origin:bottom center;
+  mask-image:linear-gradient(to top, #000 6%, transparent 78%);
+  -webkit-mask-image:linear-gradient(to top, #000 6%, transparent 78%);}
+#stars{position:absolute;inset:0;}
+.pt{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--star-col, #bcd2ff);}
+
+/* CRT overlays */
+#scan{position:absolute;inset:0;pointer-events:none;z-index:90;
+  background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.16) 2px 4px);
+  mix-blend-mode:multiply;}
+#vig{position:absolute;inset:0;pointer-events:none;z-index:91;
+  box-shadow:inset 0 0 280px 60px rgba(0,0,0,.85);
+  background:radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%);}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;z-index:80;pointer-events:none;}
+
+/* header bar */
+#hdr{position:absolute;top:212px;left:0;right:0;text-align:center;z-index:40;opacity:0;}
+#hdr .lab{font-size:34px;letter-spacing:6px;color:#cfe0ff;text-shadow:0 3px 0 #1a2c66;}
+#hdr .cnt{margin-top:10px;font-size:26px;color:#ffd23f;letter-spacing:4px;
+  text-shadow:0 0 14px rgba(255,210,63,.6);}
+
+/* title */
+#title{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;z-index:50;}
+#title .crest{width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%, #fff 0 46%, #ff4d4d 47% 100%);
+  border:9px solid #111;position:relative;box-shadow:0 0 50px rgba(255,80,80,.5);}
+#title .crest:before{content:"";position:absolute;top:50%;left:0;right:0;height:9px;
+  background:#111;transform:translateY(-50%);}
+#title .crest:after{content:"";position:absolute;top:50%;left:50%;width:42px;height:42px;
+  border-radius:50%;background:#fff;border:9px solid #111;transform:translate(-50%,-50%);}
+#title .t1{margin-bottom:34px;font-size:30px;letter-spacing:7px;color:#9fc0ff;
+  text-shadow:1px 0 #ff3b6b,-1px 0 #2bd6ff;}
+#title .t2{margin-top:40px;font-size:56px;line-height:1;letter-spacing:4px;color:#fff;
+  text-shadow:0 6px 0 #21347a,0 0 36px rgba(120,170,255,.7);}
+#title .t3{margin-top:24px;font-size:28px;letter-spacing:8px;color:#ffd23f;}
+
+/* pile cards + heroes share .pcard */
+.pcard{position:absolute;will-change:transform,opacity;}
+.frame{background:#fdfdfb;padding:14px 14px 46px 14px;border-radius:6px;
+  box-shadow:0 18px 34px rgba(0,0,0,.55),0 2px 0 rgba(255,255,255,.6) inset;
+  position:relative;}
+.frame img{display:block;width:100%;height:100%;object-fit:cover;border-radius:2px;
+  background:#222;}
+.frame .cap{position:absolute;left:0;right:0;bottom:12px;text-align:center;
+  font-size:20px;letter-spacing:3px;color:#2a2f45;}
+.holo{position:absolute;inset:14px 14px 46px 14px;border-radius:2px;overflow:hidden;
+  pointer-events:none;}
+.holo:before{content:"";position:absolute;top:-40%;left:-60%;width:60%;height:180%;
+  transform:rotate(18deg);
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.0) 30%, rgba(255,255,255,.85) 50%, rgba(255,255,255,0) 70%, transparent);
+  mix-blend-mode:screen;will-change:transform;}
+
+/* hero extras */
+#heroLayer{position:absolute;inset:0;z-index:45;}
+.burst{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);z-index:44;
+  pointer-events:none;}
+.spark{position:absolute;width:10px;height:10px;border-radius:50%;
+  background:#fff;box-shadow:0 0 16px 4px #ffe98a;}
+.rating{position:absolute;left:50%;transform:translateX(-50%);text-align:center;z-index:48;}
+.stars{font-size:78px;letter-spacing:8px;color:#ffd23f;text-shadow:0 0 20px rgba(255,210,63,.8);}
+.pts{margin-top:6px;font-size:40px;color:#fff;letter-spacing:4px;text-shadow:0 3px 0 #21347a;}
+.tag{margin-top:8px;font-size:28px;letter-spacing:6px;color:#8fb3ff;}
+
+/* Oak dialogue box */
+#oak{position:absolute;left:70px;right:70px;bottom:292px;z-index:60;
+  background:#13245e;
+  border:6px solid #fff;border-radius:18px;padding:30px 34px;opacity:0;
+  box-shadow:0 0 0 6px #0a1230,0 18px 40px rgba(0,0,0,.6);}
+#oak .who{font-size:26px;color:#ffd23f;letter-spacing:4px;margin-bottom:14px;}
+#oak .msg{font-size:34px;line-height:1.4;color:#fff;letter-spacing:2px;}
+#oak .arrow{position:absolute;right:34px;bottom:18px;width:0;height:0;
+  border-left:16px solid transparent;border-right:16px solid transparent;
+  border-top:20px solid #fff;}
+
+/* finish */
+#finish{position:absolute;inset:0;z-index:55;pointer-events:none;}
+#gj{position:absolute;left:50%;top:62%;transform:translate(-50%,-50%) scale(0);
+  font-size:82px;letter-spacing:4px;color:#fff;white-space:nowrap;
+  text-shadow:0 8px 0 #c0392b,0 0 40px rgba(255,90,90,.7);}
+#brand{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;opacity:0;}
+#brand .logoPanel{display:inline-block;background:#fdfdfb;border-radius:34px;
+  padding:34px 46px;box-shadow:0 16px 50px rgba(0,0,0,.55),0 0 0 4px rgba(255,255,255,.15);}
+#brand .logoPanel img{display:block;width:420px;height:420px;}
+#brand .cta{margin-top:38px;font-size:56px;line-height:1.15;letter-spacing:4px;color:#fff;text-shadow:0 5px 0 #C8102E;}
+#brand .loc{margin-top:20px;font-size:24px;line-height:1.45;letter-spacing:4px;color:#9fb3d9;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="lab"></div>
+  <div id="grid"></div>
+  <div id="stars"></div>
+  <div id="pile"></div>
+  <div id="heroLayer"></div>
+  <div id="title">
+    <div class="t1"></div>
+    <div class="crest"></div>
+    <div class="t2"></div>
+    <div class="t3"></div>
+  </div>
+  <div id="hdr"><div class="lab">PHOTO CHECK</div><div class="cnt">PHOTOS 00/16</div></div>
+  <div id="finish">
+    <div id="gj">WELL DONE!</div>
+    <div id="brand">
+      <div class="logoPanel"><img src="tc_logo.png"></div>
+      <div class="cta">COME VISIT THE SHOP!</div>
+      <div class="loc">HUNTINGTON BEACH, CA · @TRAINERCENTER.POKEMON</div>
+    </div>
+  </div>
+  <div id="oak"><div class="who">PROF. OAK</div><div class="msg"></div><div class="arrow"></div></div>
+  <div id="flash"></div>
+  <div id="scan"></div>
+  <div id="vig"></div>
+</div>
+<script>
+const W=1080,H=1920;
+
+/* ============================================================
+   TEMPLATE CONFIG  —  edit this block to make a new reel.
+   1. Drop 16 card photos in cards/ and run ./make.sh (converts to display/).
+   2. Set the level name + the 4 heroes below.  Heroes build to the LAST one,
+      which lands on the music drop. Reaction voices are positional:
+      hero 1 = "Ooh!", 2 = "Wonderful!", 3 = "Wow!", 4 = "Perfect!".
+   3. Run ./make.sh to render + mux the final mp4.
+   ============================================================ */
+const CONFIG={
+  theme     :"gallery",                   // background theme: "gallery" (gold) | "space" (deep blue, saved for Mew)
+  supertitle:"PROF. OAK'S PHOTO CHECK",   // the Snap "mechanic" line (small)
+  levelName :"TRAINER GALLERY",           // the LEVEL / set name (big)
+  courseTag :"★ COURSE 01 ★",    // small tag under the level name
+  cardCount :16,                          // photos in cards/ -> display/card_01..NN.jpg
+  heroes:[                                // spotlighted cards, in reveal order
+    {file:'04', stars:4, points:'4,300', name:'MILOTIC',   reaction:'Ooh! What a beauty!'},
+    {file:'15', stars:4, points:'4,820', name:'FALINKS',   reaction:'Wonderful! What a squad!'},
+    {file:'10', stars:5, points:'5,510', name:'GARDEVOIR', reaction:'Wow! Simply stunning!'},
+    {file:'11', stars:5, points:'9,999', name:'GENGAR',    reaction:'PERFECT! A spooky gem!'},
+  ],
+  cta:["COME VISIT","THE SHOP TODAY"],          // each line stays clear of the edges
+  loc:["HUNTINGTON BEACH, CA","@TRAINERCENTER.POKEMON"],
+};
+// background themes (the "main background throughout")
+const THEMES={
+  // deep space — SAVED for the future Mew reel
+  space:{
+    stage:'radial-gradient(120% 90% at 50% 32%, #15235c 0%, #0a1230 42%, #05070f 100%)',
+    grid :'rgba(96,150,255,.22)',
+    star :'#bcd2ff',
+    lab  :'radial-gradient(120% 95% at 50% 30%, rgba(21,35,92,.30), rgba(4,6,13,.80))',
+  },
+  // warm gold — Trainer Gallery (matches the gold card borders; rich, not lemon, not beachy)
+  gallery:{
+    stage:'radial-gradient(120% 90% at 50% 32%, #6b5620 0%, #2b2109 44%, #0c0903 100%)',
+    grid :'rgba(255,206,108,.18)',
+    star :'#ffe7ad',
+    lab  :'radial-gradient(120% 95% at 50% 28%, rgba(96,76,28,.26), rgba(8,6,2,.80))',
+  },
+};
+const TH=THEMES[CONFIG.theme]||THEMES.gallery;
+const stageRoot=document.getElementById('stage');
+stageRoot.style.setProperty('--stage-bg',TH.stage);
+stageRoot.style.setProperty('--grid-col',TH.grid);
+stageRoot.style.setProperty('--star-col',TH.star);
+stageRoot.style.setProperty('--lab-tint',TH.lab);
+
+// wire config -> DOM text
+document.querySelector('#title .t1').textContent=CONFIG.supertitle;
+document.querySelector('#title .t2').textContent=CONFIG.levelName;
+document.querySelector('#title .t3').textContent=CONFIG.courseTag;
+document.querySelector('#brand .cta').innerHTML=CONFIG.cta.join('<br>');
+document.querySelector('#brand .loc').innerHTML=CONFIG.loc.join('<br>');
+// ---------- easing ----------
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const lin=(t,a,b)=>clamp((t-a)/(b-a),0,1);
+const eOut=t=>1-Math.pow(1-t,3);
+const eIn=t=>t*t*t;
+const eInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const back=t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);};
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+// ---------- starfield ----------
+const starsEl=document.getElementById('stars');
+const STAR=[];
+for(let i=0;i<46;i++){
+  const d=document.createElement('div');d.className='pt';
+  const x=(i*97+31)%W, y=(i*61+17)%(H*0.62)+H*0.16;
+  d.style.left=x+'px';d.style.top=y+'px';
+  const ph=(i*37)%100/100, sz=0.6+((i*53)%100)/100*2.2;
+  d.style.transform='scale('+sz+')';
+  starsEl.appendChild(d);STAR.push({el:d,ph,sz,bx:x});
+}
+
+// ---------- card data ----------
+const PILE_POS=[
+ [360,824,-11],[702,800,8],[540,910,-3],[336,1030,12],[722,1010,-7],[540,1118,5],
+ [378,1214,-13],[700,1192,10],[500,930,15],[612,1058,-6],[430,944,4],[684,890,-10],
+ [360,1126,7],[642,1222,-4],[540,802,12],[500,1040,-8]];
+// stamp schedule — beat-locked to 120BPM (0.5s grid), accelerating into the
+// drop at 29.0s so the 16th photo lands ON the beat the main section hits.
+// eighth-note collage: rapid-fire, one photo every 0.25s (4.0s -> 7.75s)
+const STAMP=[4.0,4.25,4.5,4.75,5.0,5.25,5.5,5.75,6.0,6.25,6.5,6.75,7.0,7.25,7.5,7.75];
+const CDONE=7.75;   // collage complete accent
+const DROP=23.0;    // music drop — Charizard climax lands here
+const CW=400,CH=534; // image area; frame adds padding
+
+const pileEl=document.getElementById('pile');
+const PCARD=[];
+for(let i=0;i<16;i++){
+  const n=String(i+1).padStart(2,'0');
+  const w=document.createElement('div');w.className='pcard';
+  w.innerHTML='<div class="frame" style="width:'+(CW+28)+'px;height:'+(CH+60)+'px">'+
+    '<img src="display/card_'+n+'.jpg"></div>';
+  w.style.zIndex=10+i;
+  pileEl.appendChild(w);PCARD.push(w);
+}
+
+// heroes from CONFIG: build to the last one (lands on the drop). [cardFile, stars, points, name]
+const HERO=CONFIG.heroes.map(h=>[h.file,h.stars,h.points,h.name]);
+const HW=660,HH=880; // hero frame size
+const heroEl=document.getElementById('heroLayer');
+const HNODE=HERO.map((h,i)=>{
+  const w=document.createElement('div');w.className='pcard';w.style.zIndex=30+i;
+  w.innerHTML='<div class="frame" style="width:'+HW+'px;height:'+HH+'px">'+
+      '<img src="display/card_'+h[0]+'.jpg"><div class="cap">'+h[3]+'</div>'+
+      '<div class="holo"><i></i></div></div>';
+  heroEl.appendChild(w);
+  // rating block
+  const r=document.createElement('div');r.className='rating';
+  r.innerHTML='<div class="stars"></div><div class="pts"></div><div class="tag">'+h[3]+'</div>';
+  heroEl.appendChild(r);
+  // sparkle burst
+  const b=document.createElement('div');b.className='burst';
+  const sp=[];for(let s=0;s<14;s++){const e=document.createElement('div');e.className='spark';b.appendChild(e);sp.push(e);}
+  heroEl.appendChild(b);
+  return {w,holo:w.querySelector('.holo i'),r,stars:r.querySelector('.stars'),
+          pts:r.querySelector('.pts'),burst:b,sp,data:h};
+});
+
+const titleEl=document.getElementById('title');
+const hdrEl=document.getElementById('hdr');
+const cntEl=hdrEl.querySelector('.cnt');
+const oakEl=document.getElementById('oak');
+const oakMsg=oakEl.querySelector('.msg');
+const flashEl=document.getElementById('flash');
+const gjEl=document.getElementById('gj');
+const brandEl=document.getElementById('brand');
+const gridEl=document.getElementById('grid');
+const labEl=document.getElementById('lab');
+
+function setT(el,tr,op){el.style.transform=tr;if(op!==undefined)el.style.opacity=op;}
+function typeText(el,full,p){const n=Math.floor(full.length*clamp(p,0,1));el.textContent=full.slice(0,n);}
+
+// HERO timing — reveals land on downbeats during the energetic section
+const HSTART=9.5, HSTEP=4.5;  // 9.5,14,18.5 -> Charizard(23) on the drop
+
+function render(t){
+  // ---- Oak's lab is the MAIN backdrop: hidden on the color title screen,
+  //      fades in as photos begin, then a slow drift through the showcase ----
+  labEl.style.opacity = lin(t,3.2,4.6).toFixed(3);
+  const lz = lin(t,3.5,32);
+  labEl.style.transform = 'scale('+(1.05+0.07*lz).toFixed(3)+') translateX('+lerp(0,-24,lz).toFixed(1)+'px)';
+
+  // ---- background life ----
+  const gridOp = lin(t,1.0,3.0);
+  gridEl.style.opacity = gridOp*0.9;
+  for(const s of STAR){
+    const tw=0.5+0.5*Math.sin(t*2.2+s.ph*6.28);
+    s.el.style.opacity=(0.2+0.8*tw).toFixed(3);
+    s.el.style.transform='scale('+(s.sz*(0.8+0.3*tw)).toFixed(2)+')';
+  }
+
+  // ---- intro CRT flicker ----
+  let stageFlick=1;
+  if(t<0.7){ const f=[.1,.6,.3,1]; stageFlick=f[Math.floor(t/0.18)%4]; }
+  document.getElementById('stage').style.filter='brightness('+stageFlick.toFixed(2)+')';
+
+  // ---- title ----
+  const tIn=lin(t,0.6,1.2), tOut=lin(t,2.9,3.6);
+  const tScale=lerp(0.7,1,back(tIn)) * lerp(1,0.86,eIn(tOut));
+  const tY=lerp(40,0,eOut(tIn)) + lerp(0,-60,eIn(tOut));
+  setT(titleEl,'translateY('+tY+'px) scale('+tScale.toFixed(3)+')', tIn*(1-tOut));
+
+  // ---- header ----
+  hdrEl.style.opacity=lin(t,3.4,4.0)*(1-lin(t,8.0,8.8));
+  let stamped=0; for(let i=0;i<16;i++) if(t>=STAMP[i]) stamped++;
+  cntEl.textContent='PHOTOS '+String(stamped).padStart(2,'0')+'/16';
+
+  // ---- pile cards ----
+  const pileGone=lin(t,8.0,9.0);
+  for(let i=0;i<16;i++){
+    const c=PCARD[i],[px,py,rot]=PILE_POS[i];
+    const st=STAMP[i];
+    if(t<st){ c.style.opacity=0; continue; }
+    const a=lin(t,st,st+0.26);           // settle (snappy, eighth-note)
+    const eb=back(a);
+    const curY=lerp(py-150,py,eb);
+    const curS=lerp(1.22,1,eOut(a));
+    const curR=lerp(rot*0.3-8,rot,eOut(a));
+    // exit during transition: fly down+fade
+    const ex=pileGone;
+    const exY=lerp(0,260+(i%5)*40,eIn(ex));
+    const op=(1-ex);
+    setT(c,'translate('+(px-(CW+28)/2)+'px,'+(curY-(CH+60)/2+exY)+'px) rotate('+curR+'deg) scale('+curS.toFixed(3)+')',op.toFixed(3));
+  }
+
+  // ---- camera flash on each stamp ----
+  let flash=0;
+  for(let i=0;i<16;i++){ const d=t-STAMP[i]; if(d>=0&&d<0.09) flash=Math.max(flash,(1-d/0.09)*0.22); }
+  // accent when the collage completes
+  { const d=t-CDONE; if(d>=0&&d<0.30) flash=Math.max(flash,(1-d/0.30)*0.5); }
+  // hero reveals; Charizard (i=3) lands on the drop -> biggest pulse
+  for(let i=0;i<4;i++){ const d=t-(HSTART+i*HSTEP); const big=(i===3)?0.7:0.5, dur=(i===3)?0.34:0.22;
+    if(d>=0&&d<dur) flash=Math.max(flash,(1-d/dur)*big); }
+  flashEl.style.opacity=flash.toFixed(3);
+
+  // ---- heroes ----
+  const topPicks = t>=31.6 && t<HSTART; // brief "TOP PICKS" handled by oak text
+  for(let i=0;i<4;i++){
+    const hn=HNODE[i], hs=HSTART+i*HSTEP;
+    const last=(i===3);
+    const inA=lin(t,hs,hs+0.55);
+    let outA = last ? 0 : lin(t,hs+HSTEP-0.35,hs+HSTEP+0.2);
+    // last hero stays until finish, then drifts up slightly
+    if(last) outA=0;
+    const vis = t>=hs && (last ? true : t<hs+HSTEP+0.2);
+    if(!vis){ hn.w.style.opacity=0; hn.r.style.opacity=0; hn.burst.style.opacity=0; continue; }
+    const scl=lerp(0.55,1,back(inA)) * lerp(1,0.9,eIn(outA));
+    const yIn=lerp(120,0,eOut(inA));
+    const yOut=lerp(0,-80,eIn(outA));
+    // last hero: shift up to make room for GREAT JOB at finish
+    let extraY=0,extraS=1,heroEnd=0;
+    if(last){ const fin=lin(t,26.2,27.4); extraY=lerp(0,-110,eOut(fin)); extraS=lerp(1,0.86,eOut(fin)); heroEnd=lin(t,26.6,27.5); }
+    const cx=W/2-HW/2, cy=H*0.355-HH/2;
+    setT(hn.w,'translate('+cx+'px,'+(cy+yIn+yOut+extraY)+'px) scale('+(scl*extraS).toFixed(3)+')',(inA*(1-outA)*(1-heroEnd)).toFixed(3));
+    // holo sweep
+    const sweep=((t-hs)%1.6)/1.6;
+    hn.holo.parentElement.style.opacity=inA;
+    hn.holo.style.transform='translateX('+lerp(-40,680,sweep)+'px)';
+    // rating
+    const rA=lin(t,hs+0.5,hs+0.9);
+    const ratingFade = last ? (1-lin(t,26.0,26.6)) : 1; // clear as Gengar exits
+    const rTop=cy+HH+yIn+yOut+extraY+ (last?0:0);
+    hn.r.style.top=(rTop+20)+'px';
+    hn.r.style.opacity=(rA*(1-outA)*ratingFade).toFixed(3);
+    hn.r.style.transform='translateX(-50%) scale('+lerp(0.6,1,back(rA)).toFixed(3)+')';
+    const nstars=hn.data[1];
+    const shown=Math.floor(clamp((t-(hs+0.55))/0.12,0,nstars));
+    hn.stars.textContent='★'.repeat(shown)+'☆'.repeat(nstars-shown);
+    const pv=Math.floor(lin(t,hs+0.6,hs+1.3)* parseInt(hn.data[2].replace(/,/g,'')) );
+    hn.pts.textContent=pv.toLocaleString()+' PTS';
+    // sparkle burst at reveal
+    const bp=lin(t,hs+0.15,hs+0.95);
+    hn.burst.style.opacity=(1-bp).toFixed(3);
+    hn.burst.style.top=(H*0.355)+'px';
+    for(let s=0;s<hn.sp.length;s++){
+      const ang=s/hn.sp.length*6.283, rad=lerp(10,360,eOut(bp));
+      hn.sp[s].style.transform='translate('+(Math.cos(ang)*rad)+'px,'+(Math.sin(ang)*rad)+'px) scale('+(1-bp)+')';
+    }
+  }
+
+  // ---- Oak dialogue ----
+  let who='PROF. OAK', msg='', show=0, p=1;
+  if(t>=0.9&&t<3.6){ msg='Welcome back!'; show=lin(t,0.9,1.3)*(1-lin(t,3.0,3.6)); p=lin(t,1.0,1.8); }
+  else if(t>=3.6&&t<7.6){ msg="Let's review the cards you caught..."; show=lin(t,3.6,4.0)*(1-lin(t,7.2,7.6)); p=lin(t,3.7,5.5); }
+  else if(t>=7.7&&t<9.4){ msg="And now... my TOP PICKS!"; show=lin(t,7.7,8.0)*(1-lin(t,9.1,9.4)); p=lin(t,7.8,8.7); }
+  else if(t>=9.5&&t<26.6){
+    const i=clamp(Math.floor((t-HSTART)/HSTEP),0,3);
+    const lines=CONFIG.heroes.map(h=>h.reaction);
+    const hs=HSTART+i*HSTEP;
+    msg=lines[i]; show=lin(t,hs+0.35,hs+0.7)*(1-(i<3?lin(t,hs+HSTEP-0.3,hs+HSTEP):lin(t,26.0,26.6)));
+    p=lin(t,hs+0.4,hs+1.1);
+  }
+  oakEl.style.opacity=show.toFixed(3);
+  oakEl.querySelector('.who').textContent=who;
+  typeText(oakMsg,msg,p);
+  oakEl.querySelector('.arrow').style.opacity=(p>=1?(0.4+0.6*Math.abs(Math.sin(t*4))):0);
+
+  // ---- finish GREAT JOB + brand ----
+  gjEl.style.opacity=0;  // WELL DONE stamp removed — the "Well done!" SOUND carries it
+  // shop CTA card rises (centered) as Gengar exits + the "Well done!" sound hits
+  const brIn=lin(t,27.0,28.2), brOut=lin(t,31.2,32.0);
+  brandEl.style.opacity=(brIn*(1-brOut)).toFixed(3);
+  brandEl.style.transform='translateY(calc(-50% + '+lerp(30,0,eOut(brIn)).toFixed(1)+'px))';
+
+  // final fade to black
+  document.getElementById('vig').style.opacity = (1+lin(t,31.2,32.0)*1.6).toFixed(2);
+}
+window.render=render;
+window.__ready=true;
+render(0);
+</script>
+</body>
+</html>

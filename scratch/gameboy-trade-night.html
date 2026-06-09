@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TC Trade Night - GameBoy Post</title>
+<style>
+  @font-face {
+    font-family: 'PokeText';
+    src: url('./PokeText.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    width: 1080px;
+    height: 1920px;
+    overflow: hidden;
+    background: #C8102E;
+    font-family: 'PokeText', monospace;
+    color: #fff;
+    position: relative;
+  }
+
+  .bg-grid { display: none; }
+
+  .stage {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 170px 0 0;
+  }
+
+  .top-tag {
+    text-align: center;
+    font-family: 'PokeText', monospace;
+    font-size: 42px;
+    letter-spacing: 8px;
+    color: #ffe66d;
+    text-shadow: 0 0 22px rgba(255,230,109,0.55);
+  }
+
+  .top-sub {
+    margin-top: 12px;
+    text-align: center;
+    font-family: 'PokeText', monospace;
+    font-size: 20px;
+    letter-spacing: 6px;
+    color: rgba(255,255,255,0.55);
+  }
+
+  /* GameBoy holder reserves scaled space.
+     CardChase native = 380x608. We scale 2.3x => 874x1398. */
+  .gameboy-holder {
+    width: 874px;
+    height: 1398px;
+    margin-top: 24px;
+    position: relative;
+  }
+
+  .gameboy-scale {
+    transform: scale(2.3);
+    transform-origin: top left;
+    width: 380px;
+    height: 608px;
+  }
+
+  /* ---- GameBoy (CardChase originals, 380x608) ---- */
+  .gameboy-outer {
+    width: 380px;
+    height: 608px;
+    background-color: #FFFFFF;
+    border-radius: 24px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    box-shadow:
+      0 14px 30px rgba(0,0,0,0.45);
+  }
+
+  .gameboy-screen-outer {
+    height: 340px;
+    background-color: #D1D5DB;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .gameboy-power-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  .gameboy-power-light {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #22c55e;
+    box-shadow: 0 0 6px #22c55e;
+    margin-right: 4px;
+  }
+
+  .gameboy-power-text {
+    font-size: 10px;
+    color: #374151;
+    font-weight: 500;
+    font-family: 'PokeText', monospace;
+  }
+
+  .gameboy-screen-wrapper {
+    flex: 1;
+    background-color: #9CA3AF;
+    border-radius: 6px;
+    padding: 8px;
+  }
+
+  .gameboy-screen-inner {
+    width: 100%;
+    height: 100%;
+    background-color: #E5E7EB;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ---- Title menu inside the screen ---- */
+  .gb-title-screen {
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .gb-menu-box {
+    background: white;
+    border: 2px solid #374151;
+    border-radius: 4px;
+    padding: 10px 14px 12px 10px;
+    width: 100%;
+  }
+
+  .gb-menu-header {
+    font-family: 'PokeText', monospace;
+    font-size: 13px;
+    font-weight: bold;
+    color: #1F2937;
+    text-align: center;
+    padding-bottom: 7px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #D1D5DB;
+    letter-spacing: 1px;
+  }
+
+  .gb-menu-option {
+    font-family: 'PokeText', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #1F2937;
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .gb-menu-option + .gb-menu-option {
+    margin-top: 8px;
+  }
+
+  .gb-menu-cursor {
+    font-family: 'PokeText', monospace;
+    width: 12px;
+    display: inline-block;
+    color: #1F2937;
+    flex-shrink: 0;
+  }
+
+  .gb-menu-option.clickable {
+    cursor: pointer;
+  }
+
+  /* Pokemon-style save textbox that pops up over the screen */
+  .gb-save-overlay {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    background: #ffffff;
+    border: 2px solid #374151;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: 'PokeText', monospace;
+    font-size: 10px;
+    color: #1F2937;
+    text-align: center;
+    letter-spacing: 1px;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 180ms ease, transform 180ms ease;
+    pointer-events: none;
+    z-index: 5;
+    min-height: 18px;
+  }
+  .gb-save-overlay.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .gb-save-star {
+    color: #f59e0b;
+    font-size: 14px;
+    margin-left: 4px;
+    display: inline-block;
+    animation: savePop 800ms ease-out;
+  }
+  @keyframes savePop {
+    0%   { transform: scale(0) rotate(-30deg); }
+    60%  { transform: scale(1.6) rotate(15deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  /* Screen flash when save fires */
+  .gb-flash {
+    position: absolute;
+    inset: 0;
+    background: #ffffff;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+  }
+  .gb-flash.fire {
+    animation: flashOnce 220ms ease-out;
+  }
+  @keyframes flashOnce {
+    0%   { opacity: 0; }
+    25%  { opacity: 0.85; }
+    100% { opacity: 0; }
+  }
+
+  /* ---- Controls ---- */
+  .gameboy-controls {
+    margin-top: 12px;
+    height: 220px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .gameboy-menu-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  .gameboy-select-start {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0 20px;
+  }
+
+  .gameboy-ss-line {
+    width: 40px;
+    height: 4px;
+    background-color: #4B5563;
+    border-radius: 2px;
+    transform: rotate(-12deg);
+    margin-bottom: 4px;
+  }
+
+  .gameboy-ss-text {
+    font-size: 10px;
+    color: #4B5563;
+    font-weight: 500;
+    font-family: 'PokeText', monospace;
+  }
+
+  .gameboy-controls-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 24px;
+  }
+
+  .gameboy-dpad {
+    width: 80px;
+    height: 80px;
+    position: relative;
+  }
+
+  .gameboy-dpad-vertical {
+    position: absolute;
+    width: 26px;
+    height: 80px;
+    background-color: #4B5563;
+    left: 27px;
+    border-radius: 4px;
+  }
+
+  .gameboy-dpad-horizontal {
+    position: absolute;
+    width: 80px;
+    height: 26px;
+    background-color: #4B5563;
+    top: 27px;
+    border-radius: 4px;
+  }
+
+  /* Clickable press zones over the up and down arrows */
+  .gameboy-dpad-press {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    left: 27px;
+    border-radius: 4px;
+    background-color: #1f2937;
+    opacity: 0;
+    z-index: 3;
+    cursor: pointer;
+  }
+
+  .gameboy-dpad-press.up   { top: 0; }
+  .gameboy-dpad-press.down { bottom: 0; }
+
+  .gameboy-dpad-press.press.up   { opacity: 1; transform: translateY(2px); }
+  .gameboy-dpad-press.press.down { opacity: 1; transform: translateY(-2px); }
+
+  .gameboy-dpad-press {
+    transition: opacity 80ms ease-out, transform 80ms ease-out;
+  }
+
+  .gameboy-ab {
+    width: 90px;
+    height: 80px;
+    position: relative;
+  }
+
+  .gameboy-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #DC2626;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    font-family: 'PokeText', monospace;
+    box-shadow: 0 4px 0 #991b1b;
+  }
+
+  .gameboy-btn-a {
+    position: absolute;
+    right: 0;
+    top: 5px;
+  }
+
+  .gameboy-btn-b {
+    position: absolute;
+    left: 0;
+    bottom: 5px;
+  }
+
+  .gameboy-speaker {
+    position: absolute;
+    bottom: 20px;
+    right: 24px;
+  }
+
+  .gameboy-speaker-line {
+    width: 24px;
+    height: 3px;
+    background-color: #9CA3AF;
+    margin-bottom: 4px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+
+  <div class="stage">
+    <div class="top-tag">TRADE NIGHT</div>
+    <div class="top-sub">SAVE THE DATE</div>
+
+    <div class="gameboy-holder">
+      <div class="gameboy-scale">
+        <div class="gameboy-outer">
+          <!-- Screen -->
+          <div class="gameboy-screen-outer">
+            <div class="gameboy-power-row">
+              <div class="gameboy-power-light"></div>
+              <span class="gameboy-power-text">POWER</span>
+            </div>
+            <div class="gameboy-screen-wrapper">
+              <div class="gameboy-screen-inner">
+                <div class="gb-title-screen">
+                  <div class="gb-menu-box">
+                    <div class="gb-menu-header">TRAINER CENTER HB</div>
+
+                    <div class="gb-menu-option">
+                      <span class="gb-menu-cursor" data-cursor="0">&gt;</span>
+                      <span>TC's Beach City Trade Night</span>
+                    </div>
+
+                    <div class="gb-menu-option">
+                      <span class="gb-menu-cursor" data-cursor="1">&nbsp;</span>
+                      <span>June 26th 2026</span>
+                    </div>
+
+                    <div class="gb-menu-option">
+                      <span class="gb-menu-cursor" data-cursor="2">&nbsp;</span>
+                      <span>12 - 10 PM</span>
+                    </div>
+
+                    <div class="gb-menu-option">
+                      <span class="gb-menu-cursor" data-cursor="3">&nbsp;</span>
+                      <span>Free Admission</span>
+                    </div>
+
+                    <div class="gb-menu-option clickable" id="saveOption">
+                      <span class="gb-menu-cursor" data-cursor="4">&nbsp;</span>
+                      <span>Save and Bookmark</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="gb-save-overlay" id="saveOverlay"></div>
+                <div class="gb-flash" id="screenFlash"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="gameboy-controls">
+            <div class="gameboy-menu-row">
+              <div class="gameboy-select-start">
+                <div class="gameboy-ss-line"></div>
+                <span class="gameboy-ss-text">SELECT</span>
+              </div>
+              <div class="gameboy-select-start">
+                <div class="gameboy-ss-line"></div>
+                <span class="gameboy-ss-text">START</span>
+              </div>
+            </div>
+
+            <div class="gameboy-controls-row">
+              <div class="gameboy-dpad">
+                <div class="gameboy-dpad-vertical"></div>
+                <div class="gameboy-dpad-horizontal"></div>
+                <div class="gameboy-dpad-press up"></div>
+                <div class="gameboy-dpad-press down"></div>
+              </div>
+              <div class="gameboy-ab">
+                <button class="gameboy-btn gameboy-btn-a">A</button>
+                <button class="gameboy-btn gameboy-btn-b">B</button>
+              </div>
+            </div>
+
+            <div class="gameboy-speaker">
+              <div class="gameboy-speaker-line"></div>
+              <div class="gameboy-speaker-line"></div>
+              <div class="gameboy-speaker-line"></div>
+              <div class="gameboy-speaker-line"></div>
+              <div class="gameboy-speaker-line"></div>
+              <div class="gameboy-speaker-line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <audio id="clickAudio" src="./Select.mp3" preload="auto"></audio>
+
+  <script>
+    (function () {
+      const cursors = Array.from(document.querySelectorAll('[data-cursor]'));
+      const dpadUp = document.querySelector('.gameboy-dpad-press.up');
+      const dpadDown = document.querySelector('.gameboy-dpad-press.down');
+      const click = document.getElementById('clickAudio');
+      click.volume = 0.3;
+
+      const lastIdx = cursors.length - 1;
+      let idx = 0;
+
+      function setCursor(i) {
+        idx = i;
+        cursors.forEach((c, j) => {
+          c.innerHTML = (j === idx) ? '&gt;' : '&nbsp;';
+        });
+      }
+
+      function flashDpad(dir) {
+        const el = dir === 'up' ? dpadUp : dpadDown;
+        el.classList.add('press');
+        setTimeout(() => el.classList.remove('press'), 140);
+      }
+
+      function playClick() {
+        // Logged so an external recorder can mux audio at the actual fire time
+        console.log('CLICK ' + Date.now());
+        try {
+          click.currentTime = 0;
+          click.play().catch(() => {});
+        } catch (e) {}
+      }
+
+      function moveUp() {
+        if (idx === 0) return;
+        setCursor(idx - 1);
+        flashDpad('up');
+        playClick();
+      }
+
+      function moveDown() {
+        if (idx === lastIdx) return;
+        setCursor(idx + 1);
+        flashDpad('down');
+        playClick();
+      }
+
+      dpadUp.addEventListener('click', moveUp);
+      dpadDown.addEventListener('click', moveDown);
+
+      // -------- Save / Bookmark animation --------
+      const saveOption = document.getElementById('saveOption');
+      const saveOverlay = document.getElementById('saveOverlay');
+      const screenFlash = document.getElementById('screenFlash');
+      const buttonA = document.querySelector('.gameboy-btn-a');
+      buttonA.style.cursor = 'pointer';
+
+      let isSaving = false;
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      async function triggerSave() {
+        if (isSaving) return;
+        isSaving = true;
+
+        // Snap cursor to the save option
+        setCursor(4);
+        playClick();
+
+        // Brief screen flash
+        screenFlash.classList.remove('fire');
+        // Force reflow so the animation can restart
+        void screenFlash.offsetWidth;
+        screenFlash.classList.add('fire');
+
+        // Pop the textbox in
+        saveOverlay.classList.add('visible');
+        saveOverlay.textContent = 'Now saving';
+        await wait(380);
+        saveOverlay.textContent = 'Now saving.';
+        await wait(380);
+        saveOverlay.textContent = 'Now saving..';
+        await wait(380);
+        saveOverlay.textContent = 'Now saving...';
+        await wait(520);
+
+        playClick();
+        saveOverlay.innerHTML = 'SAVED! <span class="gb-save-star">&#9733;</span>';
+        await wait(1700);
+
+        saveOverlay.classList.remove('visible');
+        await wait(220);
+        saveOverlay.textContent = '';
+        isSaving = false;
+      }
+
+      // Click directly on the option triggers it
+      saveOption.addEventListener('click', triggerSave);
+      // A button: fires when cursor is on the save option
+      buttonA.addEventListener('click', () => {
+        playClick();
+        if (idx === 4) triggerSave();
+      });
+      // Keyboard: Enter or Space fires when cursor is on save option
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp')   { e.preventDefault(); moveUp(); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveDown(); }
+        if ((e.key === 'Enter' || e.key === ' ') && idx === 4) {
+          e.preventDefault();
+          triggerSave();
+        }
+      });
+
+      setCursor(0);
+
+      // -------- Auto-demo loop for screen recording --------
+      // Tiny 0.5s warm-up so the menu is visible before motion starts, then loops forever.
+      async function autoDemo() {
+        await wait(500);
+        while (true) {
+          setCursor(0);
+          await wait(900);
+          moveDown(); await wait(1100);
+          moveDown(); await wait(1100);
+          moveDown(); await wait(1100);
+          moveDown(); await wait(900);
+          await triggerSave();
+          await wait(2200);
+        }
+      }
+      autoDemo();
+    })();
+  </script>
+
+</body>
+</html>

@@ -6481,17 +6481,17 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
             {/* Hero — pinned toward top so the new date block below the
                 IG handle has breathing room before the bottom band. */}
             <div style={{
-              flex: 1,
+              flex: 1, minHeight: 0, overflow: 'hidden',
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'flex-start',
-              textAlign: 'center', paddingTop: 14,
+              textAlign: 'center', paddingTop: 8,
               ...(enable3D ? { transform: 'translateZ(30px)' } : null),
             }}>
               {/* Vendor logo with gold ring */}
               <div style={{
-                width: 168, height: 168,
+                width: 150, height: 150,
                 position: 'relative',
-                marginBottom: 18,
+                marginBottom: 10,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 ...(enable3D ? { transform: 'translateZ(20px)' } : null),
               }}>
@@ -6550,13 +6550,15 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   fontStyle: 'italic', fontWeight: 600,
                   maxWidth: 300, lineHeight: 1.35,
                   marginBottom: 4,
+                  display: '-webkit-box', WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 }}>"{tagline}"</div>
               )}
 
               {igNorm && (
                 <div style={{
                   display: 'flex', justifyContent: 'center',
-                  marginTop: 14,
+                  marginTop: 10,
                 }}>
                   <a
                     href={`https://instagram.com/${igNorm}`}
@@ -6579,7 +6581,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                   read prominently right under the vendor's IG. */}
               {(eventDate || eventTime) && (
                 <div style={{
-                  marginTop: 16,
+                  marginTop: 10,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', gap: 2,
                 }}>
@@ -6613,7 +6615,7 @@ function HoloVendorCard({ vendor, event, isOwn, isMobile, scale = 1, frozen = fa
                 (preserve-3d lets it leak out), so it's off for frozen
                 cards used by downloads / modal preview / sizzle. */}
             <div style={{
-              marginTop: 18,
+              marginTop: 12, flexShrink: 0,
               background: 'linear-gradient(90deg, #C8102E 0%, #8B0A1F 100%)',
               borderRadius: 12,
               padding: '12px 16px',

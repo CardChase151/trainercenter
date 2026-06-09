@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vendor Post-Event Survey Mockup</title>
+<style>
+  @page { size: Letter; margin: 0.4in 0.5in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; background: #fff; font-size: 10pt; line-height: 1.4; }
+
+  h1 { font-size: 18pt; font-weight: 800; letter-spacing: -0.4pt; margin-bottom: 2pt; }
+  h2 { font-size: 11pt; font-weight: 800; margin: 14pt 0 4pt; padding-bottom: 2pt; border-bottom: 1.25pt solid #000; letter-spacing: -0.1pt; }
+
+  .header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2pt solid #000; padding-bottom: 5pt; margin-bottom: 10pt; }
+  .sub { color: #555; font-size: 9pt; }
+  .badge { background: #C8102E; color: #fff; padding: 2pt 7pt; border-radius: 2pt; font-size: 8pt; font-weight: 800; letter-spacing: 0.4pt; text-transform: uppercase; }
+
+  /* The "mandatory modal" lock-in mockup */
+  .modal-box {
+    border: 2.5pt solid #C8102E; border-radius: 8pt;
+    background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%);
+    padding: 14pt 18pt; margin-bottom: 16pt;
+    box-shadow: 0 2pt 8pt rgba(200,16,46,0.06);
+  }
+  .modal-box .label { font-size: 8pt; font-weight: 800; color: #C8102E; letter-spacing: 0.6pt; text-transform: uppercase; margin-bottom: 3pt; }
+  .modal-box .title { font-size: 14pt; font-weight: 800; color: #000; margin-bottom: 4pt; letter-spacing: -0.3pt; }
+  .modal-box .body  { font-size: 10pt; color: #333; line-height: 1.5; margin-bottom: 8pt; }
+  .modal-box .cta   { display: inline-block; background: #C8102E; color: #fff; font-weight: 800; font-size: 9pt; padding: 6pt 14pt; border-radius: 4pt; letter-spacing: 0.3pt; text-transform: uppercase; }
+  .modal-box .quiet { font-size: 8pt; color: #777; margin-top: 6pt; font-style: italic; }
+
+  /* Form questions */
+  .q { background: #fafafa; border: 0.75pt solid #e5e5e5; border-radius: 5pt; padding: 10pt 12pt; margin-bottom: 8pt; }
+  .q .num { font-size: 7.5pt; font-weight: 800; color: #C8102E; letter-spacing: 0.5pt; text-transform: uppercase; margin-bottom: 2pt; }
+  .q .label { font-size: 10pt; font-weight: 700; color: #000; margin-bottom: 2pt; line-height: 1.35; }
+  .q .helper { font-size: 8.5pt; color: #666; margin-bottom: 6pt; line-height: 1.4; }
+  .q.required .num::after { content: ' · REQUIRED'; color: #C8102E; }
+
+  /* 1-10 scale */
+  .scale-row { display: flex; gap: 3pt; margin-top: 4pt; }
+  .scale-btn {
+    flex: 1;
+    text-align: center;
+    border: 0.75pt solid #ccc; border-radius: 3pt;
+    padding: 6pt 0;
+    font-weight: 700; font-size: 9.5pt;
+    background: #fff; color: #555;
+  }
+  .scale-label { display: flex; justify-content: space-between; font-size: 7.5pt; color: #888; margin-top: 3pt; padding: 0 2pt; }
+
+  /* AB split */
+  .ab-wrap { display: flex; gap: 8pt; margin-top: 4pt; }
+  .ab-card { flex: 1; background: #fff; border: 1.25pt solid #C8102E; border-radius: 5pt; padding: 8pt 10pt; }
+  .ab-card .ab-tag { font-size: 7.5pt; font-weight: 800; color: #C8102E; letter-spacing: 0.5pt; margin-bottom: 3pt; }
+  .ab-card .ab-label { font-size: 9pt; font-weight: 700; color: #000; margin-bottom: 4pt; }
+  .ab-card .ab-helper { font-size: 8pt; color: #666; line-height: 1.35; margin-bottom: 4pt; }
+  .or-divider { display: flex; align-items: center; font-size: 8pt; font-weight: 800; color: #C8102E; letter-spacing: 1pt; }
+
+  .input-mock {
+    background: #fff; border: 0.75pt solid #ccc; border-radius: 3pt;
+    padding: 5pt 8pt; font-size: 9pt; color: #aaa;
+    margin-top: 3pt;
+  }
+  .textarea-mock {
+    background: #fff; border: 0.75pt solid #ccc; border-radius: 3pt;
+    padding: 6pt 8pt; font-size: 9pt; color: #aaa;
+    margin-top: 3pt; min-height: 36pt;
+  }
+
+  .submit-row { display: flex; justify-content: flex-end; margin-top: 12pt; }
+  .submit-btn {
+    background: #C8102E; color: #fff;
+    padding: 8pt 18pt; border-radius: 4pt;
+    font-weight: 800; font-size: 10pt; letter-spacing: 0.5pt; text-transform: uppercase;
+  }
+
+  .footer { margin-top: 12pt; padding-top: 6pt; border-top: 0.5pt solid #ccc; font-size: 7.5pt; color: #888; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Vendor Post-Event Survey — Mockup</h1>
+    <div class="sub">Pops up on next login · Mandatory · Trainer Center HB</div>
+  </div>
+  <div><span class="badge">v1 draft</span></div>
+</div>
+
+<!-- ──────── MANDATORY MODAL MOCKUP ──────── -->
+<div class="modal-box">
+  <div class="label">Action Required</div>
+  <div class="title">We need your feedback.</div>
+  <div class="body">
+    Quick mandatory survey before you can use your vendor dashboard. Takes about 2 minutes.
+    Your honest answers shape what we change for the next event.
+  </div>
+  <div class="cta">Start Survey →</div>
+  <div class="quiet">Can't close until submitted. We'll only ask once per event.</div>
+</div>
+
+<h2>Survey Questions</h2>
+
+<!-- Q1 -->
+<div class="q required">
+  <div class="num">Question 1</div>
+  <div class="label">On a scale of 1–10, how was your overall personal experience at the May 29 Trade Night?</div>
+  <div class="helper">Just your general feeling — the night as a whole.</div>
+  <div class="scale-row">
+    <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+    <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+  </div>
+  <div class="scale-label"><span>Rough night</span><span>Loved it</span></div>
+</div>
+
+<!-- Q2 -->
+<div class="q required">
+  <div class="num">Question 2 · Community</div>
+  <div class="label">1–10, how much did you enjoy the type of people who came to the event?</div>
+  <div class="helper">The crowd, the energy, the conversations.</div>
+  <div class="scale-row">
+    <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+    <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+  </div>
+  <div class="helper" style="margin-top:6pt;">Tell us why (optional):</div>
+  <div class="textarea-mock">Type here…</div>
+</div>
+
+<!-- Q2b -->
+<div class="q required">
+  <div class="num">Question 3 · Community vs other events</div>
+  <div class="label">1–10, how does our crowd compare to other shows you've vended?</div>
+  <div class="scale-row">
+    <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+    <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+  </div>
+  <div class="scale-label"><span>Way worse</span><span>Way better</span></div>
+  <div class="helper" style="margin-top:6pt;">Tell us why (optional):</div>
+  <div class="textarea-mock">Type here…</div>
+</div>
+
+<!-- Q3 -->
+<div class="q required">
+  <div class="num">Question 4 · Vendor neighbors</div>
+  <div class="label">1–10, how were your interactions with the other vendors here?</div>
+  <div class="scale-row">
+    <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+    <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+  </div>
+</div>
+
+<!-- Q3b -->
+<div class="q required">
+  <div class="num">Question 5 · Vendor neighbors vs other events</div>
+  <div class="label">1–10, how does that compare to other events you've worked?</div>
+  <div class="scale-row">
+    <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+    <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+  </div>
+  <div class="helper" style="margin-top:6pt;">Tell us why (optional):</div>
+  <div class="textarea-mock">Type here…</div>
+</div>
+
+<!-- Q4 — A or B -->
+<div class="q required">
+  <div class="num">Question 6 · Sales</div>
+  <div class="label">Pick one. Both help us, but specifics are always better.</div>
+  <div class="helper">Just your revenue from the night, separate from what you bought to restock.</div>
+  <div class="ab-wrap">
+    <div class="ab-card">
+      <div class="ab-tag">Option A · Preferred</div>
+      <div class="ab-label">Total sales / cash earned</div>
+      <div class="ab-helper">Best signal. Stays private to TC HB owners.</div>
+      <div class="input-mock">$&nbsp;&nbsp;&nbsp;0.00</div>
+    </div>
+    <div class="or-divider">OR</div>
+    <div class="ab-card">
+      <div class="ab-tag">Option B</div>
+      <div class="ab-label">1–10, how does May 29 compare to other shows for sales?</div>
+      <div class="ab-helper">If you'd rather not share the dollar figure.</div>
+      <div class="scale-row" style="margin-top:6pt;">
+        <div class="scale-btn">1</div><div class="scale-btn">2</div><div class="scale-btn">3</div><div class="scale-btn">4</div><div class="scale-btn">5</div>
+        <div class="scale-btn">6</div><div class="scale-btn">7</div><div class="scale-btn">8</div><div class="scale-btn">9</div><div class="scale-btn">10</div>
+      </div>
+      <div class="ab-helper" style="margin-top:6pt;">Tell us why (optional):</div>
+      <div class="textarea-mock">Type here…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Q5 — what should we provide -->
+<div class="q">
+  <div class="num">Question 7 · What can we provide</div>
+  <div class="label">We already cover tables, cloths, lights, canopies, food, everything. Anything else we should provide to make your night easier?</div>
+  <div class="helper">Hardware, supplies, signage, drinks, anything. Optional but really helpful.</div>
+  <div class="textarea-mock">Type here…</div>
+</div>
+
+<!-- Q6 — open feedback -->
+<div class="q">
+  <div class="num">Question 8 · Anything else</div>
+  <div class="label">Any other feedback for us? Good, bad, or weird — we read everything.</div>
+  <div class="textarea-mock">Type here…</div>
+</div>
+
+<div class="submit-row">
+  <div class="submit-btn">Submit Survey</div>
+</div>
+
+<div class="footer">
+  Mockup for review · Trainer Center HB · Generated 2026-05-30
+</div>
+
+</body>
+</html>

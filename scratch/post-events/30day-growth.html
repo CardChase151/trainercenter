@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trainer Center HB — 30-Day Growth Pulse</title>
+<style>
+  @page { size: Letter; margin: 0.4in 0.45in; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; background: #fff; font-size: 9pt; line-height: 1.3; }
+
+  h1 { font-size: 17pt; font-weight: 800; letter-spacing: -0.4pt; margin-bottom: 1pt; }
+  h2 { font-size: 10pt; font-weight: 800; margin: 8pt 0 3pt; padding-bottom: 1.5pt; border-bottom: 1pt solid #000; letter-spacing: -0.1pt; text-transform: uppercase; }
+  .sub { color: #555; font-size: 8.5pt; }
+
+  .header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2pt solid #000; padding-bottom: 4pt; margin-bottom: 6pt; }
+  .badge { background: #16a34a; color: #fff; padding: 2pt 8pt; border-radius: 2pt; font-size: 8pt; font-weight: 800; letter-spacing: 0.4pt; text-transform: uppercase; }
+
+  .kpi-row { display: flex; gap: 4pt; margin-bottom: 4pt; }
+  .kpi { flex: 1; border: 0.5pt solid #ccc; padding: 4pt 7pt; border-radius: 2pt; }
+  .kpi.hl { border-color: #16a34a; background: #f0fdf4; }
+  .kpi .label { font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.4pt; color: #777; margin-bottom: 1pt; font-weight: 700; }
+  .kpi .value { font-size: 14pt; font-weight: 800; letter-spacing: -0.4pt; line-height: 1.1; }
+  .kpi .delta { font-size: 7.5pt; color: #16a34a; font-weight: 700; margin-top: 1pt; }
+
+  .cols { display: flex; gap: 10pt; }
+  .col { flex: 1; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 2pt 0 4pt; font-variant-numeric: tabular-nums; }
+  th { text-align: right; font-weight: 800; padding: 3pt 5pt; border-bottom: 1pt solid #000; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.4pt; color: #000; }
+  th:first-child { text-align: left; }
+  td { text-align: right; padding: 2.5pt 5pt; border-bottom: 0.4pt solid #eee; }
+  td:first-child { text-align: left; font-weight: 600; }
+  tr.win td { background: #f0fdf4; }
+  tr.win td:last-child { color: #15803d; font-weight: 800; }
+
+  .pos { color: #16a34a; font-weight: 700; }
+  .accent {
+    background: #f0fdf4; border-left: 3pt solid #16a34a;
+    padding: 7pt 12pt; margin: 6pt 0;
+    border-radius: 0 4pt 4pt 0;
+  }
+  .accent .label { font-size: 7.5pt; font-weight: 800; color: #16a34a; letter-spacing: 0.4pt; text-transform: uppercase; margin-bottom: 2pt; }
+  .accent .body { font-size: 9.5pt; color: #000; line-height: 1.4; }
+  .accent .body b { font-weight: 800; }
+
+  .footer { margin-top: 8pt; padding-top: 4pt; border-top: 0.5pt solid #ccc; font-size: 7pt; color: #888; text-align: center; }
+
+  .data-banner {
+    background: #1a1a1a; color: #fff;
+    padding: 5pt 12pt; margin-bottom: 8pt;
+    border-radius: 3pt;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 9pt; font-weight: 800; letter-spacing: 0.8pt; text-transform: uppercase;
+  }
+  .data-banner .left { display: flex; align-items: center; gap: 8pt; }
+  .data-banner .dot { width: 8pt; height: 8pt; border-radius: 50%; background: #16a34a; }
+  .data-banner .right { font-size: 7.5pt; letter-spacing: 0.6pt; opacity: 0.8; font-weight: 600; }
+
+  /* Bar viz for referrers */
+  .bar-row { display: flex; align-items: center; gap: 6pt; margin-bottom: 2pt; font-size: 8.5pt; }
+  .bar-label { width: 95pt; font-weight: 600; }
+  .bar-track { flex: 1; height: 9pt; background: #f0f0f0; border-radius: 2pt; overflow: hidden; }
+  .bar-fill { height: 100%; background: #16a34a; }
+  .bar-fill.brand { background: #C8102E; }
+  .bar-val { width: 50pt; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="data-banner">
+  <div class="left"><span class="dot"></span>Website Data</div>
+  <div class="right">pokemontrainercenter.com</div>
+</div>
+
+<div class="header">
+  <div>
+    <h1>Trainer Center HB — 30-Day Growth</h1>
+    <div class="sub">pokemontrainercenter.com · May 2 → Jun 1, 2026</div>
+  </div>
+  <div><span class="badge">Growing</span></div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi hl"><div class="label">Page Views</div><div class="value">3,952</div><div class="delta">75% in last 14 days</div></div>
+  <div class="kpi hl"><div class="label">Unique Sessions</div><div class="value">2,008</div><div class="delta">+15% week over week</div></div>
+  <div class="kpi"><div class="label">Mobile Share</div><div class="value">76%</div><div class="delta" style="color:#777;">where the customers are</div></div>
+  <div class="kpi hl"><div class="label">Instagram Referrals</div><div class="value">1,119</div><div class="delta">28% of all traffic</div></div>
+</div>
+
+<div class="accent">
+  <div class="label">The Story</div>
+  <div class="body">
+    <b>Three of every four visits this month landed in the last 14 days.</b>
+    Instagram alone drove <b>1,119 visits</b>. Brand searches ("trainer center," "trainer center HB," "pokemon store huntington beach") all rank <b>#1–#3 on Google</b>. The site is on the map and the curve is up and to the right.
+  </div>
+</div>
+
+<div class="cols">
+  <div class="col">
+    <h2>We Own the Map · Top Google Queries</h2>
+    <table>
+      <thead><tr><th>Search Query</th><th>Pos</th><th>Clicks</th></tr></thead>
+      <tbody>
+        <tr class="win"><td>trainer center hb</td><td>#1.5</td><td>10</td></tr>
+        <tr class="win"><td>trainer center huntington beach</td><td>#1.9</td><td>12</td></tr>
+        <tr class="win"><td>pokemon store huntington beach</td><td>#2.0</td><td>6</td></tr>
+        <tr class="win"><td>trainer center</td><td>#2.5</td><td>16</td></tr>
+        <tr class="win"><td>pokemon trainer center</td><td>#2.9</td><td>7</td></tr>
+        <tr><td>pokemon training center</td><td>#6.7</td><td>2</td></tr>
+        <tr><td>card shops in huntington beach</td><td>#7.0</td><td>1</td></tr>
+        <tr><td>pokemon center nearby</td><td>#6.0</td><td>1</td></tr>
+      </tbody>
+    </table>
+    <div class="sub" style="margin-top:4pt; font-style:italic;">Every brand search now lands TC HB on page 1, top of the list.</div>
+  </div>
+
+  <div class="col">
+    <h2>Where People Land · Top Pages</h2>
+    <table>
+      <thead><tr><th>Page</th><th>Visits</th></tr></thead>
+      <tbody>
+        <tr><td>Home <code>/</code></td><td>1,383</td></tr>
+        <tr><td><code>/vendor-day</code></td><td>649</td></tr>
+        <tr><td><code>/vendors/dashboard</code></td><td>427</td></tr>
+        <tr><td><code>/vendors/events</code></td><td>241</td></tr>
+        <tr><td><code>/vendors/apply</code></td><td>230</td></tr>
+        <tr><td><code>/calendar</code></td><td>204</td></tr>
+        <tr><td><code>/checkin</code> (event QR)</td><td>120</td></tr>
+        <tr><td><code>/vendor-day/about</code></td><td>114</td></tr>
+        <tr><td><code>/buy-sell</code></td><td>67</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h2>Traffic Sources</h2>
+<div class="bar-row"><div class="bar-label">Direct</div><div class="bar-track"><div class="bar-fill brand" style="width:100%"></div></div><div class="bar-val">2,372</div></div>
+<div class="bar-row"><div class="bar-label">Instagram</div><div class="bar-track"><div class="bar-fill" style="width:47%"></div></div><div class="bar-val">1,119</div></div>
+<div class="bar-row"><div class="bar-label">Google Search</div><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div><div class="bar-val">310</div></div>
+<div class="bar-row"><div class="bar-label">Facebook</div><div class="bar-track"><div class="bar-fill" style="width:2.5%"></div></div><div class="bar-val">61</div></div>
+<div class="bar-row"><div class="bar-label">Gmail</div><div class="bar-track"><div class="bar-fill" style="width:1.7%"></div></div><div class="bar-val">39</div></div>
+<div class="bar-row"><div class="bar-label">Bing</div><div class="bar-track"><div class="bar-fill" style="width:0.9%"></div></div><div class="bar-val">20</div></div>
+<div class="bar-row"><div class="bar-label">Yelp</div><div class="bar-track"><div class="bar-fill" style="width:0.5%"></div></div><div class="bar-val">12</div></div>
+
+<div class="sub" style="margin-top:5pt; font-style:italic;">"Direct" is link clicks from SMS, the IG bio link, and the printed event QR. Together with Instagram, social-driven traffic is over <b style="color:#000;">88% of the month</b>.</div>
+
+<div class="footer">
+  Source: Google Search Console + on-site analytics (page_visits) · Generated 2026-06-01
+</div>
+
+</body>
+</html>

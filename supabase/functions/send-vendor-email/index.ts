@@ -508,25 +508,52 @@ Deno.serve(async (req: Request) => {
 
       const status = app.status
       if (status === 'approved') {
-        const subject = `You're in for ${dateStr}`
+        const subject = `CONGRATS ${v.name}, you're approved for ${dateStr}!`
         const lineupUrl = `${SITE_URL}/vendor-day?event=${app.event_id}`
         const vendorTimes = vendorTimeLine(e || {})
-        const vendorNote = e?.vendor_note || ''
-        const body = `<p>Hi ${v.name},</p>` +
-          `<p>Trainer Center HB approved your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>${vendorTimes ? ` from <strong>${vendorTimes}</strong>` : ''}.</p>` +
-          (vendorNote ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:6px"><p style="margin:0 0 4px;font-size:11px;font-weight:800;color:#166534;letter-spacing:0.06em">FROM CHEF</p><p style="margin:0;font-size:14px;color:#166534;line-height:1.5">${vendorNote}</p></td></tr></table>` : '') +
-          `<p>Bring your inventory, your energy, and your A-game. When you arrive on event day, log in and tap <strong>Check in</strong> on your dashboard. After the event you can come back and upload photos and a clip from your table — those go on our public Vendors page.</p>` +
-          (app.decision_note ? `<p style="font-size:14px;background:#f9fafb;border-left:3px solid #16a34a;padding:10px 14px">${app.decision_note}</p>` : '') +
-          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:18px 22px;border-radius:6px">` +
-          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.04em">📣 PROMOTE YOUR TABLE</p>` +
-          `  <p style="margin:0 0 10px;color:#1f2937;font-size:14px;line-height:1.5">Your logo and socials are live on the public lineup page. Share the link with your community to drive traffic to your table that day.</p>` +
+        const whenLine = `${dateStr}${vendorTimes ? ` &nbsp;&middot;&nbsp; ${vendorTimes}` : ''}`
+        const body =
+          `<p style="font-size:24px;font-weight:800;color:#1a1a1a;margin:0 0 6px">CONGRATS, ${v.name}!</p>` +
+          `<p style="margin:0 0 16px;font-size:16px;color:#1f2937">You've been <strong>approved</strong> for the next Trainer Center event!</p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px"><tr><td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px">` +
+          `  <p style="margin:0 0 4px;font-size:12px;font-weight:800;color:#64748b;letter-spacing:0.08em">WHEN</p>` +
+          `  <p style="margin:0;font-size:18px;font-weight:800;color:#1a1a1a">${whenLine}</p>` +
+          `  <p style="margin:6px 0 0;font-size:13px;color:#475569;line-height:1.5">This is an <strong>all-day</strong> event. There's no partial or shift option, so plan to be set up for the full window.</p>` +
+          `</td></tr></table>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:16px 20px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.04em">YOU MADE THE CUT</p>` +
+          `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.55">We're capping this event at <strong>30-35 vendors ONLY</strong>. We want you to know, you're a <strong>great fit and great quality</strong>. We don't just want anyone. <strong>Congrats on getting in!</strong></p>` +
+          `</td></tr></table>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:16px 20px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#166534;letter-spacing:0.04em">THIS EVENT IS TAKING OVER</p>` +
+          `  <p style="margin:0;color:#166534;font-size:14px;line-height:1.55">Everyone is talking about it, and that's thanks to people like <strong>YOU</strong>. We've got big plans and big excitement, and your table is a huge part of what makes it special.</p>` +
+          `</td></tr></table>` +
+          `<p style="margin:0 0 10px;font-size:15px;font-weight:800;color:#1a1a1a">A couple of keys to get you ready:</p>` +
+          `<ul style="margin:0 0 20px;padding-left:20px;color:#1f2937;font-size:14px;line-height:1.7">` +
+          `  <li><strong>Pok&eacute;mon only.</strong> No other TCG. We're California's Pok&eacute;mon-only shop and we keep it pure.</li>` +
+          `  <li><strong>We've got your setup covered.</strong> Tables, chairs, tablecloths, canopies, and area lighting. Just show up.</li>` +
+          `  <li><strong>Want it comfier?</strong> Bring your own chair or a custom setup, totally welcome.</li>` +
+          `  <li><strong>Last event was PACKED OUT.</strong> If you can bring an extra of anything to support a fellow vendor, that goes a long way. We're a community.</li>` +
+          `</ul>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr><td style="background:#eff6ff;border-left:4px solid #2563eb;padding:16px 20px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#1d4ed8;letter-spacing:0.04em">PICK YOUR SPOT</p>` +
+          `  <p style="margin:0;color:#1e3a5f;font-size:14px;line-height:1.55">Seating is <strong>first come, first serve</strong>, but please grab a <strong>different spot than last time</strong>. Also be ready to have a newer vendor placed <strong>between you and a veteran</strong>. We're sprinkling new folks around so everyone gets great neighbors and fresh foot traffic.</p>` +
+          `</td></tr></table>` +
+          `<p style="margin:0 0 16px;font-size:14px;color:#1f2937;line-height:1.6">When you arrive, log in and tap <strong>Check in</strong> on your dashboard so we know you've landed. After the event, hop back on and <strong>upload photos and a short clip</strong> from your table. Those go straight onto our public Vendors page and put your brand in front of everyone who visits.</p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:18px 22px;border-radius:6px">` +
+          `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.04em">PROMOTE YOUR TABLE</p>` +
+          `  <p style="margin:0 0 10px;color:#1f2937;font-size:14px;line-height:1.5">Your logo and socials are already live on the public lineup page. Drop the link to your community and bring your people. More eyes on the event means more traffic to your table.</p>` +
           `  <p style="margin:0;font-size:13px"><a href="${lineupUrl}" style="color:#C8102E;font-weight:700;text-decoration:underline">${lineupUrl.replace('https://', '')}</a></p>` +
           `</td></tr></table>` +
-          `<p style="margin-top:8px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>`
-        const text = `Approved for ${eventTitle} on ${dateStr}${vendorTimes ? ` from ${vendorTimes}` : ''}.\n\n` +
-          (vendorNote ? `From Trainer Center HB: ${vendorNote}\n\n` : '') +
-          `Promote your table — your logo and socials are live on the public lineup page. Share with your community:\n${lineupUrl}\n\n` +
-          `Dashboard: ${SITE_URL}/vendors/dashboard`
+          `<p style="margin:0 0 24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>` +
+          `<p style="margin:0;font-size:15px;color:#1a1a1a;font-weight:700">Let's make this the best one yet. See you ${dateStr}!</p>`
+        const text = `CONGRATS ${v.name}! You're approved for ${eventTitle} on ${dateStr}${vendorTimes ? ` (${vendorTimes})` : ''}.\n\n` +
+          `This is an all-day event. There's no partial or shift option, so plan to be set up for the full window.\n\n` +
+          `You made the cut: we're capping this at 30-35 vendors only. You're a great fit and great quality. Congrats on getting in!\n\n` +
+          `Keys: Pokemon only (no other TCG). We provide tables, chairs, tablecloths, canopies, and area lighting. Bring your own chair or setup if you want it comfier. Last event was packed out, so if you can bring an extra of anything to support fellow vendors, that is appreciated.\n\n` +
+          `Pick your spot: first come, first serve, but please grab a different spot than last time, and be ready to have a newer vendor placed between you and a veteran.\n\n` +
+          `When you arrive, tap Check in on your dashboard. After the event, upload photos and a clip for the public Vendors page.\n\n` +
+          `Promote your table: ${lineupUrl}\n\nDashboard: ${SITE_URL}/vendors/dashboard`
         await sendResendEmail([v.email], subject, wrapHtml(body), text)
       } else if (status === 'declined') {
         const subject = `About your TC's Beach City Trade Night application`
