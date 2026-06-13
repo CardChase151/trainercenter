@@ -17222,6 +17222,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   const gems = ['All', 'easy', 'moderate', 'tough', 'TRAP'];
   const money = (v) => v == null ? '—' : '$' + Number(v).toLocaleString();
   const ebayUrl = (c, grade) => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent((grade ? grade + ' ' : '') + c.name + ' ' + c.set + ' ' + String(c.number).split('/')[0] + ' pokemon')}&LH_Sold=1&LH_Complete=1`;
+  const tcgUrl = (c) => `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(c.name + ' ' + c.set)}&productLineName=pokemon`;
   const setSort = (k) => { if (sortKey === k) setSortDir(d => -d); else { setSortKey(k); setSortDir(-1); } };
 
   let rows = GRADING_CARDS.filter((c) => {
@@ -17314,7 +17315,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                   <Th k="psa10" label="PSA 10" right />
                   <Th k="mult" label="x10/raw" right />
                   <Th k="gem" label="Gem" />
-                  <th style={{ padding: '8px 10px', fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd', background: '#f7f7f9' }}>eBay</th>
+                  <th style={{ padding: '8px 10px', fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd', background: '#f7f7f9' }}>Verify</th>
                 </tr>
               </thead>
               <tbody>
@@ -17332,9 +17333,10 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                     <td style={{ padding: '7px 10px' }}>
                       {c.gem && <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: 5, background: c.gem === 'easy' ? '#dcfce7' : c.gem === 'TRAP' ? '#fee2e2' : c.gem === 'tough' ? '#ffedd5' : '#f1f5f9', color: c.gem === 'easy' ? '#15803d' : c.gem === 'TRAP' ? '#b91c1c' : c.gem === 'tough' ? '#c2410c' : '#475569' }}>{c.gem === 'moderate' ? 'mod' : c.gem}</span>}
                     </td>
-                    <td style={{ padding: '7px 10px' }}>
-                      <a href={ebayUrl(c, '')} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>raw</a>
-                      <a href={ebayUrl(c, 'PSA 10')} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none' }}>PSA10</a>
+                    <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>
+                      <a href={tcgUrl(c)} target="_blank" rel="noreferrer" title="Raw price on TCGplayer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>TCG raw</a>
+                      <a href={ebayUrl(c, 'PSA 9')} target="_blank" rel="noreferrer" title="eBay PSA 9 sold" style={{ color: '#0d1117', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>eBay 9</a>
+                      <a href={ebayUrl(c, 'PSA 10')} target="_blank" rel="noreferrer" title="eBay PSA 10 sold" style={{ color: '#0d1117', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none' }}>eBay 10</a>
                     </td>
                   </tr>
                 ))}
