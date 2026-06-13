@@ -17197,6 +17197,19 @@ function VendorNotesModal({ vendor, currentUserId, profilesById, onClose }) {
 
 function StaffGradingCandidatesPage({ isMobile, staff }) {
   const isAdmin = !!staff?.isAdmin;
+  const [cards, setCards] = useState(GRADING_CARDS);
+  useEffect(() => {
+    supabase.from('grading_candidates').select('*').then(({ data, error }) => {
+      if (!error && data && data.length) {
+        const num = (v) => (v === null || v === undefined ? null : Number(v));
+        setCards(data.map((r) => ({
+          name: r.name, set: r.set_name, number: r.number, era: r.era, tier: r.tier,
+          gem: r.gem, why: r.why, rawNM: num(r.raw_nm), psa9: num(r.psa9), psa10: num(r.psa10),
+          mult: num(r.mult), nineRoi: num(r.nine_roi), biz: r.biz, suspect: r.suspect,
+        })));
+      }
+    });
+  }, []);
   const [search, setSearch] = useState('');
   const [era, setEra] = useState('All');
   const [gem, setGem] = useState('All');
@@ -17206,6 +17219,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   const [sortKey, setSortKey] = useState('psa10');
   const [sortDir, setSortDir] = useState(-1);
   const [hideSuspect, setHideSuspect] = useState(true);
+  const [bizOnly, setBizOnly] = useState(false);
 
   if (!isAdmin) {
     return (
@@ -17218,9 +17232,9 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   }
 
   const RULES = [['Raw NM', 'nmMin', 'nmMax'], ['PSA 9', 'p9Min', 'p9Max'], ['PSA 10', 'p10Min', 'p10Max'], ['x10/raw', 'mMin', 'mMax']];
-  const sets = ['All', ...Array.from(new Set(GRADING_CARDS.map((c) => c.set))).sort()];
+  const sets = ['All', ...Array.from(new Set(cards.map((c) => c.set))).sort()];
   const inRange = (v, mn, mx) => { if (mn !== '' && (v == null || v < Number(mn))) return false; if (mx !== '' && (v == null || v > Number(mx))) return false; return true; };
-  const eras = ['All', 'SV', 'SwSh', 'XYSM'];
+  const eras = ['All', 'Mega', 'SV', 'SwSh', 'SM', 'XY'];
   const gems = ['All', 'easy', 'moderate', 'tough', 'TRAP'];
   const money = (v) => v == null ? '—' : '$' + Number(v).toLocaleString();
   const ebayUrl = (c, grade) => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent((grade ? grade + ' ' : '') + c.name + ' ' + c.set + ' ' + String(c.number).split('/')[0] + ' pokemon')}&LH_Sold=1&LH_Complete=1`;
@@ -17228,11 +17242,12 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   const setSort = (k) => { if (sortKey === k) setSortDir(d => -d); else { setSortKey(k); setSortDir(-1); } };
 
   const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  let rows = GRADING_CARDS.filter((c) => {
+  let rows = cards.filter((c) => {
     if (era !== 'All' && c.era !== era) return false;
     if (gem !== 'All' && c.gem !== gem) return false;
     if (setSel !== 'All' && c.set !== setSel) return false;
     if (hideSuspect && c.suspect) return false;
+    if (bizOnly && !c.biz) return false;
     if (tokens.length) {
       const hay = (c.name + ' ' + c.set + ' ' + c.number + ' ' + c.era).toLowerCase();
       if (!tokens.every((t) => hay.includes(t))) return false;
@@ -17312,7 +17327,10 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
               <span style={labelStyle2}>Gem</span>
               {gems.map((g) => <span key={g} onClick={() => setGem(g)} style={chipStyle(gem === g)}>{g}</span>)}
             </div>
-            <label style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
+            <label style={{ fontSize: '0.8rem', color: '#15803d', fontWeight: 700, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
+              <input type="checkbox" checked={bizOnly} onChange={(e) => setBizOnly(e.target.checked)} /> Business cards only (profit on a 9)
+            </label>
+            <label style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
               <input type="checkbox" checked={hideSuspect} onChange={(e) => setHideSuspect(e.target.checked)} /> Hide bad-match rows
             </label>
           </div>
@@ -17331,6 +17349,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                   <Th k="psa9" label="PSA 9" right />
                   <Th k="psa10" label="PSA 10" right />
                   <Th k="mult" label="x10/raw" right />
+                  <Th k="nineRoi" label="9-ROI" right />
                   <Th k="gem" label="Gem" />
                   <th style={{ padding: '8px 10px', fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd', background: '#f7f7f9' }}>Verify</th>
                 </tr>
@@ -17347,6 +17366,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.psa9)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{money(c.psa10)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: c.suspect ? '#b45309' : '#16a34a' }}>{c.mult ? 'x' + c.mult : '—'}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: (c.nineRoi && c.nineRoi >= 1.6) ? '#15803d' : '#bbb' }} title="PSA 9 sale ÷ all-in cost (raw + grading). ≥1.6 = profit even on a 9.">{c.nineRoi ? c.nineRoi + 'x' : '—'}</td>
                     <td style={{ padding: '7px 10px' }}>
                       {c.gem && <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: 5, background: c.gem === 'easy' ? '#dcfce7' : c.gem === 'TRAP' ? '#fee2e2' : c.gem === 'tough' ? '#ffedd5' : '#f1f5f9', color: c.gem === 'easy' ? '#15803d' : c.gem === 'TRAP' ? '#b91c1c' : c.gem === 'tough' ? '#c2410c' : '#475569' }}>{c.gem === 'moderate' ? 'mod' : c.gem}</span>}
                     </td>
@@ -17363,7 +17383,7 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
           {rows.length === 0 && <div style={{ padding: '32px 20px', textAlign: 'center', color: '#999', fontSize: '0.9rem' }}>No cards match these filters.</div>}
         </div>
         <div style={{ maxWidth: 1200, margin: '10px auto 0', fontSize: '0.78rem', color: '#999' }}>
-          {rows.length} of {GRADING_CARDS.length} cards. Prices = median consensus (eBay sold via Countdown + Poketrace, PriceCharting). x10/raw = grading ROI. "check NM" = raw price looks like a bad match — verify on eBay before trusting.
+          {rows.length} of {cards.length} cards. Prices = median consensus (eBay sold via Countdown + Poketrace, PriceCharting). x10/raw = grading ROI. "check NM" = raw price looks like a bad match — verify on eBay before trusting.
         </div>
       </div>
     </PageWrapper>
