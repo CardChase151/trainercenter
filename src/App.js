@@ -17335,8 +17335,8 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                     </td>
                     <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>
                       <a href={tcgUrl(c)} target="_blank" rel="noreferrer" title="Raw price on TCGplayer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>TCG raw</a>
-                      <a href={ebayUrl(c, 'PSA 9')} target="_blank" rel="noreferrer" title="eBay PSA 9 sold" style={{ color: '#0d1117', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>eBay 9</a>
-                      <a href={ebayUrl(c, 'PSA 10')} target="_blank" rel="noreferrer" title="eBay PSA 10 sold" style={{ color: '#0d1117', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none' }}>eBay 10</a>
+                      <a href={ebayUrl(c, 'PSA 9')} target="_blank" rel="noreferrer" title="eBay PSA 9 sold" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>eBay 9</a>
+                      <a href={ebayUrl(c, 'PSA 10')} target="_blank" rel="noreferrer" title="eBay PSA 10 sold" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none' }}>eBay 10</a>
                     </td>
                   </tr>
                 ))}
