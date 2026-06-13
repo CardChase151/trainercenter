@@ -17200,9 +17200,9 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   const [search, setSearch] = useState('');
   const [era, setEra] = useState('All');
   const [gem, setGem] = useState('All');
-  const [field, setField] = useState('psa10');
-  const [minP, setMinP] = useState('');
-  const [maxP, setMaxP] = useState('');
+  const [setSel, setSetSel] = useState('All');
+  const [R, setR] = useState({ nmMin: '', nmMax: '', p9Min: '', p9Max: '', p10Min: '', p10Max: '', mMin: '', mMax: '' });
+  const upR = (k, v) => setR((o) => ({ ...o, [k]: v }));
   const [sortKey, setSortKey] = useState('psa10');
   const [sortDir, setSortDir] = useState(-1);
   const [hideSuspect, setHideSuspect] = useState(true);
@@ -17217,7 +17217,9 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
     );
   }
 
-  const FIELDS = [['rawNM', 'Raw NM'], ['psa9', 'PSA 9'], ['psa10', 'PSA 10'], ['mult', 'Multiplier']];
+  const RULES = [['Raw NM', 'nmMin', 'nmMax'], ['PSA 9', 'p9Min', 'p9Max'], ['PSA 10', 'p10Min', 'p10Max'], ['x10/raw', 'mMin', 'mMax']];
+  const sets = ['All', ...Array.from(new Set(GRADING_CARDS.map((c) => c.set))).sort()];
+  const inRange = (v, mn, mx) => { if (mn !== '' && (v == null || v < Number(mn))) return false; if (mx !== '' && (v == null || v > Number(mx))) return false; return true; };
   const eras = ['All', 'SV', 'SwSh', 'XYSM'];
   const gems = ['All', 'easy', 'moderate', 'tough', 'TRAP'];
   const money = (v) => v == null ? '—' : '$' + Number(v).toLocaleString();
@@ -17225,14 +17227,20 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
   const tcgUrl = (c) => `https://www.tcgplayer.com/search/pokemon/product?q=${encodeURIComponent(c.name + ' ' + c.set)}&productLineName=pokemon`;
   const setSort = (k) => { if (sortKey === k) setSortDir(d => -d); else { setSortKey(k); setSortDir(-1); } };
 
+  const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let rows = GRADING_CARDS.filter((c) => {
     if (era !== 'All' && c.era !== era) return false;
     if (gem !== 'All' && c.gem !== gem) return false;
+    if (setSel !== 'All' && c.set !== setSel) return false;
     if (hideSuspect && c.suspect) return false;
-    if (search && !((c.name + ' ' + c.set).toLowerCase().includes(search.toLowerCase()))) return false;
-    const val = c[field];
-    if (minP !== '' && (val == null || val < Number(minP))) return false;
-    if (maxP !== '' && (val == null || val > Number(maxP))) return false;
+    if (tokens.length) {
+      const hay = (c.name + ' ' + c.set + ' ' + c.number + ' ' + c.era).toLowerCase();
+      if (!tokens.every((t) => hay.includes(t))) return false;
+    }
+    if (!inRange(c.rawNM, R.nmMin, R.nmMax)) return false;
+    if (!inRange(c.psa9, R.p9Min, R.p9Max)) return false;
+    if (!inRange(c.psa10, R.p10Min, R.p10Max)) return false;
+    if (!inRange(c.mult, R.mMin, R.mMax)) return false;
     return true;
   });
   rows = [...rows].sort((a, b) => {
@@ -17249,6 +17257,8 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
     color: on ? '#fff' : '#666', cursor: 'pointer', fontFamily: 'inherit',
   });
   const inputStyle = { padding: '7px 9px', fontSize: '0.85rem', border: '1px solid #ddd', borderRadius: 8, fontFamily: 'inherit', boxSizing: 'border-box' };
+  const labelStyle = { fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 };
+  const labelStyle2 = { fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase' };
   const Th = ({ k, label, right }) => (
     <th onClick={() => setSort(k)} style={{
       padding: '8px 10px', textAlign: right ? 'right' : 'left', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -17264,35 +17274,42 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
 
         {/* Filters */}
         <div style={{ maxWidth: 1200, margin: '0 auto 18px', background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: isMobile ? 14 : '16px 20px' }}>
+          {/* search + set + reset */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Search</label>
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Card or set…" style={{ ...inputStyle, width: '100%' }} />
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <label style={labelStyle}>Search — name, number, or combo</label>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder='e.g. "charizard 199", "umbreon", "zek 33"' style={{ ...inputStyle, width: '100%' }} />
             </div>
             <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Price range by</label>
-              <select value={field} onChange={(e) => setField(e.target.value)} style={{ ...inputStyle }}>
-                {FIELDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              <label style={labelStyle}>Set</label>
+              <select value={setSel} onChange={(e) => setSetSel(e.target.value)} style={{ ...inputStyle, maxWidth: 230 }}>
+                {sets.map((s) => <option key={s} value={s}>{s === 'All' ? 'All sets' : s}</option>)}
               </select>
             </div>
-            <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Min</label>
-              <input type="number" value={minP} onChange={(e) => setMinP(e.target.value)} placeholder="0" style={{ ...inputStyle, width: 90 }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Max</label>
-              <input type="number" value={maxP} onChange={(e) => setMaxP(e.target.value)} placeholder="any" style={{ ...inputStyle, width: 90 }} />
-            </div>
-            <button onClick={() => setMaxP('5000')} style={{ ...inputStyle, cursor: 'pointer', fontWeight: 700, background: '#f3f4f6' }}>Cap $5K</button>
-            <button onClick={() => { setSearch(''); setEra('All'); setGem('All'); setMinP(''); setMaxP(''); }} style={{ ...inputStyle, cursor: 'pointer', fontWeight: 700, background: '#f3f4f6' }}>Reset</button>
+            <button onClick={() => { setSearch(''); setEra('All'); setGem('All'); setSetSel('All'); setR({ nmMin: '', nmMax: '', p9Min: '', p9Max: '', p10Min: '', p10Max: '', mMin: '', mMax: '' }); }} style={{ ...inputStyle, cursor: 'pointer', fontWeight: 700, background: '#f3f4f6' }}>Reset all</button>
           </div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
+          {/* price rules — combinable min/max per field */}
+          <div style={{ marginTop: 14 }}>
+            <div style={labelStyle}>Price rules — set any min/max, they stack (e.g. PSA 9 min 500 + PSA 10 max 5000)</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {RULES.map(([lbl, mnK, mxK]) => (
+                <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f9fafb', border: '1px solid #eee', borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#444', minWidth: 56 }}>{lbl}</span>
+                  <input type="number" value={R[mnK]} onChange={(e) => upR(mnK, e.target.value)} placeholder="min" style={{ ...inputStyle, width: 66, padding: '5px 7px' }} />
+                  <span style={{ color: '#bbb' }}>–</span>
+                  <input type="number" value={R[mxK]} onChange={(e) => upR(mxK, e.target.value)} placeholder="max" style={{ ...inputStyle, width: 66, padding: '5px 7px' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* era + gem + hide */}
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 14, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase' }}>Era</span>
+              <span style={labelStyle2}>Era</span>
               {eras.map((e) => <span key={e} onClick={() => setEra(e)} style={chipStyle(era === e)}>{e}</span>)}
             </div>
             <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase' }}>Gem</span>
+              <span style={labelStyle2}>Gem</span>
               {gems.map((g) => <span key={g} onClick={() => setGem(g)} style={chipStyle(gem === g)}>{g}</span>)}
             </div>
             <label style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
