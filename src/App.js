@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
 import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import BLOG_DATA from './blogData';
+import { GRADING_CARDS } from './gradingData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
@@ -597,6 +598,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     { key: 'instagram', label: 'Instagram Contacts', desc: 'Tag followers as member, vendor, or influencer', icon: <IgIcon size={20} />, to: '/staff/instagram', accent: '#C8102E' },
     { key: 'printables', label: 'Printables', desc: 'Staff sheets + QR codes — print or download', icon: <FileEdit size={20} />, to: '/staff/printables', accent: '#C8102E' },
     { key: 'analytics', label: 'Analytics', desc: 'Daily SEO + traffic dashboard', icon: <BarChart3 size={20} />, to: '/staff/analytics', accent: '#C8102E' },
+    { key: 'grading',  label: 'Grading Candidates', desc: 'Top cards to grade, by price + ROI', icon: <GraduationCap size={20} />, to: '/staff/grading-candidates', accent: '#C8102E' },
     { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
   ];
 
@@ -17193,6 +17195,162 @@ function VendorNotesModal({ vendor, currentUserId, profilesById, onClose }) {
   );
 }
 
+function StaffGradingCandidatesPage({ isMobile, staff }) {
+  const isAdmin = !!staff?.isAdmin;
+  const [search, setSearch] = useState('');
+  const [era, setEra] = useState('All');
+  const [gem, setGem] = useState('All');
+  const [field, setField] = useState('psa10');
+  const [minP, setMinP] = useState('');
+  const [maxP, setMaxP] = useState('');
+  const [sortKey, setSortKey] = useState('psa10');
+  const [sortDir, setSortDir] = useState(-1);
+  const [hideSuspect, setHideSuspect] = useState(true);
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: 560, margin: '0 auto', marginBottom: 64, textAlign: 'center' }}>
+          <SectionHeader title="Staff only" subtitle="Log in as staff to view grading candidates" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const FIELDS = [['rawNM', 'Raw NM'], ['psa9', 'PSA 9'], ['psa10', 'PSA 10'], ['mult', 'Multiplier']];
+  const eras = ['All', 'SV', 'SwSh', 'XYSM'];
+  const gems = ['All', 'easy', 'moderate', 'tough', 'TRAP'];
+  const money = (v) => v == null ? '—' : '$' + Number(v).toLocaleString();
+  const ebayUrl = (c, grade) => `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent((grade ? grade + ' ' : '') + c.name + ' ' + c.set + ' ' + String(c.number).split('/')[0] + ' pokemon')}&LH_Sold=1&LH_Complete=1`;
+  const setSort = (k) => { if (sortKey === k) setSortDir(d => -d); else { setSortKey(k); setSortDir(-1); } };
+
+  let rows = GRADING_CARDS.filter((c) => {
+    if (era !== 'All' && c.era !== era) return false;
+    if (gem !== 'All' && c.gem !== gem) return false;
+    if (hideSuspect && c.suspect) return false;
+    if (search && !((c.name + ' ' + c.set).toLowerCase().includes(search.toLowerCase()))) return false;
+    const val = c[field];
+    if (minP !== '' && (val == null || val < Number(minP))) return false;
+    if (maxP !== '' && (val == null || val > Number(maxP))) return false;
+    return true;
+  });
+  rows = [...rows].sort((a, b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (x == null) x = sortDir > 0 ? Infinity : -Infinity;
+    if (y == null) y = sortDir > 0 ? Infinity : -Infinity;
+    if (typeof x === 'string') return sortDir * x.localeCompare(y);
+    return sortDir * (x - y);
+  });
+
+  const chipStyle = (on) => ({
+    fontSize: '0.8rem', fontWeight: 700, padding: '4px 11px', borderRadius: 99,
+    border: '1px solid ' + (on ? '#C8102E' : '#ddd'), background: on ? '#C8102E' : '#fff',
+    color: on ? '#fff' : '#666', cursor: 'pointer', fontFamily: 'inherit',
+  });
+  const inputStyle = { padding: '7px 9px', fontSize: '0.85rem', border: '1px solid #ddd', borderRadius: 8, fontFamily: 'inherit', boxSizing: 'border-box' };
+  const Th = ({ k, label, right }) => (
+    <th onClick={() => setSort(k)} style={{
+      padding: '8px 10px', textAlign: right ? 'right' : 'left', cursor: 'pointer', whiteSpace: 'nowrap',
+      fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd',
+      background: '#f7f7f9', position: 'sticky', top: 0,
+    }}>{label}{sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>
+  );
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: 64 }}>
+        <SectionHeader title="Grading Candidates" subtitle="Top $500+ PSA 10 cards to grade — sortable by price and ROI" />
+
+        {/* Filters */}
+        <div style={{ maxWidth: 1200, margin: '0 auto 18px', background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: isMobile ? 14 : '16px 20px' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Search</label>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Card or set…" style={{ ...inputStyle, width: '100%' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Price range by</label>
+              <select value={field} onChange={(e) => setField(e.target.value)} style={{ ...inputStyle }}>
+                {FIELDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Min</label>
+              <input type="number" value={minP} onChange={(e) => setMinP(e.target.value)} placeholder="0" style={{ ...inputStyle, width: 90 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>Max</label>
+              <input type="number" value={maxP} onChange={(e) => setMaxP(e.target.value)} placeholder="any" style={{ ...inputStyle, width: 90 }} />
+            </div>
+            <button onClick={() => setMaxP('5000')} style={{ ...inputStyle, cursor: 'pointer', fontWeight: 700, background: '#f3f4f6' }}>Cap $5K</button>
+            <button onClick={() => { setSearch(''); setEra('All'); setGem('All'); setMinP(''); setMaxP(''); }} style={{ ...inputStyle, cursor: 'pointer', fontWeight: 700, background: '#f3f4f6' }}>Reset</button>
+          </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase' }}>Era</span>
+              {eras.map((e) => <span key={e} onClick={() => setEra(e)} style={chipStyle(era === e)}>{e}</span>)}
+            </div>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#888', textTransform: 'uppercase' }}>Gem</span>
+              {gems.map((g) => <span key={g} onClick={() => setGem(g)} style={chipStyle(gem === g)}>{g}</span>)}
+            </div>
+            <label style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
+              <input type="checkbox" checked={hideSuspect} onChange={(e) => setHideSuspect(e.target.checked)} /> Hide bad-match rows
+            </label>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div style={{ maxWidth: 1200, margin: '0 auto', background: '#fff', border: '1px solid #eee', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', minWidth: 760 }}>
+              <thead>
+                <tr>
+                  <Th k="name" label="Card" />
+                  <Th k="set" label="Set" />
+                  <Th k="era" label="Era" />
+                  <Th k="rawNM" label="Raw NM" right />
+                  <Th k="psa9" label="PSA 9" right />
+                  <Th k="psa10" label="PSA 10" right />
+                  <Th k="mult" label="x10/raw" right />
+                  <Th k="gem" label="Gem" />
+                  <th style={{ padding: '8px 10px', fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd', background: '#f7f7f9' }}>eBay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '7px 10px', fontWeight: 700, color: '#1a1a1a' }}>
+                      {c.name}{c.suspect && <span title="Raw NM looks like a bad match" style={{ marginLeft: 6, fontSize: '0.65rem', fontWeight: 800, color: '#b45309', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>check NM</span>}
+                    </td>
+                    <td style={{ padding: '7px 10px', color: '#666' }}>{c.set} #{c.number}</td>
+                    <td style={{ padding: '7px 10px', color: '#888', fontSize: '0.78rem' }}>{c.era}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.rawNM)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.psa9)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{money(c.psa10)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: c.suspect ? '#b45309' : '#16a34a' }}>{c.mult ? 'x' + c.mult : '—'}</td>
+                    <td style={{ padding: '7px 10px' }}>
+                      {c.gem && <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: 5, background: c.gem === 'easy' ? '#dcfce7' : c.gem === 'TRAP' ? '#fee2e2' : c.gem === 'tough' ? '#ffedd5' : '#f1f5f9', color: c.gem === 'easy' ? '#15803d' : c.gem === 'TRAP' ? '#b91c1c' : c.gem === 'tough' ? '#c2410c' : '#475569' }}>{c.gem === 'moderate' ? 'mod' : c.gem}</span>}
+                    </td>
+                    <td style={{ padding: '7px 10px' }}>
+                      <a href={ebayUrl(c, '')} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', marginRight: 8 }}>raw</a>
+                      <a href={ebayUrl(c, 'PSA 10')} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none' }}>PSA10</a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {rows.length === 0 && <div style={{ padding: '32px 20px', textAlign: 'center', color: '#999', fontSize: '0.9rem' }}>No cards match these filters.</div>}
+        </div>
+        <div style={{ maxWidth: 1200, margin: '10px auto 0', fontSize: '0.78rem', color: '#999' }}>
+          {rows.length} of {GRADING_CARDS.length} cards. Prices = median consensus (eBay sold via Countdown + Poketrace, PriceCharting). x10/raw = grading ROI. "check NM" = raw price looks like a bad match — verify on eBay before trusting.
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
 function StaffVendorsPage({ isMobile, staff }) {
   const [tab, setTab] = useState('new');
   const [pending, setPending] = useState([]);
@@ -19363,6 +19521,7 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Instagram Contacts', to: '/staff/instagram' },
             { label: 'Printables', to: '/staff/printables' },
             { label: 'Analytics', to: '/staff/analytics' },
+            { label: 'Grading Candidates', to: '/staff/grading-candidates' },
             { label: 'Business Hours', to: '/#visit-us' },
             // Trade Night preview — flips the entire site into event-day
             // mode (for everyone) so staff can run a real end-to-end test.
@@ -24594,6 +24753,7 @@ function App() {
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/printables" element={<StaffPrintablesPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
+        <Route path="/staff/grading-candidates" element={<StaffGradingCandidatesPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
       {/* Unified auth modal — replaces the old StaffLogin. Driven by
