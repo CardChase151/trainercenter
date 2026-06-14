@@ -17206,6 +17206,8 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
           name: r.name, set: r.set_name, number: r.number, era: r.era, tier: r.tier,
           gem: r.gem, why: r.why, rawNM: num(r.raw_nm), psa9: num(r.psa9), psa10: num(r.psa10),
           mult: num(r.mult), nineRoi: num(r.nine_roi), biz: r.biz, suspect: r.suspect,
+          psa10Rate: num(r.psa10_rate), psa9Rate: num(r.psa9_rate), gemPop: num(r.gem_pop), gemSource: r.gem_source,
+          gemOdds: (r.psa10_rate != null || r.psa9_rate != null) ? (Number(r.psa10_rate || 0) + Number(r.psa9_rate || 0)) : null,
         })));
       }
     });
@@ -17350,6 +17352,8 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                   <Th k="psa10" label="PSA 10" right />
                   <Th k="mult" label="x10/raw" right />
                   <Th k="nineRoi" label="9-ROI" right />
+                  <Th k="psa10Rate" label="10 odds" right />
+                  <Th k="gemOdds" label="9+ odds" right />
                   <Th k="gem" label="Gem" />
                   <th style={{ padding: '8px 10px', fontSize: '0.7rem', fontWeight: 800, color: '#888', textTransform: 'uppercase', borderBottom: '1px solid #ddd', background: '#f7f7f9' }}>Verify</th>
                 </tr>
@@ -17367,6 +17371,8 @@ function StaffGradingCandidatesPage({ isMobile, staff }) {
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{money(c.psa10)}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: c.suspect ? '#b45309' : '#16a34a' }}>{c.mult ? 'x' + c.mult : '—'}</td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: (c.nineRoi && c.nineRoi >= 1.6) ? '#15803d' : '#bbb' }} title="PSA 9 sale ÷ all-in cost (raw + grading). ≥1.6 = profit even on a 9.">{c.nineRoi ? c.nineRoi + 'x' : '—'}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: c.psa10Rate == null ? '#bbb' : (c.psa10Rate >= 40 ? '#15803d' : c.psa10Rate < 15 ? '#dc4b4b' : '#666') }} title={c.gemSource === 'est' ? 'estimated' : (c.gemPop ? 'PSA pop ' + c.gemPop : 'PSA pop data')}>{c.psa10Rate == null ? '—' : c.psa10Rate + '%' + (c.gemSource === 'est' ? '*' : '')}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: c.gemOdds == null ? '#bbb' : (c.gemOdds >= 70 ? '#15803d' : c.gemOdds < 40 ? '#dc4b4b' : '#666') }} title="Chance of a PSA 9 or 10 (the profit zone). Below ~40% = most copies come back an 8.">{c.gemOdds == null ? '—' : Math.round(c.gemOdds) + '%'}</td>
                     <td style={{ padding: '7px 10px' }}>
                       {c.gem && <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '1px 7px', borderRadius: 5, background: c.gem === 'easy' ? '#dcfce7' : c.gem === 'TRAP' ? '#fee2e2' : c.gem === 'tough' ? '#ffedd5' : '#f1f5f9', color: c.gem === 'easy' ? '#15803d' : c.gem === 'TRAP' ? '#b91c1c' : c.gem === 'tough' ? '#c2410c' : '#475569' }}>{c.gem === 'moderate' ? 'mod' : c.gem}</span>}
                     </td>
