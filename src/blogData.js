@@ -311,7 +311,7 @@ const BLOG_DATA = [
   {
     slug: 'foreign-language-cards',
     title: 'Are Foreign Language Pokemon Cards Worth More Than English?',
-    published: false,
+    published: true,
     content: [
       { type: 'p', text: 'Short answer: usually no.' },
       { type: 'p', text: 'The majority of the Pokemon card market, especially in the United States, is driven by English language cards. English cards have the largest buyer pool, the most price data, and the highest demand. If you are looking to sell or trade, English cards will almost always move faster and for more money.' },

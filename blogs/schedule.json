@@ -1,5 +1,5 @@
 {
-  "next": 12,
+  "next": 13,
   "total": 12,
   "blogs": [
     {
@@ -72,7 +72,7 @@
       "num": 12,
       "file": "12-foreign-language-cards.md",
       "title": "Are Foreign Language Pokemon Cards Worth More?",
-      "status": "queued"
+      "status": "published"
     }
   ]
 }
