@@ -10874,12 +10874,6 @@ function VendorDashboardPage({ isMobile }) {
           </div>
         )}
 
-        {/* ── Partnership journey strip ───────────────────────
-            5-step lifecycle visualizer. Step 1 reflects the vendor's
-            current partner status; steps 2-5 are the recurring rhythm
-            that keeps the partnership active. */}
-        <PartnershipJourney vendorStatus={vendor.status} isMobile={isMobile} />
-
         {/* Profile summary */}
         <div style={{
           backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #eee',
@@ -11198,279 +11192,6 @@ function VendorUploadPickerPage({ isMobile }) {
         )}
       </div>
     </PageWrapper>
-  );
-}
-
-// ─── Partnership Journey strip ────────────────────────────
-// 5-step horizontal (or vertical on mobile) lifecycle the vendor moves
-// through. Step 1 mirrors `vendor.status`. Steps 2-5 are recurring per
-// event cycle. Pending or suspended vendors see steps 2-5 dimmed.
-function PartnershipJourney({ vendorStatus, isMobile }) {
-  const STEPS = [
-    { num: 1, label: 'Partner status', short: 'Status', desc: 'Apply to partner with Trainer Center HB.' },
-    { num: 2, label: 'Pick events', short: 'Events', desc: 'Apply for the Vendor Days you want to be at.' },
-    { num: 3, label: 'Promote before', short: 'Promote', desc: 'DM the next event in line to 3-10 people each cycle, plus 1 IG post tagging Trainer Center HB.' },
-    { num: 4, label: 'Capture during', short: 'Capture', desc: 'Take photos and a short clip from your table.' },
-    { num: 5, label: 'Upload after', short: 'Upload', desc: 'Post freely on your IG and tag Trainer Center HB as often as you like. Then upload here so it shows on our public Vendors page.' },
-  ];
-  const isApproved = vendorStatus === 'approved';
-  const isPending = vendorStatus === 'pending';
-  const isSuspended = vendorStatus === 'suspended';
-  const [showWhy, setShowWhy] = useState(false);
-  const [openStep, setOpenStep] = useState(null); // mobile: tapped step reveals its detail
-
-  // Step 1 takes the partner-status color. Steps 2-5 are dimmed unless approved.
-  const step1Color = isApproved ? '#16a34a' : isSuspended ? '#dc2626' : '#c2410c';
-  const step1Pill = isApproved ? 'Approved partner' : isSuspended ? 'Suspended' : 'Pending review';
-
-  const stepStyle = (i) => {
-    const isFirst = i === 0;
-    const dimmed = !isFirst && !isApproved;
-    return {
-      flex: 1,
-      minWidth: isMobile ? 'auto' : '0',
-      backgroundColor: '#fff',
-      border: `1px solid ${isFirst ? step1Color : dimmed ? '#eee' : '#1a1a1a'}`,
-      borderRadius: '12px',
-      padding: isMobile ? '14px 14px' : '14px 16px',
-      opacity: dimmed ? 0.55 : 1,
-    };
-  };
-
-  // ── Mobile: condensed horizontal strip. The 5 full step-cards stack into a
-  //    tall tower on phones, so collapse to a compact numbered row; tap a step
-  //    to reveal its detail below. Desktop keeps the fuller layout.
-  if (isMobile) {
-    const activeStep = STEPS.find(x => x.num === openStep);
-    return (
-      <div style={{ maxWidth: '1100px', margin: '0 auto 20px' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: '10px', marginBottom: '10px',
-        }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666' }}>
-            Partnership steps
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowWhy(s => !s)}
-            aria-label="Why this matters"
-            className="icon-tap"
-            style={{
-              width: '24px', height: '24px', borderRadius: '50%',
-              backgroundColor: showWhy ? '#1a1a1a' : '#fff',
-              color: showWhy ? '#fff' : '#666',
-              border: '1px solid #ddd', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.9rem', fontWeight: 900, fontFamily: 'inherit', flexShrink: 0,
-            }}
-            title="Why this matters"
-          >
-            i
-          </button>
-        </div>
-
-        {showWhy && (
-          <div style={{
-            backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '12px',
-            padding: '14px 16px', marginBottom: '10px',
-            fontSize: '0.85rem', color: '#333', lineHeight: 1.6,
-          }}>
-            <p style={{ margin: '0 0 8px' }}>
-              <strong>Why this matters.</strong> Traffic from our site gets funneled to promote you over time. The IG algo rewards behind-the-scenes DMs more than public likes, so we ask for at least <strong>3-10 DMs per month</strong> for the next event.
-            </p>
-            <p style={{ margin: 0 }}>
-              Tagging us and uploading after places you on{' '}
-              <Link to="/vendors" style={{ color: '#C8102E', fontWeight: '700' }}>our public Vendors page</Link>.
-            </p>
-          </div>
-        )}
-
-        <div style={{
-          display: 'flex', gap: '2px', alignItems: 'flex-start',
-          backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
-          padding: '12px 6px',
-        }}>
-          {STEPS.map((s, i) => {
-            const isFirst = i === 0;
-            const dimmed = !isFirst && !isApproved;
-            const circleColor = isFirst ? step1Color : dimmed ? '#e5e7eb' : '#1a1a1a';
-            const isOpen = openStep === s.num;
-            return (
-              <button
-                key={s.num}
-                type="button"
-                onClick={() => setOpenStep(isOpen ? null : s.num)}
-                style={{
-                  flex: 1, minWidth: 0, padding: '4px 2px',
-                  background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
-                  opacity: dimmed ? 0.6 : 1,
-                }}
-              >
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%',
-                  backgroundColor: circleColor, color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 800, flexShrink: 0,
-                  outline: isOpen ? `2px solid ${circleColor}` : 'none', outlineOffset: '2px',
-                }}>
-                  {s.num}
-                </div>
-                <div style={{ fontSize: '0.6rem', fontWeight: 700, color: dimmed ? '#9ca3af' : '#444', textAlign: 'center', lineHeight: 1.2 }}>
-                  {s.short}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {activeStep && (
-          <div style={{
-            marginTop: '8px', backgroundColor: '#fafafa', border: '1px solid #eee',
-            borderRadius: '10px', padding: '10px 14px',
-            fontSize: '0.82rem', color: '#444', lineHeight: 1.5,
-          }}>
-            {openStep === 1 ? (
-              <><strong style={{ color: step1Color }}>{step1Pill}.</strong>{' '}
-                {isPending ? 'Awaiting Trainer Center HB review.' : isSuspended ? 'Reach out to Chef to re-activate.' : 'You are an approved partner.'}</>
-            ) : (
-              <><strong>{activeStep.label}.</strong> {activeStep.desc}</>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto 24px' }}>
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        gap: '12px', flexWrap: 'wrap', marginBottom: '14px',
-      }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{
-            fontSize: isMobile ? '1.3rem' : '1.6rem',
-            fontWeight: '900',
-            color: '#1a1a1a',
-            margin: '0 0 4px 0',
-            letterSpacing: '-0.02em',
-          }}>
-            Partnership: Want more followers?
-          </h2>
-          <p style={{
-            fontSize: isMobile ? '0.95rem' : '1rem',
-            fontWeight: '700',
-            color: '#C8102E',
-            margin: 0,
-          }}>
-            Follow the steps exactly.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowWhy(s => !s)}
-          aria-label="Why this matters"
-          className="icon-tap"
-          style={{
-            borderRadius: '50%',
-            backgroundColor: showWhy ? '#1a1a1a' : '#fff',
-            color: showWhy ? '#fff' : '#666',
-            border: '1px solid #ddd',
-            cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.05rem', fontWeight: '900',
-            fontFamily: 'inherit',
-            flexShrink: 0,
-          }}
-          title="Why this matters"
-        >
-          i
-        </button>
-      </div>
-
-      {showWhy && (
-        <div style={{
-          backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '12px',
-          padding: isMobile ? '14px 16px' : '16px 20px',
-          marginBottom: '14px',
-          fontSize: '0.88rem', color: '#333', lineHeight: 1.7,
-        }}>
-          <p style={{ margin: '0 0 8px' }}>
-            <strong>Why this matters.</strong> As part of our relationship, all the traffic from our site can be funneled to promote you over time as well.
-          </p>
-          <p style={{ margin: '0 0 8px' }}>
-            <strong>The IG algo rewards behind-the-scenes DMs</strong> more than public likes. Don't spam — genuine shares can be daily and by the dozens — but at minimum we ask for <strong>3-10 DMs per month</strong> for the next upcoming event.
-          </p>
-          <p style={{ margin: 0 }}>
-            Tagging us and uploading after places you on our site at{' '}
-            <Link to="/vendors" style={{ color: '#C8102E', fontWeight: '700' }}>pokemontrainercenter.com/vendors</Link>{' '}
-            to drive traffic to you too. Make the posts great.
-          </p>
-        </div>
-      )}
-      <div style={{
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        gap: '10px',
-        alignItems: 'stretch',
-      }}>
-        {STEPS.map((s, i) => {
-          const dimmed = i > 0 && !isApproved;
-          return (
-            <div key={s.num} style={stepStyle(i)}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{
-                  width: '24px', height: '24px', borderRadius: '50%',
-                  backgroundColor: i === 0 ? step1Color : dimmed ? '#e5e7eb' : '#1a1a1a',
-                  color: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.72rem', fontWeight: '800',
-                  flexShrink: 0,
-                }}>
-                  {s.num}
-                </div>
-                <div style={{
-                  fontSize: '0.78rem', fontWeight: '800',
-                  color: dimmed ? '#9ca3af' : '#1a1a1a',
-                  letterSpacing: '0.02em',
-                  textTransform: 'uppercase',
-                }}>
-                  {s.label}
-                </div>
-              </div>
-              {i === 0 ? (
-                <>
-                  <div style={{
-                    display: 'inline-block',
-                    fontSize: '0.7rem', fontWeight: '800',
-                    color: step1Color,
-                    backgroundColor: step1Color + '14',
-                    padding: '3px 10px', borderRadius: '999px',
-                    marginBottom: '6px',
-                    letterSpacing: '0.04em', textTransform: 'uppercase',
-                  }}>
-                    {step1Pill}
-                  </div>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#666', lineHeight: 1.45 }}>
-                    {isPending
-                      ? 'Awaiting Trainer Center HB review.'
-                      : isSuspended
-                        ? 'Reach out to Chef to re-activate.'
-                        : 'You are an approved partner.'}
-                  </p>
-                </>
-              ) : (
-                <p style={{ margin: 0, fontSize: '0.78rem', color: dimmed ? '#9ca3af' : '#444', lineHeight: 1.45 }}>
-                  {s.desc}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -12777,42 +12498,32 @@ function vendorMatchesQuery(vendor, query) {
 
 // ─── Apply-for-event modal ────────────────────────────────
 // Shown when a logged-in approved vendor clicks "Apply for this date" on
-// their dashboard. Collects:
-//   - Requested time slot (defaulted to the event's full window)
-//   - Optional vendor_note explaining the slot or anything else for chef
-// Both fields are persisted on vendor_applications so the public showcase
-// can render the time and the chef can see context when approving.
+// their dashboard. Simple confirmation: shows the event's date + vendor
+// hours read-only (vendors don't pick a window or table size — Trainer
+// Center handles table assignments). Collects only an optional
+// vendor_note. The requested_* columns are NOT NULL in the DB, so we
+// persist the event's vendor window and 'tbd' for table size.
 function ApplyForEventModal({ event, onClose, onSubmit }) {
-  const [startTime, setStartTime] = useState((event.start_time || '12:00:00').slice(0, 5));
-  const [endTime, setEndTime] = useState((event.end_time || '20:00:00').slice(0, 5));
-  const [tableSize, setTableSize] = useState('tbd');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const eventStartLabel = formatTime12h(event.start_time) || '12 PM';
-  const eventEndLabel = formatTime12h(event.end_time) || '8 PM';
+  const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
+  const vendorEnd = event.vendor_end_time || event.end_time || '20:00:00';
+  const eventStartLabel = formatTime12h(vendorStart) || '12 PM';
+  const eventEndLabel = formatTime12h(vendorEnd) || '8 PM';
+  const dateLabel = new Date(event.event_date + 'T12:00:00')
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Defense in depth: HTML `required` blocks empty submits in most
-    // browsers, but iOS Safari has historically been loose with native
-    // time inputs. Re-validate here so the DB never sees a null slot.
-    if (!startTime || !endTime) {
-      setError('Pick both an arrival time and a leave time.');
-      return;
-    }
-    if (endTime <= startTime) {
-      setError('End time must be after start time.');
-      return;
-    }
     setSubmitting(true);
     setError('');
     try {
       await onSubmit({
-        requested_start_time: startTime,
-        requested_end_time: endTime,
-        requested_table_size: tableSize,
+        requested_start_time: vendorStart.slice(0, 5),
+        requested_end_time: vendorEnd.slice(0, 5),
+        requested_table_size: 'tbd',
         vendor_note: note.trim() || null,
       });
       onClose();
@@ -12849,73 +12560,27 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
           Apply for {event.title || 'Vendor Day'}
         </h3>
         <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: '#666' }}>
-          Event runs {eventStartLabel} – {eventEndLabel}. Pick the window you want to be there.
+          You are applying for the following date and time.
         </p>
 
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelCss}>Arrive at</label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-              style={inputCss}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={labelCss}>Leave at</label>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-              style={inputCss}
-            />
-          </div>
-        </div>
-
-        <label style={labelCss}>Table space needed</label>
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '6px', marginBottom: '16px',
+          backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '10px',
+          padding: '14px 16px', marginBottom: '16px',
         }}>
-          {[
-            { key: 'half',   label: 'Half',   sub: 'Share' },
-            { key: 'full',   label: 'Full',   sub: '1 table' },
-            { key: 'double', label: 'Double', sub: '2 tables' },
-            { key: 'tbd',    label: 'Not sure', sub: 'Decide later' },
-          ].map(opt => {
-            const active = tableSize === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setTableSize(opt.key)}
-                style={{
-                  padding: '10px 6px',
-                  border: active ? '2px solid #C8102E' : '2px solid #e5e7eb',
-                  backgroundColor: active ? '#fef2f2' : '#fff',
-                  color: active ? '#C8102E' : '#1a1a1a',
-                  borderRadius: '8px',
-                  fontSize: '0.82rem', fontWeight: '800',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
-                }}
-              >
-                <span>{opt.label}</span>
-                <span style={{ fontSize: '0.62rem', fontWeight: '600', opacity: 0.7 }}>{opt.sub}</span>
-              </button>
-            );
-          })}
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '4px' }}>
+            {dateLabel}
+          </div>
+          <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#444' }}>
+            {eventStartLabel} – {eventEndLabel}
+          </div>
         </div>
 
-        <label style={labelCss}>Notes for chef (optional)</label>
+        <label style={labelCss}>Notes for Trainer Center (optional)</label>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={3}
-          placeholder="Anything chef should know? Setup needs, what you'll bring, why these hours, etc."
+          placeholder="Anything we should know? Setup needs, what you'll bring, etc."
           style={{ ...inputCss, resize: 'vertical', marginBottom: '16px' }}
         />
 
