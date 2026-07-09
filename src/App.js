@@ -5,7 +5,7 @@ import { GRADING_CARDS } from './gradingData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw, Landmark } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -433,6 +433,9 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
   // forgot-phase card from "enter your email" to "check your inbox" without
   // changing the surrounding phase machine.
   const [forgotSent, setForgotSent] = useState(false);
+  // Owner flag (profiles.is_owner) — captured at login so the staff-picker
+  // phase can show the owner-only Banking tile.
+  const [staffIsOwner, setStaffIsOwner] = useState(false);
 
   const switchMode = (next) => {
     setMode(next);
@@ -512,10 +515,11 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
 
     // Role detection — same as before, just shared between login + signup.
     const [profileRes, vendorRes] = await Promise.all([
-      supabase.from('profiles').select('is_admin').eq('id', user.id).maybeSingle(),
+      supabase.from('profiles').select('is_admin, is_owner').eq('id', user.id).maybeSingle(),
       supabase.from('vendors').select('id').eq('user_id', user.id).maybeSingle(),
     ]);
     const isStaff  = !!profileRes.data?.is_admin;
+    setStaffIsOwner(!!profileRes.data?.is_owner);
     const isVendor = !!vendorRes.data?.id;
     const role = isStaff ? 'staff' : isVendor ? 'vendor' : 'member';
 
@@ -600,6 +604,8 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     { key: 'analytics', label: 'Analytics', desc: 'Daily SEO + traffic dashboard', icon: <BarChart3 size={20} />, to: '/staff/analytics', accent: '#C8102E' },
     { key: 'grading',  label: 'Grading Candidates', desc: 'Top cards to grade, by price + ROI', icon: <GraduationCap size={20} />, to: '/staff/grading-candidates', accent: '#C8102E' },
     { key: 'hours',    label: 'Business Hours', desc: 'See shop hours block', icon: <Clock size={20} />, to: '/#visit-us', accent: '#C8102E' },
+    // Owner-only (profiles.is_owner): Chase, Chef, Brent.
+    ...(staffIsOwner ? [{ key: 'banking', label: 'Banking', desc: 'Connect the bank account that receives payments', icon: <Landmark size={20} />, to: '/staff/banking', accent: '#16a34a' }] : []),
   ];
 
   // ─── Phase: staff post-login picker ─────────────────────
@@ -1062,6 +1068,7 @@ const AuthContext = createContext({
   vendor: null,
   member: null,
   isAdmin: false,
+  isOwner: false,
   isVendor: false,
   isGuest: false,
   isLoading: true,
@@ -16071,6 +16078,210 @@ function LifecycleGroupCard({ group, isMobile }) {
   );
 }
 
+// ─── Staff Banking Page (/staff/banking) ─────────────────
+// Owner-only (profiles.is_owner): Chase, Chef, Brent. Connects the
+// store's receiving bank account via Stripe Connect Standard onboarding —
+// same pass-through pattern as our other apps. Stripe hosts the whole
+// flow; we never see bank details, only the account id + capability
+// flags (stripe_settings singleton, written by the stripe-connect
+// edge function). Once charges + payouts are enabled, table-fee
+// collection and the online store both charge on this account.
+function StaffBankingPage({ isMobile }) {
+  const { user, isOwner, isLoading: authLoading } = useAuth();
+  const [status, setStatus] = useState(null);   // null until first check_status returns
+  const [working, setWorking] = useState(null); // 'status' | 'onboard' | 'login' | null
+  const [error, setError] = useState('');
+
+  const fetchStatus = useCallback(async () => {
+    setWorking('status');
+    setError('');
+    const { data, error: fnError } = await supabase.functions.invoke('stripe-connect', {
+      body: { action: 'check_status' },
+    });
+    if (fnError) {
+      setError(fnError.message || 'Failed to load banking status.');
+    } else if (data?.error) {
+      setError(data.error);
+    } else {
+      setStatus(data);
+    }
+    setWorking(null);
+  }, []);
+
+  useEffect(() => {
+    if (user && isOwner) fetchStatus();
+  }, [user, isOwner, fetchStatus]);
+
+  const startOnboarding = async () => {
+    setWorking('onboard');
+    setError('');
+    const { data, error: fnError } = await supabase.functions.invoke('stripe-connect', {
+      body: {
+        action: 'create_account',
+        return_url: `${window.location.origin}/staff/banking?stripe=return`,
+        refresh_url: `${window.location.origin}/staff/banking?stripe=refresh`,
+      },
+    });
+    if (fnError || data?.error) {
+      setError(data?.error || fnError.message || 'Failed to start Stripe onboarding.');
+      setWorking(null);
+      return;
+    }
+    if (data?.url) window.location.href = data.url;
+  };
+
+  const openDashboard = async () => {
+    setWorking('login');
+    setError('');
+    const { data, error: fnError } = await supabase.functions.invoke('stripe-connect', {
+      body: { action: 'login_link' },
+    });
+    if (fnError || data?.error) {
+      setError(data?.error || fnError.message || 'Failed to open the Stripe dashboard.');
+    } else if (data?.url) {
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    }
+    setWorking(null);
+  };
+
+  if (authLoading) {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}>Loading...</p></PageWrapper>;
+  }
+  if (!user) {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}>Please log in.</p></PageWrapper>;
+  }
+  if (!isOwner) {
+    return <StaffBypassScreen isMobile={isMobile} title="Owners only" body="Banking is only available to owner accounts." linkTo="/staff/vendors" linkLabel="Back to staff dashboard" />;
+  }
+
+  const fullyEnabled = !!status?.connected && !!status?.charges_enabled && !!status?.payouts_enabled;
+  const midOnboarding = !!status?.connected && !fullyEnabled;
+
+  const bigBtn = (bg) => ({
+    padding: '13px 22px', backgroundColor: bg, color: '#fff',
+    border: 'none', borderRadius: '10px',
+    fontSize: '0.95rem', fontWeight: '700',
+    cursor: 'pointer', fontFamily: 'inherit',
+    display: 'inline-flex', alignItems: 'center', gap: '8px',
+  });
+  const statusRow = (ok, label) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: ok ? '#16a34a' : '#b45309', fontWeight: 600 }}>
+      {ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+      {label}
+    </div>
+  );
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <h1 style={{ fontSize: isMobile ? '1.5rem' : '1.9rem', fontWeight: '900', color: '#1a1a1a', margin: '0 0 6px', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Landmark size={isMobile ? 24 : 28} style={{ color: '#16a34a' }} />
+            Banking
+          </h1>
+          <p style={{ fontSize: '0.92rem', color: '#666', margin: 0, lineHeight: 1.5 }}>
+            Connect the bank account that receives payments — table fees, store orders, everything.
+            Stripe hosts the secure setup; we never see or store bank details.
+          </p>
+        </div>
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+            borderRadius: '10px', padding: '12px 14px', fontSize: '0.88rem',
+            marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+            {error}
+          </div>
+        )}
+
+        <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px', padding: isMobile ? '20px 18px' : '26px 28px' }}>
+          {status === null && working === 'status' ? (
+            <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>Checking Stripe status…</p>
+          ) : fullyEnabled ? (
+            <>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#f0fdf4', color: '#16a34a',
+                padding: '6px 14px', borderRadius: '999px',
+                fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em',
+                marginBottom: '14px',
+              }}>
+                <CheckCircle2 size={15} />
+                Connected
+              </div>
+              {status.business_name && (
+                <p style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: '700', color: '#1a1a1a' }}>{status.business_name}</p>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+                {statusRow(true, 'Can accept payments')}
+                {statusRow(true, 'Payouts to bank enabled')}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button onClick={openDashboard} disabled={!!working} style={bigBtn('#1a1a1a')}>
+                  {working === 'login' ? <Loader2 size={16} className="spin" /> : <ExternalLink size={16} />}
+                  Open Stripe dashboard
+                </button>
+                <button onClick={fetchStatus} disabled={!!working} style={{ ...bigBtn('#fff'), color: '#666', border: '1px solid #ddd' }}>
+                  <RotateCcw size={16} />
+                  Refresh status
+                </button>
+              </div>
+            </>
+          ) : midOnboarding ? (
+            <>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#fffbeb', color: '#b45309',
+                padding: '6px 14px', borderRadius: '999px',
+                fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em',
+                marginBottom: '14px',
+              }}>
+                <AlertCircle size={15} />
+                Setup incomplete
+              </div>
+              <p style={{ margin: '0 0 14px', fontSize: '0.9rem', color: '#444', lineHeight: 1.55 }}>
+                The Stripe account exists but setup isn't finished yet. Pick up where you left off —
+                Stripe saves your progress.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+                {statusRow(!!status.charges_enabled, status.charges_enabled ? 'Can accept payments' : 'Payments not enabled yet')}
+                {statusRow(!!status.payouts_enabled, status.payouts_enabled ? 'Payouts to bank enabled' : 'Bank payouts not enabled yet')}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button onClick={startOnboarding} disabled={!!working} style={bigBtn('#C8102E')}>
+                  {working === 'onboard' ? <Loader2 size={16} className="spin" /> : <ArrowRight size={16} />}
+                  Finish setup
+                </button>
+                <button onClick={fetchStatus} disabled={!!working} style={{ ...bigBtn('#fff'), color: '#666', border: '1px solid #ddd' }}>
+                  <RotateCcw size={16} />
+                  Refresh status
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 style={{ margin: '0 0 8px', fontSize: '1.1rem', fontWeight: '800', color: '#1a1a1a' }}>
+                No bank account connected yet
+              </h2>
+              <p style={{ margin: '0 0 18px', fontSize: '0.9rem', color: '#444', lineHeight: 1.6 }}>
+                Click below to set up the store's Stripe account. You'll enter the business info and
+                the bank account that receives payouts on Stripe's secure page, then land back here.
+                Takes about 5–10 minutes.
+              </p>
+              <button onClick={startOnboarding} disabled={!!working} style={bigBtn('#C8102E')}>
+                {working === 'onboard' ? <Loader2 size={16} className="spin" /> : <Landmark size={16} />}
+                Connect bank account
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
 // ─── Staff Analytics Page (/staff/analytics) ───────────────
 // Admin-only dashboard mirroring the daily SEO digest email. Pulls:
 //   - GSC clicks/queries/pages via the staff-gsc-analytics Edge Function
@@ -19158,7 +19369,7 @@ function AllVendorsList({ vendors, profilesById, emailLog = {}, events = [], ven
 // Vendor = green, Staff = red). Inside each bucket, the last item is
 // always Log in (logged out) or Log out (logged in) — per-role auth
 // surfaced where users expect it, no separate lock badge.
-const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, onLogin, onLogout }) => {
+const buildNavItems = ({ isStaff, isOwner, isVendor, isMember, isLoggedIn, hasReminders, onLogin, onLogout }) => {
   // Reminders / My Reminders lives inside the dropdown that matches the
   // user's role: Staff > Vendor > Member > (logged-out → Guests). No red
   // accent — it just reads in the normal child color until you actually
@@ -19232,6 +19443,8 @@ const buildNavItems = ({ isStaff, isVendor, isMember, isLoggedIn, hasReminders, 
             { label: 'Printables', to: '/staff/printables' },
             { label: 'Analytics', to: '/staff/analytics' },
             { label: 'Grading Candidates', to: '/staff/grading-candidates' },
+            // Owner-only (profiles.is_owner): Chase, Chef, Brent.
+            ...(isOwner ? [{ label: 'Banking', to: '/staff/banking' }] : []),
             { label: 'Business Hours', to: '/#visit-us' },
             // Trade Night preview — flips the entire site into event-day
             // mode (for everyone) so staff can run a real end-to-end test.
@@ -23777,12 +23990,15 @@ function App() {
   const [authRolesLoading, setAuthRolesLoading] = useState(true);
   const profileFetchRef = useRef(null);
   const isAdmin = !!staffProfile?.is_admin;
+  // Owner = second layer above staff (profiles.is_owner): Chase, Chef,
+  // Brent. Gates the Banking tab + Stripe Connect onboarding.
+  const isOwner = !!staffProfile?.is_owner;
   const isVendor = !!vendor;
   const isGuest = !!member;
   // Compact "current staff" object passed down to the calendar so the
   // EventModal can stamp created_by / updated_by on saves.
   const staff = staffUser?.id && staffProfile
-    ? { id: staffUser.id, name: staffProfile.name, isAdmin }
+    ? { id: staffUser.id, name: staffProfile.name, isAdmin, isOwner }
     : null;
   // authConfig drives the unified AuthModal. null = closed; otherwise
   // { defaultMode, intent, allowSignup, onSuccess }. Helper openers below
@@ -23872,6 +24088,7 @@ function App() {
   // (otherwise we hit the const's temporal dead zone here at render time).
   const NAV_ITEMS = buildNavItems({
     isStaff: isAdmin,
+    isOwner,
     isVendor,
     isMember,
     isLoggedIn,
@@ -24035,6 +24252,7 @@ function App() {
     vendor,
     member,
     isAdmin,
+    isOwner,
     isVendor,
     isGuest,
     isLoading: authRolesLoading,
@@ -24463,6 +24681,7 @@ function App() {
         <Route path="/staff/instagram" element={<StaffInstagramPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/printables" element={<StaffPrintablesPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/analytics" element={<StaffAnalyticsPage isMobile={isMobile} />} />
+        <Route path="/staff/banking" element={<StaffBankingPage isMobile={isMobile} />} />
         <Route path="/staff/grading-candidates" element={<StaffGradingCandidatesPage isMobile={isMobile} staff={staff} />} />
       </Routes>
 
