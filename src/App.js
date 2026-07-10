@@ -16635,7 +16635,11 @@ function StaffBankingPage({ isMobile }) {
   }
 
   const fullyEnabled = !!status?.connected && !!status?.charges_enabled && !!status?.payouts_enabled;
-  const midOnboarding = !!status?.connected && !fullyEnabled;
+  // Onboarding finished but payouts still off = Stripe is running its own
+  // review. Nothing for the owner to do; "Finish setup" would just bounce
+  // them into an empty Stripe flow.
+  const reviewPending = !!status?.connected && !!status?.onboarding_complete && !!status?.charges_enabled && !status?.payouts_enabled;
+  const midOnboarding = !!status?.connected && !fullyEnabled && !reviewPending;
 
   const bigBtn = (bg) => ({
     padding: '13px 22px', backgroundColor: bg, color: '#fff',
@@ -16697,6 +16701,43 @@ function StaffBankingPage({ isMobile }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
                 {statusRow(true, 'Can accept payments')}
                 {statusRow(true, 'Payouts to bank enabled')}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button onClick={openDashboard} disabled={!!working} style={bigBtn('#1a1a1a')}>
+                  {working === 'login' ? <Loader2 size={16} className="spin" /> : <ExternalLink size={16} />}
+                  Open Stripe dashboard
+                </button>
+                <button onClick={fetchStatus} disabled={!!working} style={{ ...bigBtn('#fff'), color: '#666', border: '1px solid #ddd' }}>
+                  <RotateCcw size={16} />
+                  Refresh status
+                </button>
+              </div>
+            </>
+          ) : reviewPending ? (
+            <>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#eff6ff', color: '#1d4ed8',
+                padding: '6px 14px', borderRadius: '999px',
+                fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em',
+                marginBottom: '14px',
+              }}>
+                <Clock size={15} />
+                Payouts pending Stripe review
+              </div>
+              {status.business_name && (
+                <p style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: '700', color: '#1a1a1a' }}>{status.business_name}</p>
+              )}
+              <p style={{ margin: '0 0 14px', fontSize: '0.9rem', color: '#444', lineHeight: 1.55 }}>
+                Setup is done and the bank account is linked and verified — <strong>nothing left for you to do</strong>.
+                Stripe runs a routine review on new accounts before turning on bank payouts (usually hours,
+                sometimes a day or two). Payments already work: table fees can be collected now and the money
+                waits safely in the Stripe balance, then pays out automatically once the review clears.
+                Watch the account email in case Stripe asks for an ID photo.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '18px' }}>
+                {statusRow(true, 'Can accept payments')}
+                {statusRow(false, 'Bank payouts — pending Stripe review')}
               </div>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button onClick={openDashboard} disabled={!!working} style={bigBtn('#1a1a1a')}>
