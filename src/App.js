@@ -11606,7 +11606,19 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   if (application && feeCents > 0 && !['declined', 'cancelled', 'not_interested', 'vendor_cancelled'].includes(application.status)) {
     const ps = application.payment_status;
     if (ps === 'charged') {
-      payEl = statusPill('#f0fdf4', '#15803d', <CheckCircle2 size={14} />, `Table fee paid — ${feeLabel(application.charged_amount_cents ?? feeCents)}`);
+      // Paid — link straight to Stripe's hosted receipt when we have it.
+      payEl = application.receipt_url ? (
+        <a href={application.receipt_url} target="_blank" rel="noopener noreferrer" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          backgroundColor: '#f0fdf4', color: '#15803d',
+          padding: '6px 12px', borderRadius: '999px',
+          fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none',
+        }}>
+          <CheckCircle2 size={14} />
+          Paid {feeLabel(application.charged_amount_cents ?? feeCents)}
+          <span style={{ textDecoration: 'underline' }}>View receipt</span>
+        </a>
+      ) : statusPill('#f0fdf4', '#15803d', <CheckCircle2 size={14} />, `Table fee paid — ${feeLabel(application.charged_amount_cents ?? feeCents)}`);
     } else if (ps === 'waived') {
       payEl = statusPill('#f0fdf4', '#15803d', <CheckCircle2 size={14} />, 'Table fee waived');
     } else if (ps === 'refunded') {
@@ -16259,6 +16271,293 @@ function LifecycleGroupCard({ group, isMobile }) {
   );
 }
 
+// ─── Express vendor fast-pass (/vendors/express?event=<id>) ─────
+// The "get someone in NOW" link staff copy from the event roster and text
+// to a vendor. One page: sign in or create an account, minimal profile if
+// they're new, pay the full table fee through Stripe Checkout, and they're
+// auto-approved onto the lineup the moment payment lands. Free events skip
+// the payment step and approve instantly.
+function ExpressVendorPage({ isMobile }) {
+  const { user, vendor, isLoading: authLoading, refresh: refreshAuth } = useAuth();
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('event');
+  const paidSession = searchParams.get('express_paid');
+
+  const [event, setEvent] = useState(null);
+  const [loadingEvent, setLoadingEvent] = useState(true);
+  // landing (default) | done | already — plus a confirming spinner while a
+  // Stripe return is being verified.
+  const [phase, setPhase] = useState(paidSession ? 'confirming' : 'landing');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Account / mini-profile form state (only used when needed)
+  const [mode, setMode] = useState('signup');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [ig, setIg] = useState('');
+
+  useEffect(() => {
+    if (!eventId) { setLoadingEvent(false); return; }
+    supabase.from('events')
+      .select('id, title, event_date, table_fee_cents, vendor_start_time, vendor_end_time, start_time, end_time, has_vendors, cancelled')
+      .eq('id', eventId)
+      .maybeSingle()
+      .then(({ data }) => { setEvent(data || null); setLoadingEvent(false); });
+  }, [eventId]);
+
+  // Back from Stripe: verify payment server-side, approve, fire emails.
+  useEffect(() => {
+    if (!paidSession || !user?.id) return;
+    (async () => {
+      const { data: fn } = await supabase.functions.invoke('stripe-vendor-payment', {
+        body: { action: 'confirm_express', session_id: paidSession },
+      });
+      if (fn?.ok) {
+        sendVendorEmail({ type: 'application_decided', application_id: fn.application_id });
+        sendVendorEmail({ type: 'vendor_express_joined', application_id: fn.application_id });
+        window.history.replaceState({}, '', `${window.location.pathname}?event=${eventId}`);
+        refreshAuth && refreshAuth();
+        setPhase('done');
+      } else {
+        setError(fn?.reason || fn?.error || 'Payment could not be confirmed. If you were charged, contact Trainer Center HB.');
+        setPhase('landing');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paidSession, user?.id]);
+
+  const startPayment = async () => {
+    setBusy(true);
+    setError('');
+    const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
+      body: { action: 'express_checkout', event_id: eventId },
+    });
+    if (fn?.url) { window.location.href = fn.url; return; }
+    if (fn?.already) { setPhase('already'); setBusy(false); return; }
+    if (fn?.free) {
+      if (fn.application_id) {
+        sendVendorEmail({ type: 'application_decided', application_id: fn.application_id });
+        sendVendorEmail({ type: 'vendor_express_joined', application_id: fn.application_id });
+      }
+      setPhase('done');
+      setBusy(false);
+      return;
+    }
+    setError(fn?.error || fnError?.message || 'Could not start checkout.');
+    setBusy(false);
+  };
+
+  // Logged in but no vendor profile yet: create the minimal row, then pay.
+  const ensureVendorAndPay = async () => {
+    if (!name.trim()) { setError('Enter your name or business name.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      const { error: vErr } = await supabase.from('vendors').insert({
+        user_id: user.id,
+        name: name.trim(),
+        email: user.email,
+        phone: phone.trim() || null,
+        ig_handle: ig.trim().replace(/^@/, '') || null,
+        heard_from: 'other',
+      });
+      if (vErr) throw vErr;
+      refreshAuth && await refreshAuth();
+      await startPayment();
+    } catch (e) {
+      setError(e.message || 'Could not save your profile.');
+      setBusy(false);
+    }
+  };
+
+  // Same lenient auth pattern as door check-in: signup tries sign-in first
+  // so "I already have an account" doesn't error, sign-in mode is strict.
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      if (mode === 'signin') {
+        const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (res.error || !res.data?.session) throw new Error("Email or password didn't match. Try again, or switch to Create account.");
+      } else {
+        const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (res.error || !res.data?.session) {
+          const su = await supabase.auth.signUp({
+            email: cleanEmail, password,
+            options: { data: { source: 'vendor_express' } },
+          });
+          if (su.error) throw su.error;
+        }
+      }
+    } catch (e2) {
+      setError(e2.message || 'Could not sign in.');
+    }
+    setBusy(false);
+  };
+
+  const feeCents = event?.table_fee_cents || 0;
+  const feeLabel = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`;
+  const dateStr = event?.event_date
+    ? new Date(event.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    : '';
+  const startLabel = formatTime12h(event?.vendor_start_time || event?.start_time);
+  const endLabel = formatTime12h(event?.vendor_end_time || event?.end_time);
+
+  const inputCss = {
+    width: '100%', padding: '12px 14px', fontSize: '16px',
+    border: '1px solid #ddd', borderRadius: '8px',
+    marginBottom: '10px', boxSizing: 'border-box', fontFamily: 'inherit',
+  };
+  const bigBtn = {
+    width: '100%', padding: '14px', backgroundColor: '#C8102E', color: '#fff',
+    border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: '800',
+    cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+  };
+  const card = {
+    backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+    padding: isMobile ? '22px 18px' : '28px 32px', maxWidth: '520px', margin: '0 auto',
+  };
+
+  if (loadingEvent || authLoading) {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}><Loader2 size={18} className="spin" /> Loading…</p></PageWrapper>;
+  }
+  if (!eventId || !event || !event.has_vendors || event.cancelled) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ ...card, textAlign: 'center' }}>
+          <AlertCircle size={36} style={{ color: '#dc2626', marginBottom: '10px' }} />
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: '800' }}>This link isn't active</h2>
+          <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>The event may have been cancelled or the link is incomplete. Reach out to Trainer Center HB for a fresh one.</p>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (phase === 'confirming') {
+    return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}><Loader2 size={18} className="spin" /> Confirming your payment…</p></PageWrapper>;
+  }
+
+  if (phase === 'done' || phase === 'already') {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ ...card, textAlign: 'center' }}>
+          <CheckCircle2 size={44} style={{ color: '#16a34a', marginBottom: '12px' }} />
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.35rem', fontWeight: '900' }}>
+            {phase === 'already' ? "You're already in!" : "You're locked in!"}
+          </h2>
+          <p style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: '700', color: '#1a1a1a' }}>
+            {event.title || 'Vendor Day'} · {dateStr}
+          </p>
+          {startLabel && <p style={{ margin: '0 0 16px', fontSize: '0.9rem', color: '#666' }}>{startLabel} – {endLabel}</p>}
+          <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: '#444', lineHeight: 1.6 }}>
+            You're on the lineup. Check your email for the details{feeCents > 0 ? ' and your Stripe receipt' : ''}.
+            Your dashboard has everything — check-in on event day, content upload after.
+          </p>
+          <Link to="/vendors/dashboard" style={{ ...bigBtn, display: 'block', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box' }}>
+            Open my dashboard
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={card}>
+        <div style={{ fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#C8102E', marginBottom: '6px' }}>
+          Vendor fast pass
+        </div>
+        <h1 style={{ margin: '0 0 4px', fontSize: isMobile ? '1.35rem' : '1.6rem', fontWeight: '900', letterSpacing: '-0.02em', color: '#1a1a1a' }}>
+          {event.title || 'Vendor Day'}
+        </h1>
+        <p style={{ margin: '0 0 14px', fontSize: '0.92rem', color: '#666' }}>
+          {dateStr}{startLabel ? ` · ${startLabel} – ${endLabel}` : ''}
+        </p>
+
+        <div style={{
+          backgroundColor: feeCents > 0 ? '#fffbeb' : '#f0fdf4',
+          border: `1px solid ${feeCents > 0 ? '#fde68a' : '#bbf7d0'}`,
+          borderRadius: '10px', padding: '12px 14px', marginBottom: '18px',
+          display: 'flex', alignItems: 'baseline', gap: '8px',
+        }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: '800', color: feeCents > 0 ? '#92400e' : '#15803d', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Table fee</span>
+          <span style={{ fontSize: '1.15rem', fontWeight: '800', color: feeCents > 0 ? '#92400e' : '#15803d' }}>{feeCents > 0 ? feeLabel : 'Free'}</span>
+          <span style={{ fontSize: '0.78rem', color: feeCents > 0 ? '#92400e' : '#15803d', marginLeft: 'auto' }}>
+            {feeCents > 0 ? 'Pay now, table locked instantly' : 'Reserve instantly'}
+          </span>
+        </div>
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+            borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '14px',
+            display: 'flex', alignItems: 'flex-start', gap: '8px', lineHeight: 1.5,
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+            {error}
+          </div>
+        )}
+
+        {!user ? (
+          <form onSubmit={handleAuth}>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+              {['signup', 'signin'].map(m => (
+                <button key={m} type="button" onClick={() => { setMode(m); setError(''); }} style={{
+                  flex: 1, padding: '9px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  border: mode === m ? '2px solid #C8102E' : '2px solid #e5e7eb',
+                  backgroundColor: mode === m ? '#fef2f2' : '#fff',
+                  color: mode === m ? '#C8102E' : '#666',
+                }}>
+                  {m === 'signup' ? "I'm new here" : 'I have an account'}
+                </button>
+              ))}
+            </div>
+            <input type="email" required placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={inputCss} autoComplete="email" />
+            <input type="password" required placeholder={mode === 'signup' ? 'Create a password' : 'Password'} value={password} onChange={e => setPassword(e.target.value)} style={inputCss} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} />
+            <button type="submit" disabled={busy} style={bigBtn}>
+              {busy ? 'One sec…' : 'Continue'}
+            </button>
+          </form>
+        ) : !vendor ? (
+          <div>
+            <p style={{ margin: '0 0 12px', fontSize: '0.88rem', color: '#444', lineHeight: 1.5 }}>
+              Quick profile so we know whose table it is — this is what shows on the public lineup.
+            </p>
+            <input placeholder="Your name or business name *" value={name} onChange={e => setName(e.target.value)} style={inputCss} />
+            <input placeholder="Phone (optional)" value={phone} onChange={e => setPhone(e.target.value)} style={inputCss} inputMode="tel" />
+            <input placeholder="Instagram handle (optional)" value={ig} onChange={e => setIg(e.target.value)} style={inputCss} />
+            <button onClick={ensureVendorAndPay} disabled={busy} style={bigBtn}>
+              {busy ? 'One sec…' : feeCents > 0 ? `Continue to payment — ${feeLabel}` : 'Reserve my table'}
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p style={{ margin: '0 0 14px', fontSize: '0.9rem', color: '#444', lineHeight: 1.5 }}>
+              Signed in as <strong>{vendor.name}</strong>. {feeCents > 0
+                ? 'Pay the table fee and your spot is locked the moment the payment clears — no waiting on a review.'
+                : 'Reserve and your spot is locked instantly.'}
+            </p>
+            <button onClick={startPayment} disabled={busy} style={bigBtn}>
+              {busy ? 'One sec…' : feeCents > 0 ? `Pay ${feeLabel} & lock in my table` : 'Reserve my table'}
+            </button>
+          </div>
+        )}
+
+        <p style={{ margin: '14px 0 0', fontSize: '0.75rem', color: '#999', textAlign: 'center', lineHeight: 1.5 }}>
+          Payments are processed securely by Stripe. Questions? DM{' '}
+          <a href="https://www.instagram.com/trainercenter.pokemon/" target="_blank" rel="noopener noreferrer" style={{ color: '#999' }}>@trainercenter.pokemon</a>.
+        </p>
+      </div>
+    </PageWrapper>
+  );
+}
+
 // ─── Staff Banking Page (/staff/banking) ─────────────────
 // Owner-only (profiles.is_owner): Chase, Chef, Brent. Connects the
 // store's receiving bank account via Stripe Connect Standard onboarding —
@@ -18905,6 +19204,27 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                     <span style={{ fontSize: '0.78rem', color: '#666' }}>
                       {approved.length} approved · {pending.length} pending
                     </span>
+                    {(ev.table_fee_cents || 0) > 0 && (() => {
+                      // Money-at-a-glance for paid events: collected total +
+                      // anything stuck (failed charge / no card on approved).
+                      const collected = apps
+                        .filter(a => a.payment_status === 'charged')
+                        .reduce((sum, a) => sum + (a.charged_amount_cents ?? a.fee_cents ?? 0), 0);
+                      const waived = apps.filter(a => a.payment_status === 'waived').length;
+                      const stuck = apps.filter(a => a.status === 'approved' && ['failed', 'card_pending', 'none', 'card_saved'].includes(a.payment_status) && (a.fee_cents || 0) > 0).length;
+                      return (
+                        <span style={{
+                          fontSize: '0.72rem', fontWeight: '800',
+                          color: '#15803d', backgroundColor: '#f0fdf4',
+                          padding: '3px 10px', borderRadius: '999px',
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                        }}>
+                          ${(collected / 100).toFixed(collected % 100 === 0 ? 0 : 2)} collected
+                          {waived > 0 && <span style={{ color: '#666' }}>· {waived} waived</span>}
+                          {stuck > 0 && <span style={{ color: '#dc2626' }}>· {stuck} unpaid</span>}
+                        </span>
+                      );
+                    })()}
                     {ev.cancelled ? (
                       <span style={{
                         backgroundColor: '#fef2f2', color: '#dc2626',
@@ -18929,6 +19249,26 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         >
                           <Clock size={12} /> Time map
                         </Link>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = `${window.location.origin}/vendors/express?event=${ev.id}`;
+                            navigator.clipboard.writeText(url).then(
+                              () => alert('Express link copied:\n' + url + '\n\nSend it to anyone you want in fast — they sign up, pay the table fee, and they\'re auto-approved onto the lineup.'),
+                              () => window.prompt('Copy the express link:', url)
+                            );
+                          }}
+                          title="Copy the pay-now fast-pass link for this event"
+                          style={{
+                            backgroundColor: '#f0fdf4', color: '#15803d',
+                            padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                            fontSize: '0.75rem', cursor: 'pointer',
+                            border: '1px solid #bbf7d0',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          }}
+                        >
+                          <Link2 size={12} /> Express link
+                        </button>
                         <button onClick={() => setCancelling(ev)} style={{
                           backgroundColor: '#fff', color: '#dc2626',
                           padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
@@ -25127,6 +25467,7 @@ function App() {
         <Route path="/staff/preview" element={<StaffPreviewPage isMobile={isMobile} />} />
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
+        <Route path="/vendors/express" element={<ExpressVendorPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
         <Route path="/vendors/edit" element={<VendorEditProfilePage isMobile={isMobile} />} />
         <Route path="/vendors/events" element={<VendorEventsListPage isMobile={isMobile} />} />

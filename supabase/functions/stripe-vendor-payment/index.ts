@@ -11,10 +11,18 @@
 //   create_setup_session { application_id }        -> { url }
 //   confirm_setup       { session_id }             -> { ok }
 //   confirm_pay_link    { session_id }             -> { ok }
+//   express_checkout    { event_id }               -> { url } | { ok, free }
+//   confirm_express     { session_id }             -> { ok }
 // Staff actions (profiles.is_admin):
 //   charge          { application_id, amount_cents, note } -> { ok } | { ok:false, decline }
 //   create_pay_link { application_id, amount_cents }       -> { url }
 //   refund          { application_id }                     -> { ok }
+//
+// Express = the "last-minute fast pass" link staff share directly:
+// /vendors/express?event=<id>. Vendor pays the full fee up front and is
+// auto-approved the moment payment lands (their vendor profile flips to
+// approved too). Successful charges store Stripe's hosted receipt_url so
+// vendors always have a receipt.
 import Stripe from 'https://esm.sh/stripe@14.14.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
@@ -143,6 +151,18 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
+    // Stripe's hosted receipt page for a PaymentIntent (via its charge).
+    const receiptUrlFor = async (piId: string | null | undefined) => {
+      if (!piId) return null
+      try {
+        const pi = await stripe.paymentIntents.retrieve(piId, { expand: ['latest_charge'] }, onAcct)
+        const charge = pi.latest_charge as Stripe.Charge | null
+        return charge?.receipt_url || null
+      } catch (_e) {
+        return null
+      }
+    }
+
     // ─── Vendor: back from a pay link — verify + mark paid ───
     if (action === 'confirm_pay_link') {
       const session = await stripe.checkout.sessions.retrieve(body.session_id, {}, onAcct)
@@ -153,13 +173,123 @@ Deno.serve(async (req) => {
       if (app.vendor?.user_id !== userId) return json({ error: 'Not your application' }, 403)
       if (session.payment_status !== 'paid') return json({ ok: false, reason: 'Not paid yet' })
 
+      const piId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
       await supabase.from('vendor_applications').update({
         payment_status: 'charged',
         charged_amount_cents: session.amount_total,
-        stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
+        stripe_payment_intent_id: piId,
+        receipt_url: await receiptUrlFor(piId),
         charged_at: new Date().toISOString(),
       }).eq('id', app.id)
       return json({ ok: true })
+    }
+
+    // ─── Vendor: express fast-pass — pay full fee now, auto-approved ───
+    if (action === 'express_checkout') {
+      const { data: ev } = await supabase
+        .from('events')
+        .select('id, title, event_date, table_fee_cents, has_vendors, cancelled')
+        .eq('id', body.event_id)
+        .maybeSingle()
+      if (!ev || !ev.has_vendors || ev.cancelled) return json({ error: 'Event not found' }, 404)
+
+      const { data: vendor } = await supabase
+        .from('vendors').select('id, name, email, status').eq('user_id', userId).maybeSingle()
+      if (!vendor) return json({ error: 'No vendor profile yet' }, 400)
+
+      // Existing application row for this event (e.g. a pending one) gets
+      // reused; otherwise insert one now so the checkout has an anchor.
+      const { data: existingApp } = await supabase
+        .from('vendor_applications')
+        .select('id, status, payment_status')
+        .eq('vendor_id', vendor.id).eq('event_id', ev.id)
+        .maybeSingle()
+      if (existingApp?.payment_status === 'charged' && existingApp.status === 'approved') {
+        return json({ ok: true, already: true })
+      }
+
+      const fee = ev.table_fee_cents || 0
+      let appId = existingApp?.id
+      if (!appId) {
+        const { data: inserted, error: insErr } = await supabase
+          .from('vendor_applications')
+          .insert({
+            vendor_id: vendor.id,
+            event_id: ev.id,
+            requested_start_time: '12:00',
+            requested_end_time: '20:00',
+            requested_table_size: 'tbd',
+            fee_cents: fee,
+            payment_status: fee > 0 ? 'card_pending' : 'none',
+          })
+          .select('id')
+          .single()
+        if (insErr) return json({ error: insErr.message }, 500)
+        appId = inserted.id
+      } else {
+        await supabase.from('vendor_applications').update({ fee_cents: fee }).eq('id', appId)
+      }
+
+      // Free event: no payment step, approve immediately.
+      if (fee === 0) {
+        await supabase.from('vendor_applications').update({
+          status: 'approved',
+          decided_at: new Date().toISOString(),
+          decision_note: 'Express link',
+        }).eq('id', appId)
+        if (vendor.status !== 'approved') {
+          await supabase.from('vendors').update({ status: 'approved' }).eq('id', vendor.id)
+        }
+        return json({ ok: true, free: true, application_id: appId })
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer_email: vendor.email || undefined,
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: fee,
+            product_data: { name: `Table fee — ${ev.title || 'Vendor Day'} (${ev.event_date})` },
+          },
+        }],
+        payment_intent_data: { receipt_email: vendor.email || undefined },
+        success_url: `${SITE_URL}/vendors/express?event=${ev.id}&express_paid={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${SITE_URL}/vendors/express?event=${ev.id}`,
+        metadata: { application_id: appId, express: '1' },
+      }, onAcct)
+
+      return json({ url: session.url })
+    }
+
+    // ─── Vendor: back from express checkout — verify, approve, done ───
+    if (action === 'confirm_express') {
+      const session = await stripe.checkout.sessions.retrieve(body.session_id, {}, onAcct)
+      const appId = session.metadata?.application_id
+      if (!appId) return json({ error: 'Session has no application' }, 400)
+      const app = await loadApp(appId)
+      if (!app) return json({ error: 'Application not found' }, 404)
+      if (app.vendor?.user_id !== userId) return json({ error: 'Not your application' }, 403)
+      if (session.payment_status !== 'paid') return json({ ok: false, reason: 'Not paid yet' })
+
+      const piId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+      await supabase.from('vendor_applications').update({
+        status: 'approved',
+        decided_at: new Date().toISOString(),
+        decision_note: 'Express link — paid up front',
+        payment_status: 'charged',
+        charged_amount_cents: session.amount_total,
+        stripe_payment_intent_id: piId,
+        receipt_url: await receiptUrlFor(piId),
+        charged_at: new Date().toISOString(),
+      }).eq('id', app.id)
+      // Express implies the profile is in — staff shared the link on purpose.
+      const { data: vRow } = await supabase.from('vendors').select('status').eq('id', app.vendor_id).maybeSingle()
+      if (vRow && vRow.status !== 'approved') {
+        await supabase.from('vendors').update({ status: 'approved' }).eq('id', app.vendor_id)
+      }
+      return json({ ok: true, application_id: app.id })
     }
 
     // ─── Staff: charge on approval (0 = waive, < fee = discount) ───
@@ -199,14 +329,18 @@ Deno.serve(async (req) => {
           payment_method: app.stripe_payment_method_id,
           off_session: true,
           confirm: true,
+          receipt_email: app.vendor?.email || undefined,
           description: `Table fee — ${app.event?.title || 'Vendor Day'} ${app.event?.event_date || ''}`.trim(),
           metadata: { application_id: app.id, vendor_id: app.vendor_id },
+          expand: ['latest_charge'],
         }, onAcct)
 
+        const charge = pi.latest_charge as Stripe.Charge | null
         await supabase.from('vendor_applications').update({
           payment_status: 'charged',
           charged_amount_cents: amount,
           stripe_payment_intent_id: pi.id,
+          receipt_url: charge?.receipt_url || null,
           payment_note: note,
           payment_decided_by: userId,
           charged_at: new Date().toISOString(),
@@ -244,6 +378,7 @@ Deno.serve(async (req) => {
             product_data: { name: `Table fee — ${app.event?.title || 'Vendor Day'} (${app.event?.event_date || ''})` },
           },
         }],
+        payment_intent_data: { receipt_email: app.vendor?.email || undefined },
         success_url: `${SITE_URL}/vendors/dashboard?fee_paid={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_URL}/vendors/dashboard`,
         metadata: { application_id: app.id },

@@ -600,6 +600,27 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, sent: ['vendor'] })
     }
 
+    // Express fast-pass: vendor paid up front through the express link and
+    // is auto-approved. Notifies STAFF (the vendor gets Stripe's receipt
+    // email plus the approval email, fired separately by the client).
+    if (type === 'vendor_express_joined') {
+      if (!payload.application_id) return json({ error: 'application_id required' }, 400)
+      const { data: app, error: aErr } = await supabase.from('vendor_applications').select('*, vendor:vendors(*), event:events(*)').eq('id', payload.application_id).single()
+      if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
+      const v = app.vendor
+      const e = app.event
+      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'an upcoming event'
+      const cents = app.charged_amount_cents || 0
+      const usd = `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+      const subject = `EXPRESS: ${v.name} paid ${usd} — on the lineup for ${dateStr}`
+      const body = `<p><strong>${v.name}</strong> used the express link, paid <strong>${usd}</strong>, and is auto-approved for <strong>${e?.title || 'Vendor Day'}</strong> on <strong>${dateStr}</strong>.</p>` +
+        `<p style="font-size:13px;color:#444">${v.email}${v.phone ? ' · ' + v.phone : ''}${v.ig_handle ? ' · IG: @' + v.ig_handle : ''}</p>` +
+        `<p style="margin-top:24px"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open the roster</a></p>`
+      await sendResendEmail(STAFF_EMAILS, subject, wrapHtml(body),
+        `${v.name} used the express link, paid ${usd}, and is auto-approved for ${e?.title || 'Vendor Day'} on ${dateStr}.\n${v.email}\nRoster: ${SITE_URL}/staff/vendors`)
+      return json({ ok: true, sent: ['staff'] })
+    }
+
     // Table-fee pay link: the saved card declined (or was never saved), so
     // staff generated a hosted Stripe Checkout link and approved anyway.
     // Payload: application_id, pay_url, amount_cents.
