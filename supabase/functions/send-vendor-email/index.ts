@@ -713,9 +713,8 @@ Deno.serve(async (req: Request) => {
 
     if (type === 'vendor_broadcast') {
       // Chef-composed comms blast. Audience is resolved server-side from the
-      // filter spec — never trust a client-supplied email list. BCC's
-      // chef@trainercenter.com on every send so Chef has the broadcast in his
-      // own inbox as a record.
+      // filter spec — never trust a client-supplied email list. No BCC copies
+      // (Chase's call 2026-07-10: never BCC Chef on blasts).
       const audience = payload.audience
       const subject = (payload.subject || '').trim()
       const bodyHtml = (payload.body_html || '').trim()
@@ -812,7 +811,7 @@ Deno.serve(async (req: Request) => {
         if (!firstSend) await sleep(550) // ~2/sec to respect Resend rate limit
         firstSend = false
         try {
-          await sendResendEmail([v.email], subject, html, text, ['chef@trainercenter.com'])
+          await sendResendEmail([v.email], subject, html, text)
           sentTo.push(v.email)
         } catch (err) {
           console.error('[vendor_broadcast] failed for', v.email, err)
@@ -856,7 +855,7 @@ Deno.serve(async (req: Request) => {
         if (!firstSend) await sleep(550) // ~2/sec to respect Resend rate limit
         firstSend = false
         try {
-          await sendResendEmail([r.email], subject, html, text, ['chef@trainercenter.com'])
+          await sendResendEmail([r.email], subject, html, text)
           sentTo.push(r.email)
         } catch (err) {
           console.error('[marketing_contacts_broadcast] failed for', r.email, err)
