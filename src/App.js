@@ -18122,7 +18122,7 @@ function StaffVendorsPage({ isMobile, staff }) {
           )}
 
           {!loading && tab === 'roster' && (
-            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} vendorNextEvent={vendorNextEvent} onDecide={decideApplication} onOpenDetail={setDetailVendor} onOpenFit={setFitVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
+            <EventRosterList events={events} attendance={attendance} allVendors={allVendors} profilesById={profilesById} emailLog={emailLog} vendorNextEvent={vendorNextEvent} onDecide={decideApplication} onCollect={(app) => setChargeTarget({ app, note: null, collectOnly: true })} onOpenDetail={setDetailVendor} onOpenFit={setFitVendor} onChange={refresh} staff={staff} isMobile={isMobile} />
           )}
 
           {!loading && tab === 'vendors' && (
@@ -18163,8 +18163,11 @@ function StaffVendorsPage({ isMobile, staff }) {
       {chargeTarget && (
         <TableFeeChargeModal
           app={chargeTarget.app}
+          collectOnly={!!chargeTarget.collectOnly}
           onClose={() => setChargeTarget(null)}
-          onFinalized={() => finalizeDecision(chargeTarget.app.id, 'approved', chargeTarget.note)}
+          onFinalized={() => chargeTarget.collectOnly
+            ? Promise.resolve()
+            : finalizeDecision(chargeTarget.app.id, 'approved', chargeTarget.note)}
           onRefresh={refresh}
         />
       )}
@@ -18180,7 +18183,10 @@ function StaffVendorsPage({ isMobile, staff }) {
 // the vendor consented to). On success the approval is finalized and
 // the normal approval email fires. If the saved card declines, staff
 // can email a Stripe pay link and still approve, or back out entirely.
-function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
+// collectOnly: the application is ALREADY approved (e.g. approved while the
+// event was free, fee added later) — charge/waive/pay-link without touching
+// the approval or re-sending the approval email.
+function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh, collectOnly = false }) {
   const fee = app.fee_cents || 0;
   const [amountStr, setAmountStr] = useState(String(fee / 100));
   const [payNote, setPayNote] = useState('');
@@ -18261,10 +18267,10 @@ function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
         maxWidth: '440px', width: '100%', maxHeight: '90vh', overflow: 'auto',
       }}>
         <h3 style={{ margin: '0 0 4px', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
-          Approve &amp; collect
+          {collectOnly ? 'Collect table fee' : 'Approve & collect'}
         </h3>
         <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#666' }}>
-          <strong>{v.name || 'This vendor'}</strong> agreed to a {money(fee)} table fee for{' '}
+          <strong>{v.name || 'This vendor'}</strong> {collectOnly ? 'is approved with a' : 'agreed to a'} {money(fee)} table fee for{' '}
           {app.event?.title || 'this event'}. Charge any amount up to that — or waive it.
         </p>
 
@@ -18331,7 +18337,9 @@ function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
               border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
               cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
             }}>
-              {busy ? 'Working…' : isWaive ? 'Waive fee & approve' : `Charge ${money(amountCents)} & approve`}
+              {busy ? 'Working…' : isWaive
+                ? (collectOnly ? 'Waive fee' : 'Waive fee & approve')
+                : (collectOnly ? `Charge ${money(amountCents)}` : `Charge ${money(amountCents)} & approve`)}
             </button>
           )}
           {!isWaive && (
@@ -18340,7 +18348,7 @@ function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
               border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '700',
               cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
             }}>
-              Email a {money(amountCents || fee)} pay link &amp; approve
+              Email a {money(amountCents || fee)} pay link{collectOnly ? '' : ' & approve'}
             </button>
           )}
           <button onClick={onClose} disabled={busy} style={{
@@ -18348,7 +18356,7 @@ function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
             border: 'none', fontSize: '0.85rem', fontWeight: '600',
             cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', textDecoration: 'underline',
           }}>
-            Cancel — don't approve yet
+            {collectOnly ? 'Cancel' : "Cancel — don't approve yet"}
           </button>
         </div>
       </div>
@@ -19015,7 +19023,7 @@ function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
   );
 }
 
-function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onOpenDetail, onOpenFit, onChange, staff, isMobile }) {
+function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onCollect, onOpenDetail, onOpenFit, onChange, staff, isMobile }) {
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
   const [search, setSearch] = useState('');
@@ -19380,6 +19388,17 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                           border: '1px solid #fecaca', padding: '5px 12px', borderRadius: '6px',
                           fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
                         }}>Refund</button>
+                      );
+                    } else if (a.status === 'approved' && !isPast && feeCents > 0 && !['charged', 'waived', 'refunded'].includes(a.payment_status)) {
+                      // Approved but money never collected (fee added after
+                      // approval, or the charge failed) — collect without
+                      // re-running the approval.
+                      actions = (
+                        <button onClick={(e) => { e.stopPropagation(); onCollect && onCollect({ ...a, event: a.event || ev }); }} style={{
+                          fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
+                          border: 'none', padding: '6px 14px', borderRadius: '6px',
+                          fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+                        }}>Collect {feeMoney(feeCents)}</button>
                       );
                     } else if (a.status === 'approved' && isPast) {
                       const hasSurvey = submittedSurveys.has(`${a.vendor_id}:${ev.id}`);
