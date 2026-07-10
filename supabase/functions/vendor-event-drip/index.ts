@@ -177,12 +177,12 @@ function copyForStep(stepKey: string, eventTitle: string, dateStr: string, vendo
       subject: `Critical — promote ${eventTitle} on Instagram`,
       html: `<p>Hi ${vendorName},</p>` +
         `<p>Two weeks out from <strong>${eventLine}</strong>. Trainer Center HB has posted on Instagram. Now we need you.</p>` +
-        `<p><strong>This is part of the arrangement for a free table.</strong> Find our pinned post on <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a> and:</p>` +
+        `<p><strong>This is part of the arrangement for your table.</strong> Find our pinned post on <a href="https://instagram.com/trainercenter.pokemon">@trainercenter.pokemon</a> and:</p>` +
         `<ul style="margin:0 0 18px;padding-left:20px;color:#444;line-height:1.7"><li><strong>Send it as a DM</strong> to 5–10 people who'd be interested</li><li><strong>Repost it</strong> to your own IG (story or grid)</li><li><strong>Like, comment, and save</strong> the post on our page</li><li>Tap the <strong>reminder bell</strong> on the post so IG pushes it to you and your audience</li></ul>` +
         `<p>Why this matters for <em>you</em>: less engagement on our post means fewer customers walking in your direction. <strong>Fewer customers means less money for you.</strong></p>` +
         `<p>This is your day. Your sales. Your relationships. We're giving you the table — help us pack the room.</p>` +
         cantMakeIt,
-      text: `Two weeks out from ${eventLine}. Trainer Center HB has posted on Instagram. Now we need you.\n\nThis is part of the arrangement for a free table. Find our pinned post on @trainercenter.pokemon and:\n- Send it as a DM to 5–10 people\n- Repost it to your own IG\n- Like, comment, and save the post\n- Tap the reminder bell\n\nWhy this matters for YOU: less engagement on our post means fewer customers walking in your direction. Fewer customers means less money for you.\n\nThis is your day. Your sales. Your relationships.` + cantMakeItText,
+      text: `Two weeks out from ${eventLine}. Trainer Center HB has posted on Instagram. Now we need you.\n\nThis is part of the arrangement for your table. Find our pinned post on @trainercenter.pokemon and:\n- Send it as a DM to 5–10 people\n- Repost it to your own IG\n- Like, comment, and save the post\n- Tap the reminder bell\n\nWhy this matters for YOU: less engagement on our post means fewer customers walking in your direction. Fewer customers means less money for you.\n\nThis is your day. Your sales. Your relationships.` + cantMakeItText,
     }
   }
   if (stepKey === 'lineup.t7') {

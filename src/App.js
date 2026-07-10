@@ -1185,6 +1185,11 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
   const [vendorStartTime, setVendorStartTime] = useState('');
   const [vendorEndTime, setVendorEndTime] = useState('');
   const [vendorNote, setVendorNote] = useState('');
+  // Table fee in DOLLARS as typed (stored as cents). Empty or 0 = free
+  // event, exactly today's behavior. The fee is locked onto each
+  // application at apply time, so editing it later only affects new
+  // applications.
+  const [tableFee, setTableFee] = useState('');
   const [editingEvent, setEditingEvent] = useState(null);
   const [eventToDelete, setEventToDelete] = useState(null);
   // When editing a row that's part of a multi-day series, this toggle pushes
@@ -1204,6 +1209,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
     setTitle(''); setDescription(''); setStartTime('18:00'); setEndTime('20:00');
     setLocation(''); setCategories(['other']); setRecurrence('none'); setRecurrenceEndDate('');
     setHasVendors(false); setVendorStartTime(''); setVendorEndTime(''); setVendorNote('');
+    setTableFee('');
     setEditingEvent(null);
     setEditEventDate('');
     setScheduleMode('specific');
@@ -1227,6 +1233,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
     setVendorStartTime(event.vendor_start_time?.slice(0, 5) || '');
     setVendorEndTime(event.vendor_end_time?.slice(0, 5) || '');
     setVendorNote(event.vendor_note || '');
+    setTableFee(event.table_fee_cents ? String(event.table_fee_cents / 100) : '');
   };
 
   // When the modal is opened from a day-detail Edit button, jump straight
@@ -1279,6 +1286,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
     const trimmedLocation = location.trim() || null;
     const safeCategories = categories.length > 0 ? categories : ['other'];
     const trimmedVendorNote = hasVendors ? (vendorNote.trim() || null) : null;
+    const tableFeeCents = hasVendors ? Math.max(0, Math.round((parseFloat(tableFee) || 0) * 100)) : 0;
 
     // ─── Edit existing single row ─────────────────────────
     if (editingEvent?.id) {
@@ -1299,6 +1307,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
         vendor_start_time: hasVendors ? (vendorStartTime || editStartTime) : null,
         vendor_end_time: hasVendors ? (vendorEndTime || editEndTime) : null,
         vendor_note: trimmedVendorNote,
+        table_fee_cents: tableFeeCents,
         updated_by: staff?.id || null,
         updated_by_name: staff?.name || null,
       };
@@ -1312,6 +1321,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
           categories: safeCategories,
           has_vendors: hasVendors,
           vendor_note: trimmedVendorNote,
+          table_fee_cents: tableFeeCents,
           updated_by: staff?.id || null,
           updated_by_name: staff?.name || null,
         };
@@ -1334,6 +1344,7 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
       categories: safeCategories,
       has_vendors: hasVendors,
       vendor_note: trimmedVendorNote,
+      table_fee_cents: tableFeeCents,
       created_by: staff?.id || null,
       created_by_name: staff?.name || null,
     };
@@ -1953,6 +1964,26 @@ function EventModal({ date, existingEvents, seriesSizes = {}, initialEdit = null
                     style={inputStyle}
                   />
                 </div>
+              </div>
+
+              <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>
+                Table fee (blank or 0 = free)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '14px', top: '13px', fontSize: '16px', color: '#6b7280', fontWeight: '600' }}>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={tableFee}
+                  onChange={e => setTableFee(e.target.value)}
+                  style={{ ...inputStyle, paddingLeft: '28px' }}
+                />
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#6b7280', margin: '-4px 0 10px', lineHeight: 1.4 }}>
+                Vendors save a card when applying and are only charged when you approve them. You can discount or waive it per vendor at approval.
               </div>
 
               <label style={{ fontSize: '0.7rem', color: '#999', fontWeight: '600' }}>
@@ -10579,6 +10610,31 @@ function VendorDashboardPage({ isMobile }) {
   // Fetch Vendor Day events (recent + upcoming) + applications + attendance
   // Past 14 days included so vendors can upload content after the event.
   const [attendance, setAttendance] = useState({});
+  // Bumped after a Stripe return confirms so the fetch below re-runs and
+  // the payment chips reflect the new card/paid state.
+  const [paymentRefresh, setPaymentRefresh] = useState(0);
+
+  // ── Stripe returns land here ──
+  // ?fee_setup=<session>  vendor finished (or verified) the card-save step
+  // ?fee_paid=<session>   vendor paid a fallback pay link
+  // Confirm server-side, then strip the param and refetch.
+  useEffect(() => {
+    if (!user?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    const setupSession = params.get('fee_setup');
+    const paidSession = params.get('fee_paid');
+    if (!setupSession && !paidSession) return;
+    (async () => {
+      await supabase.functions.invoke('stripe-vendor-payment', {
+        body: setupSession
+          ? { action: 'confirm_setup', session_id: setupSession }
+          : { action: 'confirm_pay_link', session_id: paidSession },
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+      setPaymentRefresh(n => n + 1);
+    })();
+  }, [user?.id]);
+
   useEffect(() => {
     if (!vendor?.id) return;
     const today = new Date();
@@ -10609,7 +10665,7 @@ function VendorDashboardPage({ isMobile }) {
       (attRes.data || []).forEach(a => { attByEvent[a.event_id] = a; });
       setAttendance(attByEvent);
     });
-  }, [vendor?.id]);
+  }, [vendor?.id, paymentRefresh]);
 
   const handleLogout = async () => {
     await signOut();
@@ -11286,6 +11342,9 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     if (!requested_start_time || !requested_end_time) {
       throw new Error('Pick both an arrival time and a leave time before submitting.');
     }
+    // Lock the event's fee onto the application so later event edits never
+    // change what this vendor consented to. 0 = free, today's behavior.
+    const feeCents = event.table_fee_cents || 0;
     const { data, error: insertError } = await supabase
       .from('vendor_applications')
       .insert({
@@ -11295,6 +11354,8 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         requested_end_time,
         requested_table_size: requested_table_size || 'tbd',
         vendor_note: vendor_note || null,
+        fee_cents: feeCents,
+        payment_status: feeCents > 0 ? 'card_pending' : 'none',
       })
       .select()
       .single();
@@ -11305,7 +11366,32 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       application_id: data.id,
       is_first_time: !!isFirstApplication,
     });
+    // Paid event: hand off to Stripe's hosted card-save page (setup mode,
+    // no charge). If it can't start (Stripe not configured yet), the
+    // application still stands — the card chip on the event card lets
+    // them finish later.
+    if (feeCents > 0) {
+      const { data: fn } = await supabase.functions.invoke('stripe-vendor-payment', {
+        body: { action: 'create_setup_session', application_id: data.id },
+      });
+      if (fn?.url) {
+        window.location.href = fn.url;
+      }
+    }
     return data;
+  };
+
+  // Re-enter the Stripe card-save flow for a paid application whose card
+  // step was abandoned (or couldn't start). Same setup session action.
+  const resumeCardSetup = async () => {
+    const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
+      body: { action: 'create_setup_session', application_id: application.id },
+    });
+    if (fn?.url) {
+      window.location.href = fn.url;
+    } else {
+      alert('Could not start the card step: ' + (fn?.error || fnError?.message || 'unknown error'));
+    }
   };
 
   // Pre-application opt-out: vendor says "not interested in this date" without
@@ -11512,6 +11598,39 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     }
   }
 
+  // Payment chip for paid-event applications. Rides along under the main
+  // action so the vendor always knows where their table fee stands.
+  const feeCents = application?.fee_cents || 0;
+  const feeLabel = (c) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
+  let payEl = null;
+  if (application && feeCents > 0 && !['declined', 'cancelled', 'not_interested', 'vendor_cancelled'].includes(application.status)) {
+    const ps = application.payment_status;
+    if (ps === 'charged') {
+      payEl = statusPill('#f0fdf4', '#15803d', <CheckCircle2 size={14} />, `Table fee paid — ${feeLabel(application.charged_amount_cents ?? feeCents)}`);
+    } else if (ps === 'waived') {
+      payEl = statusPill('#f0fdf4', '#15803d', <CheckCircle2 size={14} />, 'Table fee waived');
+    } else if (ps === 'refunded') {
+      payEl = statusPill('#f3f4f6', '#6b7280', <RotateCcw size={14} />, 'Table fee refunded');
+    } else if (ps === 'failed') {
+      payEl = statusPill('#fef2f2', '#dc2626', <AlertCircle size={14} />, 'Payment issue — check your email');
+    } else if (ps === 'card_saved') {
+      payEl = statusPill('#f8fafc', '#475569', <CheckCircle2 size={14} />, `Card on file — ${feeLabel(feeCents)} only if approved`);
+    } else {
+      // card_pending / none: the Stripe step was skipped or abandoned.
+      payEl = (
+        <button onClick={resumeCardSetup} style={{
+          backgroundColor: '#fffbeb', color: '#92400e',
+          border: '1px solid #fde68a', borderRadius: '999px',
+          padding: '6px 12px', fontSize: '0.82rem', fontWeight: '700',
+          cursor: 'pointer', fontFamily: 'inherit',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <AlertCircle size={14} /> Add card to complete — {feeLabel(feeCents)} only if approved
+        </button>
+      );
+    }
+  }
+
   return (
     <>
       <div style={{
@@ -11589,7 +11708,10 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           // Desktop: action sits to the right with a subtle separator gap.
           width: isMobile ? '100%' : 'auto',
         }}>
-          {actionEl}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: '8px' }}>
+            {actionEl}
+            {payEl}
+          </div>
         </div>
       </div>
       {showApply && (
@@ -11685,15 +11807,29 @@ function EventInfoModal({ event, dateStr, onClose }) {
           >×</button>
         </div>
 
-        <div style={{
-          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
-          borderRadius: '10px', padding: '12px 14px',
-          margin: '16px 0', display: 'flex', alignItems: 'baseline', gap: '8px',
-        }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#15803d', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Cost</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>Free</span>
-          <span style={{ fontSize: '0.8rem', color: '#15803d', marginLeft: 'auto' }}>You keep 100% of what you sell.</span>
-        </div>
+        {(event.table_fee_cents || 0) > 0 ? (
+          <div style={{
+            backgroundColor: '#fffbeb', border: '1px solid #fde68a',
+            borderRadius: '10px', padding: '12px 14px',
+            margin: '16px 0', display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#92400e', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Table fee</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#92400e' }}>
+              ${((event.table_fee_cents || 0) / 100).toFixed((event.table_fee_cents || 0) % 100 === 0 ? 0 : 2)}
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#92400e', marginLeft: 'auto' }}>Only charged if approved. You keep 100% of what you sell.</span>
+          </div>
+        ) : (
+          <div style={{
+            backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
+            borderRadius: '10px', padding: '12px 14px',
+            margin: '16px 0', display: 'flex', alignItems: 'baseline', gap: '8px',
+          }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#15803d', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Cost</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: '800', color: '#15803d' }}>Free</span>
+            <span style={{ fontSize: '0.8rem', color: '#15803d', marginLeft: 'auto' }}>You keep 100% of what you sell.</span>
+          </div>
+        )}
 
         <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#374151', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 8px' }}>
           What we provide
@@ -12514,6 +12650,7 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [feeConsent, setFeeConsent] = useState(false);
 
   const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
   const vendorEnd = event.vendor_end_time || event.end_time || '20:00:00';
@@ -12521,9 +12658,15 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
   const eventEndLabel = formatTime12h(vendorEnd) || '8 PM';
   const dateLabel = new Date(event.event_date + 'T12:00:00')
     .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const feeCents = event.table_fee_cents || 0;
+  const feeLabel = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (feeCents > 0 && !feeConsent) {
+      setError('Please check the authorization box to continue.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -12580,7 +12723,45 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
           <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#444' }}>
             {eventStartLabel} – {eventEndLabel}
           </div>
+          <div style={{
+            marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #eee',
+            display: 'flex', alignItems: 'baseline', gap: '8px',
+          }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: '800', color: feeCents > 0 ? '#92400e' : '#15803d', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Table fee
+            </span>
+            <span style={{ fontSize: '1rem', fontWeight: '800', color: feeCents > 0 ? '#1a1a1a' : '#15803d' }}>
+              {feeCents > 0 ? feeLabel : 'Free'}
+            </span>
+            {feeCents > 0 && (
+              <span style={{ fontSize: '0.78rem', color: '#666', marginLeft: 'auto' }}>Only charged if approved</span>
+            )}
+          </div>
         </div>
+
+        {feeCents > 0 && (
+          <div style={{
+            backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px',
+            padding: '12px 14px', marginBottom: '16px',
+          }}>
+            <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#78350f', lineHeight: 1.55 }}>
+              After submitting you'll be sent to Stripe's secure page to save a card.
+              <strong> Nothing is charged now.</strong> Your card is only charged if
+              Trainer Center HB approves your application.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={feeConsent}
+                onChange={(e) => setFeeConsent(e.target.checked)}
+                style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer', accentColor: '#C8102E', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: '0.82rem', color: '#78350f', fontWeight: 600, lineHeight: 1.5 }}>
+                I authorize Trainer Center HB to charge my saved card up to {feeLabel} if my application for this event is approved.
+              </span>
+            </label>
+          </div>
+        )}
 
         <label style={labelCss}>Notes for Trainer Center (optional)</label>
         <textarea
@@ -12620,7 +12801,7 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
             fontSize: '0.95rem', fontWeight: '700',
             cursor: submitting ? 'wait' : 'pointer',
           }}>
-            {submitting ? 'Submitting…' : 'Submit application'}
+            {submitting ? 'Submitting…' : feeCents > 0 ? 'Submit & save card' : 'Submit application'}
           </button>
         </div>
       </form>
@@ -17289,6 +17470,10 @@ function StaffVendorsPage({ isMobile, staff }) {
   const [detailVendor, setDetailVendor] = useState(null);
   // Fit-status modal — clicking the Favorite/Not-a-Fit badge on any card.
   const [fitVendor, setFitVendor] = useState(null);
+  // Approve & collect modal — approving a paid application routes through
+  // here so staff pick the amount (full / discount / waive) before the
+  // approval lands. { app, note }.
+  const [chargeTarget, setChargeTarget] = useState(null);
   // Comms broadcast modal — Chef-composed email blast to vendor audiences.
 
   const isAdmin = !!staff?.isAdmin;
@@ -17376,7 +17561,34 @@ function StaffVendorsPage({ isMobile, staff }) {
 
   const refresh = () => setRefreshKey(k => k + 1);
 
+  // Look an application up across both surfaces that render Approve buttons
+  // (pending tab + per-event rosters) so the charge interceptor below can
+  // read its fee/payment state regardless of where the click came from.
+  const findAppById = (appId) => {
+    const fromPending = pending.find(p => p.id === appId);
+    if (fromPending) return fromPending;
+    for (const ev of events) {
+      const hit = (ev.vendor_applications || []).find(a => a.id === appId);
+      if (hit) return { ...hit, event: hit.event || ev };
+    }
+    return null;
+  };
+
   const decideApplication = async (appId, status, note) => {
+    // Paid application being approved with money still uncollected →
+    // route through the charge modal (Approve & collect). The modal
+    // finalizes the approval after the charge/waive/pay-link step.
+    if (status === 'approved') {
+      const app = findAppById(appId);
+      if (app && (app.fee_cents || 0) > 0 && !['charged', 'waived'].includes(app.payment_status)) {
+        setChargeTarget({ app, note: note || null });
+        return;
+      }
+    }
+    await finalizeDecision(appId, status, note);
+  };
+
+  const finalizeDecision = async (appId, status, note) => {
     // Per-event decision only. Profile approval lives in the All Vendors tab
     // and is the prerequisite — admin UI prevents approving an event app for
     // a non-approved vendor.
@@ -17649,7 +17861,199 @@ function StaffVendorsPage({ isMobile, staff }) {
         />
       )}
 
+      {chargeTarget && (
+        <TableFeeChargeModal
+          app={chargeTarget.app}
+          onClose={() => setChargeTarget(null)}
+          onFinalized={() => finalizeDecision(chargeTarget.app.id, 'approved', chargeTarget.note)}
+          onRefresh={refresh}
+        />
+      )}
+
     </PageWrapper>
+  );
+}
+
+// ─── Approve & collect modal ──────────────────────────────
+// Shown when staff approve an application whose table fee hasn't been
+// collected yet. Staff pick the amount — full fee, quick 50%, custom,
+// or waive ($0). The server enforces the ceiling (never above the fee
+// the vendor consented to). On success the approval is finalized and
+// the normal approval email fires. If the saved card declines, staff
+// can email a Stripe pay link and still approve, or back out entirely.
+function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh }) {
+  const fee = app.fee_cents || 0;
+  const [amountStr, setAmountStr] = useState(String(fee / 100));
+  const [payNote, setPayNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [declineMsg, setDeclineMsg] = useState('');
+  const v = app.vendor || {};
+  const money = (c) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
+  const amountCents = Math.min(Math.max(Math.round((parseFloat(amountStr) || 0) * 100), 0), fee);
+  const hasCard = !!app.stripe_payment_method_id;
+  const isWaive = amountCents === 0;
+
+  const finalize = async () => {
+    await onFinalized();
+    onRefresh();
+    onClose();
+  };
+
+  const chargeAndApprove = async () => {
+    setBusy(true);
+    setDeclineMsg('');
+    const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
+      body: { action: 'charge', application_id: app.id, amount_cents: amountCents, note: payNote.trim() || null },
+    });
+    if (fn?.ok) {
+      await finalize();
+      return;
+    }
+    setBusy(false);
+    setDeclineMsg(fn?.decline || fn?.error || fnError?.message || 'Charge failed.');
+  };
+
+  const payLinkAndApprove = async () => {
+    setBusy(true);
+    setDeclineMsg('');
+    const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
+      body: { action: 'create_pay_link', application_id: app.id, amount_cents: amountCents || fee },
+    });
+    if (fn?.url) {
+      sendVendorEmail({
+        type: 'table_fee_pay_link',
+        application_id: app.id,
+        pay_url: fn.url,
+        amount_cents: amountCents || fee,
+      });
+      await finalize();
+      return;
+    }
+    setBusy(false);
+    setDeclineMsg(fn?.error || fnError?.message || 'Could not create a pay link.');
+  };
+
+  const quickBtn = (label, cents, active) => (
+    <button
+      key={label}
+      type="button"
+      onClick={() => setAmountStr(String(cents / 100))}
+      style={{
+        flex: 1, padding: '9px 6px',
+        border: active ? '2px solid #C8102E' : '2px solid #e5e7eb',
+        backgroundColor: active ? '#fef2f2' : '#fff',
+        color: active ? '#C8102E' : '#1a1a1a',
+        borderRadius: '8px', fontSize: '0.82rem', fontWeight: '800',
+        cursor: 'pointer', fontFamily: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px', zIndex: 1000,
+    }} onClick={busy ? undefined : onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="modal-safe-bottom smooth-scroll" style={{
+        backgroundColor: '#fff', borderRadius: '14px', padding: '24px',
+        maxWidth: '440px', width: '100%', maxHeight: '90vh', overflow: 'auto',
+      }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+          Approve &amp; collect
+        </h3>
+        <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#666' }}>
+          <strong>{v.name || 'This vendor'}</strong> agreed to a {money(fee)} table fee for{' '}
+          {app.event?.title || 'this event'}. Charge any amount up to that — or waive it.
+        </p>
+
+        {!hasCard && (
+          <div style={{
+            backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#92400e',
+            borderRadius: '8px', padding: '10px 12px', fontSize: '0.82rem', marginBottom: '14px', lineHeight: 1.5,
+          }}>
+            No card on file (they skipped the card step). You can waive the fee, or email a pay link and approve.
+          </div>
+        )}
+
+        <label style={{ fontSize: '0.72rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '6px' }}>
+          Amount to charge
+        </label>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+          {quickBtn(`Full ${money(fee)}`, fee, amountCents === fee)}
+          {quickBtn(`50% ${money(Math.round(fee / 2))}`, Math.round(fee / 2), amountCents === Math.round(fee / 2) && fee !== Math.round(fee / 2))}
+          {quickBtn('Waive $0', 0, isWaive)}
+        </div>
+        <div style={{ position: 'relative', marginBottom: '12px' }}>
+          <span style={{ position: 'absolute', left: '13px', top: '11px', fontSize: '0.95rem', color: '#6b7280', fontWeight: '600' }}>$</span>
+          <input
+            type="number"
+            min="0"
+            max={fee / 100}
+            step="1"
+            inputMode="decimal"
+            value={amountStr}
+            onChange={(e) => setAmountStr(e.target.value)}
+            style={{
+              width: '100%', padding: '11px 13px 11px 27px', fontSize: '0.95rem',
+              border: '1px solid #ddd', borderRadius: '8px', boxSizing: 'border-box', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+
+        <input
+          value={payNote}
+          onChange={(e) => setPayNote(e.target.value)}
+          placeholder={'Reason if discounted/waived (e.g. "brought the canopy")'}
+          style={{
+            width: '100%', padding: '10px 13px', fontSize: '0.85rem',
+            border: '1px solid #ddd', borderRadius: '8px', boxSizing: 'border-box',
+            fontFamily: 'inherit', marginBottom: '14px',
+          }}
+        />
+
+        {declineMsg && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+            borderRadius: '8px', padding: '10px 12px', fontSize: '0.85rem', marginBottom: '12px',
+            display: 'flex', alignItems: 'flex-start', gap: '8px', lineHeight: 1.5,
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '1px' }} />
+            <span>{declineMsg} You can email a pay link instead and still approve.</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {(isWaive || hasCard) && (
+            <button onClick={chargeAndApprove} disabled={busy} style={{
+              padding: '12px', backgroundColor: busy ? '#999' : (isWaive ? '#1a1a1a' : '#16a34a'), color: '#fff',
+              border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
+              cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+            }}>
+              {busy ? 'Working…' : isWaive ? 'Waive fee & approve' : `Charge ${money(amountCents)} & approve`}
+            </button>
+          )}
+          {!isWaive && (
+            <button onClick={payLinkAndApprove} disabled={busy} style={{
+              padding: '12px', backgroundColor: '#fff', color: '#1a1a1a',
+              border: '1px solid #ddd', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '700',
+              cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit',
+            }}>
+              Email a {money(amountCents || fee)} pay link &amp; approve
+            </button>
+          )}
+          <button onClick={onClose} disabled={busy} style={{
+            padding: '10px', backgroundColor: 'transparent', color: '#888',
+            border: 'none', fontSize: '0.85rem', fontWeight: '600',
+            cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', textDecoration: 'underline',
+          }}>
+            Cancel — don't approve yet
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -17924,6 +18328,19 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, on
                 Requested: {formatTime12h(app.requested_start_time) || '?'} – {formatTime12h(app.requested_end_time) || '?'}
               </div>
             )}
+            {(app.fee_cents || 0) > 0 && (
+              <div style={{
+                marginTop: '6px', marginLeft: (app.requested_start_time || app.requested_end_time) ? '6px' : 0,
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontSize: '0.78rem', fontWeight: '700',
+                color: app.payment_status === 'card_saved' ? '#475569' : '#92400e',
+                backgroundColor: app.payment_status === 'card_saved' ? '#f8fafc' : '#fffbeb',
+                padding: '4px 10px', borderRadius: '999px',
+              }}>
+                ${((app.fee_cents || 0) / 100).toFixed((app.fee_cents || 0) % 100 === 0 ? 0 : 2)} fee
+                {app.payment_status === 'card_saved' ? ' · card on file' : ' · no card yet'}
+              </div>
+            )}
           </div>
         </div>
         {(onOpenNotes || onRatingChange) && v.id && (
@@ -18034,7 +18451,7 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, on
           border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
           cursor: profilePending ? 'not-allowed' : (busy ? 'wait' : 'pointer')
         }}>
-          Approve for this date
+          {(app.fee_cents || 0) > 0 && !['charged', 'waived'].includes(app.payment_status) ? 'Approve & collect' : 'Approve for this date'}
         </button>
         <button onClick={() => handle('declined')} disabled={busy} style={{
           backgroundColor: '#fff', color: '#dc2626', padding: '8px 16px',
@@ -18554,7 +18971,46 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         : null;
                       apprLabel = when ? `Approved by ${who} · ${when}` : `Approved by ${who}`;
                     }
-                    const appBadge = <ApplicationStatusBadge status={a.status} />;
+                    // Table-fee badge rides next to the status badge on paid
+                    // applications so Chef sees money state at a glance.
+                    const feeCents = a.fee_cents || 0;
+                    const feeMoney = (c) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
+                    let payBadge = null;
+                    if (feeCents > 0) {
+                      const payStyles = {
+                        charged:  { bg: '#f0fdf4', fg: '#15803d', label: `Paid ${feeMoney(a.charged_amount_cents ?? feeCents)}${(a.charged_amount_cents ?? feeCents) < feeCents ? ' (disc.)' : ''}` },
+                        waived:   { bg: '#f0fdf4', fg: '#15803d', label: 'Waived' },
+                        refunded: { bg: '#f3f4f6', fg: '#6b7280', label: 'Refunded' },
+                        failed:   { bg: '#fef2f2', fg: '#dc2626', label: 'Payment failed' },
+                        card_saved: { bg: '#f8fafc', fg: '#475569', label: `Card on file · ${feeMoney(feeCents)}` },
+                      };
+                      const ps = payStyles[a.payment_status] || { bg: '#fffbeb', fg: '#92400e', label: `No card · ${feeMoney(feeCents)}` };
+                      payBadge = (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center',
+                          backgroundColor: ps.bg, color: ps.fg,
+                          padding: '3px 8px', borderRadius: '999px',
+                          fontSize: '0.68rem', fontWeight: '800', whiteSpace: 'nowrap',
+                        }}>
+                          {ps.label}
+                        </span>
+                      );
+                    }
+                    const refundFee = async (e) => {
+                      e.stopPropagation();
+                      if (!window.confirm(`Refund ${feeMoney(a.charged_amount_cents ?? feeCents)} to ${(a.vendor || {}).name || 'this vendor'}?`)) return;
+                      const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
+                        body: { action: 'refund', application_id: a.id },
+                      });
+                      if (fn?.ok) { onChange && onChange(); }
+                      else alert('Refund failed: ' + (fn?.error || fnError?.message || 'unknown error'));
+                    };
+                    const appBadge = (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                        <ApplicationStatusBadge status={a.status} />
+                        {payBadge}
+                      </span>
+                    );
                     let decLine = null;
                     if (a.status === 'approved') {
                       const checkedInLabel = checkedIn
@@ -18575,7 +19031,15 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                           fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
                           border: 'none', padding: '6px 14px', borderRadius: '6px',
                           fontWeight: '700', cursor: 'pointer'
-                        }}>Approve</button>
+                        }}>{feeCents > 0 && !['charged', 'waived'].includes(a.payment_status) ? 'Approve & collect' : 'Approve'}</button>
+                      );
+                    } else if (a.status === 'approved' && !isPast && a.payment_status === 'charged') {
+                      actions = (
+                        <button onClick={refundFee} style={{
+                          fontSize: '0.78rem', backgroundColor: '#fff', color: '#dc2626',
+                          border: '1px solid #fecaca', padding: '5px 12px', borderRadius: '6px',
+                          fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+                        }}>Refund</button>
                       );
                     } else if (a.status === 'approved' && isPast) {
                       const hasSurvey = submittedSurveys.has(`${a.vendor_id}:${ev.id}`);

@@ -427,7 +427,7 @@ Deno.serve(async (req: Request) => {
         // Vendor callout — bordered box with red CTA button
         `<table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;border:2px solid #1a1a1a;border-radius:10px"><tr><td style="padding:20px 22px">` +
         `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#C8102E;letter-spacing:0.06em;text-transform:uppercase">Vendors — A Few Last-Minute Spots</p>` +
-        `  <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1a1a">The lineup is full, but we have a few open tables for tonight's show. Free vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.</p>` +
+        `  <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#1a1a1a">The lineup is full, but we have a few open tables for tonight's show. Vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.</p>` +
         `  <p style="margin:0;text-align:center"><a href="${applyUrl}" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply to vend at tonight's show  →</a></p>` +
         `</td></tr></table>` +
 
@@ -442,7 +442,7 @@ Deno.serve(async (req: Request) => {
         `Tonight is our monthly Beach City Trade Night — vendors set up across the shop from 12 PM to 8 PM. Cards, sealed product, slabs. Come hang out.\n\n` +
         `See the full lineup on our website: ${lineupUrl}\n\n` +
         `VENDORS — A FEW LAST-MINUTE SPOTS\n` +
-        `The lineup is full, but we have a few open tables for tonight's show. Free vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.\n` +
+        `The lineup is full, but we have a few open tables for tonight's show. Vendor table, prime time, packed room. If you have inventory and want to get in front of our community, apply now — Trainer Center HB will review and approve before doors open.\n` +
         `Apply: ${applyUrl}\n\n` +
         `4911 Warner Ave #210, Huntington Beach, CA 92649\n` +
         `Follow us @trainercenter.pokemon for what's next.\n\n` +
@@ -487,10 +487,20 @@ Deno.serve(async (req: Request) => {
 
       if (type === 'application_received') {
         const vendorSubject = `Got your application for ${dateStr}`
-        const vendorBody = `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Trainer Center HB will confirm your spot soon.</p>`
+        // Paid event: restate the fee terms so the vendor has the
+        // authorization in writing. Nothing is charged until approval.
+        const feeCents = app.fee_cents || 0
+        const feeUsd = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`
+        const feeLine = feeCents > 0
+          ? `<p style="font-size:14px;background:#fffbeb;border-left:3px solid #f59e0b;padding:10px 14px">This event has a <strong>${feeUsd} table fee</strong>. Nothing has been charged — your saved card is only charged if Trainer Center HB approves your application.</p>`
+          : ''
+        const feeText = feeCents > 0
+          ? `\n\nThis event has a ${feeUsd} table fee. Nothing has been charged — your saved card is only charged if you're approved.`
+          : ''
+        const vendorBody = `<p>Hi ${v.name},</p><p>We got your interest in vending on <strong>${dateStr}</strong> for <strong>${eventTitle}</strong>. Trainer Center HB will confirm your spot soon.</p>${feeLine}`
         await sendResendEmail([v.email], vendorSubject,
           wrapHtml(vendorBody + `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`),
-          `${vendorSubject}\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
+          `${vendorSubject}${feeText}\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
         const isFirst = !!payload.is_first_time
         const staffSubject = isFirst ? `New vendor: ${v.name}` : `${v.name} wants to vend on ${dateStr}`
         const staffBody = `<p><strong>${v.name}</strong> ${isFirst ? 'just applied as a new vendor' : `applied for ${eventTitle} on ${dateStr}`}.</p>` +
@@ -512,6 +522,29 @@ Deno.serve(async (req: Request) => {
         const lineupUrl = `${SITE_URL}/vendor-day?event=${app.event_id}`
         const vendorTimes = vendorTimeLine(e || {})
         const whenLine = `${dateStr}${vendorTimes ? ` &nbsp;&middot;&nbsp; ${vendorTimes}` : ''}`
+        // Table-fee receipt line. State of the application at approval time:
+        // charged (possibly discounted), waived, or failed (pay link coming).
+        const feeCents = app.fee_cents || 0
+        const usd = (c: number) => `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`
+        let feeBlock = ''
+        let feeTextLine = ''
+        if (feeCents > 0) {
+          if (app.payment_status === 'charged') {
+            const charged = app.charged_amount_cents ?? feeCents
+            const discounted = charged < feeCents ? ` (discounted from ${usd(feeCents)})` : ''
+            feeBlock = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 20px;border-radius:6px">` +
+              `<p style="margin:0;font-size:14px;color:#166534"><strong>Table fee collected:</strong> ${usd(charged)}${discounted} was charged to your card on file. You're all set.</p></td></tr></table>`
+            feeTextLine = `\nTable fee collected: ${usd(charged)}${discounted} was charged to your card on file.\n`
+          } else if (app.payment_status === 'waived') {
+            feeBlock = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr><td style="background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 20px;border-radius:6px">` +
+              `<p style="margin:0;font-size:14px;color:#166534"><strong>Table fee waived:</strong> your ${usd(feeCents)} fee is on the house this time.</p></td></tr></table>`
+            feeTextLine = `\nTable fee waived: your ${usd(feeCents)} fee is on the house this time.\n`
+          } else if (app.payment_status === 'failed') {
+            feeBlock = `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px"><tr><td style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 20px;border-radius:6px">` +
+              `<p style="margin:0;font-size:14px;color:#92400e"><strong>Table fee:</strong> we couldn't charge your card. Watch your inbox for a secure payment link to lock in your table.</p></td></tr></table>`
+            feeTextLine = `\nTable fee: we couldn't charge your card. Watch for a payment link email to lock in your table.\n`
+          }
+        }
         const body =
           `<p style="font-size:24px;font-weight:800;color:#1a1a1a;margin:0 0 6px">CONGRATS, ${v.name}!</p>` +
           `<p style="margin:0 0 16px;font-size:16px;color:#1f2937">You've been <strong>approved</strong> for the next Trainer Center event!</p>` +
@@ -520,6 +553,7 @@ Deno.serve(async (req: Request) => {
           `  <p style="margin:0;font-size:18px;font-weight:800;color:#1a1a1a">${whenLine}</p>` +
           `  <p style="margin:6px 0 0;font-size:13px;color:#475569;line-height:1.5">This is an <strong>all-day</strong> event. There's no partial or shift option, so plan to be set up for the full window.</p>` +
           `</td></tr></table>` +
+          feeBlock +
           `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr><td style="background:#fff0f0;border-left:4px solid #C8102E;padding:16px 20px;border-radius:6px">` +
           `  <p style="margin:0 0 6px;font-size:13px;font-weight:800;color:#C8102E;letter-spacing:0.04em">YOU MADE THE CUT</p>` +
           `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.55">We're capping this event at <strong>30-35 vendors ONLY</strong>. We want you to know, you're a <strong>great fit and great quality</strong>. We don't just want anyone. <strong>Congrats on getting in!</strong></p>` +
@@ -548,7 +582,8 @@ Deno.serve(async (req: Request) => {
           `<p style="margin:0 0 24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open dashboard</a></p>` +
           `<p style="margin:0;font-size:15px;color:#1a1a1a;font-weight:700">Let's make this the best one yet. See you ${dateStr}!</p>`
         const text = `CONGRATS ${v.name}! You're approved for ${eventTitle} on ${dateStr}${vendorTimes ? ` (${vendorTimes})` : ''}.\n\n` +
-          `This is an all-day event. There's no partial or shift option, so plan to be set up for the full window.\n\n` +
+          `This is an all-day event. There's no partial or shift option, so plan to be set up for the full window.\n` +
+          feeTextLine + `\n` +
           `You made the cut: we're capping this at 30-35 vendors only. You're a great fit and great quality. Congrats on getting in!\n\n` +
           `Keys: Pokemon only (no other TCG). We provide tables, chairs, tablecloths, canopies, and area lighting. Bring your own chair or setup if you want it comfier. Last event was packed out, so if you can bring an extra of anything to support fellow vendors, that is appreciated.\n\n` +
           `Pick your spot: first come, first serve, but please grab a different spot than last time, and be ready to have a newer vendor placed between you and a veteran.\n\n` +
@@ -562,6 +597,30 @@ Deno.serve(async (req: Request) => {
       } else {
         return json({ ok: true, skipped: 'not a notify-worthy status' })
       }
+      return json({ ok: true, sent: ['vendor'] })
+    }
+
+    // Table-fee pay link: the saved card declined (or was never saved), so
+    // staff generated a hosted Stripe Checkout link and approved anyway.
+    // Payload: application_id, pay_url, amount_cents.
+    if (type === 'table_fee_pay_link') {
+      if (!payload.application_id) return json({ error: 'application_id required' }, 400)
+      if (!payload.pay_url) return json({ error: 'pay_url required' }, 400)
+      const { data: app, error: aErr } = await supabase.from('vendor_applications').select('*, vendor:vendors(*), event:events(*)').eq('id', payload.application_id).single()
+      if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
+      const v = app.vendor
+      const e = app.event
+      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'the upcoming event'
+      const eventTitle = e?.title || "TC's Beach City Trade Night"
+      const cents = payload.amount_cents || app.fee_cents || 0
+      const usd = `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+      const subject = `Action needed: ${usd} table fee for ${dateStr}`
+      const body = `<p>Hi ${v.name},</p>` +
+        `<p>You're approved for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong> — congrats! One last step: your <strong>${usd} table fee</strong> couldn't be charged to the card on file, so here's a secure payment link instead.</p>` +
+        `<p style="margin:24px 0"><a href="${payload.pay_url}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Pay ${usd} table fee</a></p>` +
+        `<p style="font-size:14px;color:#666">Paying locks in your table. If anything looks off, just reply to this email.</p>`
+      await sendResendEmail([v.email], subject, wrapHtml(body),
+        `Hi ${v.name},\n\nYou're approved for ${eventTitle} on ${dateStr}. One last step: your ${usd} table fee couldn't be charged to the card on file.\n\nPay here to lock in your table: ${payload.pay_url}`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
