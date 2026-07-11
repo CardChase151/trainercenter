@@ -46,6 +46,17 @@ const json = (body: unknown, status = 200) =>
 
 const money = (cents: number) => `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
 
+// App Catalyst gets half of what's left after Stripe's own processing cut
+// (estimated at the standard 2.9% + 30¢ card rate) — the store's connected
+// account keeps the other half. Exact Stripe fee isn't known until the
+// charge settles, so this is an estimate; it lands within a cent or two of
+// a true post-fee 50/50 split on ordinary domestic card charges.
+const platformFeeCents = (amountCents: number) => {
+  const estStripeFee = Math.round(amountCents * 0.029) + 30
+  const remainder = Math.max(amountCents - estStripeFee, 0)
+  return Math.round(remainder / 2)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
@@ -254,7 +265,10 @@ Deno.serve(async (req) => {
             product_data: { name: `Table fee — ${ev.title || 'Vendor Day'} (${ev.event_date})` },
           },
         }],
-        payment_intent_data: { receipt_email: vendor.email || undefined },
+        payment_intent_data: {
+          receipt_email: vendor.email || undefined,
+          application_fee_amount: platformFeeCents(fee),
+        },
         success_url: `${SITE_URL}/vendors/express?event=${ev.id}&express_paid={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_URL}/vendors/express?event=${ev.id}`,
         metadata: { application_id: appId, express: '1' },
@@ -329,6 +343,7 @@ Deno.serve(async (req) => {
           payment_method: app.stripe_payment_method_id,
           off_session: true,
           confirm: true,
+          application_fee_amount: platformFeeCents(amount),
           receipt_email: app.vendor?.email || undefined,
           description: `Table fee — ${app.event?.title || 'Vendor Day'} ${app.event?.event_date || ''}`.trim(),
           metadata: { application_id: app.id, vendor_id: app.vendor_id },
@@ -378,7 +393,10 @@ Deno.serve(async (req) => {
             product_data: { name: `Table fee — ${app.event?.title || 'Vendor Day'} (${app.event?.event_date || ''})` },
           },
         }],
-        payment_intent_data: { receipt_email: app.vendor?.email || undefined },
+        payment_intent_data: {
+          receipt_email: app.vendor?.email || undefined,
+          application_fee_amount: platformFeeCents(amount),
+        },
         success_url: `${SITE_URL}/vendors/dashboard?fee_paid={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_URL}/vendors/dashboard`,
         metadata: { application_id: app.id },
