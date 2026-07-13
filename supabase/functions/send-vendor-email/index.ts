@@ -42,7 +42,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 })
 
 type Payload = {
-  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast' | 'marketing_contacts_broadcast' | 'vendor_optout_notify'
+  type: 'vendor_welcome' | 'vendor_profile_approved' | 'vendor_event_invite_urgent' | 'vendor_event_day_reminder' | 'customer_appreciation' | 'member_welcome' | 'application_received' | 'application_decided' | 'event_cancelled' | 'vendor_broadcast' | 'marketing_contacts_broadcast' | 'vendor_optout_notify' | 'express_link_reminder'
+  apology?: boolean
   vendor_id?: string
   vendor_ids?: string[]
   member_id?: string
@@ -597,6 +598,47 @@ Deno.serve(async (req: Request) => {
       } else {
         return json({ ok: true, skipped: 'not a notify-worthy status' })
       }
+      return json({ ok: true, sent: ['vendor'] })
+    }
+
+    // One-off express-link reminder to a single applicant who hasn't put a
+    // card down yet. Payload: application_id, apology (bool) — apology=true
+    // sends a short correction note first (used once, 2026-07, after a
+    // broadcast went out with a stale event link).
+    if (type === 'express_link_reminder') {
+      if (!payload.application_id) return json({ error: 'application_id required' }, 400)
+      // Service-role read: the caller here is a one-off staff-triggered
+      // send, not the applying vendor's own session, so the public
+      // approved-only RLS policy on vendor_applications would hide pending
+      // rows. Safe to bypass — the only output is an email to v.email,
+      // which comes from the row itself, not from caller input.
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') || '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      )
+      const { data: app, error: aErr } = await supabaseAdmin.from('vendor_applications').select('*, vendor:vendors(*), event:events(*)').eq('id', payload.application_id).single()
+      if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
+      const v = app.vendor
+      const e = app.event
+      const dateStr = e?.event_date ? formatEventDate(e.event_date) : 'the upcoming event'
+      const eventTitle = e?.title || "TC's Beach City Trade Night"
+      const cents = app.fee_cents || 0
+      const usd = `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+      const expressUrl = `${SITE_URL}/vendors/express?event=${e.id}`
+      const apologyLine = payload.apology
+        ? `<p>Quick correction — the reservation link in our last email was wrong. It pointed at an old event instead of ${dateStr}. Sorry about that.</p>`
+        : ''
+      const apologyText = payload.apology
+        ? `Quick correction: the reservation link in our last email was wrong. It pointed at an old event instead of ${dateStr}. Sorry about that.\n\n`
+        : ''
+      const subject = payload.apology ? `Correction: your ${eventTitle} link` : `Reserve your spot for ${dateStr}`
+      const body = apologyLine +
+        `<p>You started an application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>, but haven't reserved your table yet.</p>` +
+        `<p>Spots are filling up. Reserve yours now and you're locked in instantly, no waiting on review.</p>` +
+        `<p style="margin:24px 0"><a href="${expressUrl}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Reserve My Spot — ${usd}</a></p>` +
+        `<p style="font-size:14px;color:#666">Questions? Reply to this email or DM us on Instagram <a href="https://www.instagram.com/trainercenter.pokemon/" style="color:#666">@trainercenter.pokemon</a>.</p>`
+      await sendResendEmail([v.email], subject, wrapHtml(body),
+        `${apologyText}You started an application for ${eventTitle} on ${dateStr}, but haven't reserved your table yet.\n\nReserve My Spot (${usd}): ${expressUrl}`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
