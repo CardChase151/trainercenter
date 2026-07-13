@@ -632,13 +632,13 @@ Deno.serve(async (req: Request) => {
         ? `Quick correction: the reservation link in our last email was wrong. It pointed at an old event instead of ${dateStr}. Sorry about that.\n\n`
         : ''
       const subject = payload.apology ? `Correction: your ${eventTitle} link` : `Reserve your spot for ${dateStr}`
-      const body = apologyLine +
+      const body = `<p>Hi ${v.name},</p>` + apologyLine +
         `<p>You started an application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>, but haven't reserved your table yet.</p>` +
         `<p>Spots are filling up. Reserve yours now and you're locked in instantly, no waiting on review.</p>` +
         `<p style="margin:24px 0"><a href="${expressUrl}" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Reserve My Spot — ${usd}</a></p>` +
         `<p style="font-size:14px;color:#666">Questions? Reply to this email or DM us on Instagram <a href="https://www.instagram.com/trainercenter.pokemon/" style="color:#666">@trainercenter.pokemon</a>.</p>`
       await sendResendEmail([v.email], subject, wrapHtml(body),
-        `${apologyText}You started an application for ${eventTitle} on ${dateStr}, but haven't reserved your table yet.\n\nReserve My Spot (${usd}): ${expressUrl}`)
+        `Hi ${v.name},\n\n${apologyText}You started an application for ${eventTitle} on ${dateStr}, but haven't reserved your table yet.\n\nReserve My Spot (${usd}): ${expressUrl}`)
       return json({ ok: true, sent: ['vendor'] })
     }
 
