@@ -203,6 +203,10 @@ Deno.serve(async (req) => {
         .eq('id', body.event_id)
         .maybeSingle()
       if (!ev || !ev.has_vendors || ev.cancelled) return json({ error: 'Event not found' }, 404)
+      // Store timezone, not server UTC — a link opened the morning after an
+      // evening event shouldn't still read as "today" server-side.
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date())
+      if (ev.event_date < todayStr) return json({ error: 'This event has already happened. Reach out to Trainer Center HB for the current sign-up link.' }, 400)
 
       const { data: vendor } = await supabase
         .from('vendors').select('id, name, email, status').eq('user_id', userId).maybeSingle()

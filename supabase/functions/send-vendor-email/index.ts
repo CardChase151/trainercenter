@@ -725,7 +725,7 @@ Deno.serve(async (req: Request) => {
 
       // Resolve audience → list of vendor rows
       let targets: { id: string; name: string; email: string; user_id?: string }[] = []
-      const eventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event']
+      const eventScoped = ['approved_not_applied', 'applied_any', 'approved_for_event', 'pending_for_event', 'unpaid_for_event']
       if (eventScoped.includes(audience) && !payload.event_id) {
         return json({ error: 'event_id required for this audience' }, 400)
       }
@@ -773,6 +773,21 @@ Deno.serve(async (req: Request) => {
           .select('vendor_id, vendor:vendors(id, name, email, user_id)')
           .eq('event_id', payload.event_id)
           .eq('status', 'pending')
+        if (aErr) return json({ error: aErr.message }, 500)
+        targets = (apps || [])
+          .map((a: any) => a.vendor)
+          .filter((v: any) => v && v.email)
+      } else if (audience === 'unpaid_for_event') {
+        // Applied to this event but never even got as far as saving a card
+        // (payment_status card_pending or none). Deliberately excludes
+        // card_saved — those vendors have a card on file already and staff
+        // charge them directly; emailing them a reservation link risks a
+        // double charge. Works for both approved and still-pending applications.
+        const { data: apps, error: aErr } = await supabase
+          .from('vendor_applications')
+          .select('vendor_id, payment_status, vendor:vendors(id, name, email, user_id)')
+          .eq('event_id', payload.event_id)
+          .in('payment_status', ['card_pending', 'none'])
         if (aErr) return json({ error: aErr.message }, 500)
         targets = (apps || [])
           .map((a: any) => a.vendor)

@@ -16437,6 +16437,18 @@ function ExpressVendorPage({ isMobile }) {
       </PageWrapper>
     );
   }
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  if (event.event_date < todayStr) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ ...card, textAlign: 'center' }}>
+          <AlertCircle size={36} style={{ color: '#dc2626', marginBottom: '10px' }} />
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: '800' }}>This event already happened</h2>
+          <p style={{ margin: 0, color: '#666', fontSize: '0.9rem' }}>{event.title || 'This Vendor Day'} was on {dateStr || event.event_date}. Reach out to Trainer Center HB for the current sign-up link.</p>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   if (phase === 'confirming') {
     return <PageWrapper isMobile={isMobile}><p style={{ textAlign: 'center', color: '#666' }}><Loader2 size={18} className="spin" /> Confirming your payment…</p></PageWrapper>;
