@@ -11142,6 +11142,7 @@ function VendorEventsListPage({ isMobile }) {
                 vendorId={vendor.id}
                 vendorStatus={vendor.status}
                 isFirstApplication={Object.keys(applications).length === 0}
+                hasAttendanceHistory={Object.keys(attendance).length > 0}
                 onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
                 onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
                 isMobile={isMobile}
@@ -11320,8 +11321,9 @@ function VendorStatusBadge({ status }) {
 }
 
 // ─── Per-event card on vendor dashboard ───────────────────
-function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, onApplied, onCheckedIn, isMobile }) {
+function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, onApplied, onCheckedIn, isMobile }) {
   const [showApply, setShowApply] = useState(false); // open the apply modal
+  const [showChoice, setShowChoice] = useState(false); // first-timer full-table-vs-free-half-table popup
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCancel, setShowCancel] = useState(false); // post-approval cancel modal
   const [showInfo, setShowInfo] = useState(false);     // "Cost & info" modal
@@ -11361,11 +11363,18 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       .single();
     if (insertError) throw insertError;
     onApplied(data);
-    sendVendorEmail({
-      type: 'application_received',
-      application_id: data.id,
-      is_first_time: !!isFirstApplication,
-    });
+    // Free event: nothing to gate on, so the application is "successful"
+    // the moment it's submitted, same as always. Paid events wait — the
+    // stripe-vendor-payment confirm_setup action fires this same email
+    // once the card is actually saved, since it's not a real application
+    // until then.
+    if (feeCents === 0) {
+      sendVendorEmail({
+        type: 'application_received',
+        application_id: data.id,
+        is_first_time: !hasAttendanceHistory,
+      });
+    }
     // Paid event: hand off to Stripe's hosted card-save page (setup mode,
     // no charge). If it can't start (Stripe not configured yet), the
     // application still stands — the card chip on the event card lets
@@ -11378,6 +11387,42 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         window.location.href = fn.url;
       }
     }
+    return data;
+  };
+
+  // First-timer path: free shared half-table, no card, no Stripe at all.
+  // fee_cents is deliberately 0 regardless of this event's real table fee —
+  // this is the free first-time-vendor offer, independent of what the event
+  // normally charges. requested_table_size 'half' feeds directly into the
+  // existing staff Tables-page pairing (auto-pair + manual override), so no
+  // new pairing UI is needed. vendor_note (not decision_note — that field
+  // gets wiped by finalizeDecision on every approve/decline) flags this row
+  // for staff.
+  const submitFreeHalfTableApplication = async () => {
+    const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
+    const vendorEnd = event.vendor_end_time || event.end_time || '20:00:00';
+    const { data, error: insertError } = await supabase
+      .from('vendor_applications')
+      .insert({
+        vendor_id: vendorId,
+        event_id: event.id,
+        requested_start_time: vendorStart.slice(0, 5),
+        requested_end_time: vendorEnd.slice(0, 5),
+        requested_table_size: 'half',
+        fee_cents: 0,
+        payment_status: 'none',
+        vendor_note: 'First-time vendor — free shared half-table (confirmed table-sharing).',
+      })
+      .select()
+      .single();
+    if (insertError) throw insertError;
+    onApplied(data);
+    // Free — nothing to gate on, fires immediately same as any $0 application.
+    sendVendorEmail({
+      type: 'application_received',
+      application_id: data.id,
+      is_first_time: true,
+    });
     return data;
   };
 
@@ -11505,7 +11550,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       // hides past events from the "no application" branch.
       actionEl = (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: '6px' }}>
-          <button onClick={() => setShowApply(true)} style={primaryBtnStyle('#C8102E')}>
+          <button onClick={() => hasAttendanceHistory ? setShowApply(true) : setShowChoice(true)} style={primaryBtnStyle('#C8102E')}>
             <Plus size={16} /> Apply for this date
           </button>
           {!isPast && (
@@ -11726,6 +11771,14 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           </div>
         </div>
       </div>
+      {showChoice && (
+        <FirstTimerChoiceModal
+          event={event}
+          onClose={() => setShowChoice(false)}
+          onChooseFullTable={() => { setShowChoice(false); setShowApply(true); }}
+          onChooseFreeHalfTable={submitFreeHalfTableApplication}
+        />
+      )}
       {showApply && (
         <ApplyForEventModal
           event={event}
@@ -12649,6 +12702,137 @@ function vendorMatchesQuery(vendor, query) {
     if (phoneDigits && phoneDigits.includes(qDigits)) return true;
   }
   return false;
+}
+
+// ─── First-timer choice modal ──────────────────────────────
+// Shown instead of ApplyForEventModal when the vendor has no real
+// attendance history (never actually checked in to a Vendor Day). Offers a
+// full-price full table (hands off to the normal ApplyForEventModal,
+// unchanged) or a free shared half-table for first-timers only, no card
+// required. Returning vendors never see this — Apply goes straight to
+// ApplyForEventModal like it always has.
+function FirstTimerChoiceModal({ event, onClose, onChooseFullTable, onChooseFreeHalfTable }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const dateLabel = new Date(event.event_date + 'T12:00:00')
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const feeCents = event.table_fee_cents || 0;
+  const feeLabel = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`;
+
+  const handleFreeHalfTable = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      await onChooseFreeHalfTable();
+      onClose();
+    } catch (err) {
+      setSubmitting(false);
+      setError(err.message || 'Something went wrong.');
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px', zIndex: 1000,
+    }} onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="modal-safe-bottom smooth-scroll"
+        style={{
+          backgroundColor: '#fff', borderRadius: '14px',
+          padding: '24px', maxWidth: '460px', width: '100%',
+          maxHeight: '90vh', overflow: 'auto',
+        }}
+      >
+        <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+          First time vending with us?
+        </h3>
+        <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: '#666' }}>
+          {event.title || 'Vendor Day'} · {dateLabel}
+        </p>
+
+        <button
+          type="button"
+          onClick={onChooseFullTable}
+          style={{
+            width: '100%', textAlign: 'left', padding: '14px 16px',
+            backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '10px',
+            cursor: 'pointer', fontFamily: 'inherit', marginBottom: '14px',
+          }}
+        >
+          <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '2px' }}>
+            Apply for a full table
+          </div>
+          <div style={{ fontSize: '0.82rem', color: '#666' }}>
+            {feeCents > 0 ? `${feeLabel} table fee, only charged if approved` : 'Free'}
+          </div>
+        </button>
+
+        <div style={{
+          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px',
+          padding: '14px 16px',
+        }}>
+          <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#15803d', marginBottom: '6px' }}>
+            First-timer? Get a free shared half-table
+          </div>
+          <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: '#166534', lineHeight: 1.5 }}>
+            New vendors can try us out with a half-table, shared with another first-time vendor,
+            at no cost. No card needed.
+          </p>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '12px' }}>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer', accentColor: '#15803d', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, lineHeight: 1.5 }}>
+              I understand I'll share a table with another first-time vendor.
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={handleFreeHalfTable}
+            disabled={!confirmed || submitting}
+            style={{
+              width: '100%', padding: '12px',
+              backgroundColor: (!confirmed || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
+              border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
+              cursor: (!confirmed || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {submitting ? 'Reserving…' : 'Reserve my free half-table'}
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+            color: '#dc2626', borderRadius: '8px', padding: '10px 12px',
+            fontSize: '0.85rem', margin: '14px 0 0',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
+        <button type="button" onClick={onClose} disabled={submitting} style={{
+          width: '100%', padding: '12px', marginTop: '14px',
+          backgroundColor: '#fff', color: '#666',
+          border: '1px solid #ddd', borderRadius: '10px',
+          fontSize: '0.9rem', fontWeight: '700', fontFamily: 'inherit',
+          cursor: submitting ? 'wait' : 'pointer',
+        }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Apply-for-event modal ────────────────────────────────

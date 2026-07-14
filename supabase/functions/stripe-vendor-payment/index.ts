@@ -28,6 +28,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
 const SITE_URL = Deno.env.get('SITE_URL') || 'https://pokemontrainercenter.com'
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || ''
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -155,11 +157,35 @@ Deno.serve(async (req) => {
       const pm = typeof si?.payment_method === 'string' ? si.payment_method : si?.payment_method?.id
       if (!pm || si?.status !== 'succeeded') return json({ ok: false, reason: 'Card setup not completed' })
 
+      // This action can legitimately be called more than once for the same
+      // session (stale bookmark, back button, retried network call) — only
+      // treat it as "the application just became real" the first time the
+      // card actually lands, not on a replay.
+      const wasAlreadySaved = app.payment_status === 'card_saved'
       await supabase.from('vendor_applications').update({
         stripe_payment_method_id: pm,
         payment_status: 'card_saved',
       }).eq('id', app.id)
-      return json({ ok: true })
+
+      if (!wasAlreadySaved) {
+        // Only now is this a successful application — fire the "application
+        // received" notification here instead of at apply time, so staff
+        // never get notified about a card that was never actually saved.
+        const { count } = await supabase
+          .from('vendor_attendance')
+          .select('*', { count: 'exact', head: true })
+          .eq('vendor_id', app.vendor_id)
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/send-vendor-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+            body: JSON.stringify({ type: 'application_received', application_id: app.id, is_first_time: !count }),
+          })
+        } catch (notifyErr) {
+          console.error('[stripe-vendor-payment] application_received notify failed', notifyErr)
+        }
+      }
+      return json({ ok: true, application_id: app.id })
     }
 
     // Stripe's hosted receipt page for a PaymentIntent (via its charge).
