@@ -12113,6 +12113,27 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
       setError('A logo is required to apply. You can use the image from your Instagram or other social media as your logo.');
       return;
     }
+    // Business name, phone, Instagram, and specialty are required on signup
+    // too (Chase's call — no more applications missing basic vetting info).
+    // Existing vendors editing their profile aren't retroactively blocked.
+    if (!isEdit) {
+      if (!form.business_name.trim()) {
+        setError('Business name is required.');
+        return;
+      }
+      if (!form.phone.trim()) {
+        setError('Phone number is required.');
+        return;
+      }
+      if (!form.ig_handle.trim()) {
+        setError('Instagram handle is required.');
+        return;
+      }
+      if (!form.specialty) {
+        setError('Please pick what you specialize in.');
+        return;
+      }
+    }
     setSubmitting(true);
     setError('');
     const personalFull = `${form.first_name.trim()} ${form.last_name.trim()}`;
@@ -12262,7 +12283,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           <p style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.7', margin: '0 0 16px 0' }}>
             {isEdit
               ? 'Update anything that\'s changed. Only your name is required. Your approval status is unaffected.'
-              : 'All fields are optional except your name. The more you share, the easier it is for Chef to vet and approve you.'}
+              : 'Name, logo, business name, phone, Instagram, and specialty are required so Chef can vet and approve you. Everything else is optional but helps.'}
           </p>
 
           <div style={{
@@ -12281,7 +12302,7 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             Personal info
           </h3>
           <p style={{ fontSize: '0.78rem', color: '#888', margin: '0 0 14px', lineHeight: 1.5 }}>
-            Used for your account + our records. Not displayed publicly unless you skip the business name below.
+            Used for your account + our records.{isEdit ? ' Not displayed publicly unless you skip the business name below.' : ''}
           </p>
 
           <label style={labelCss}>First name *</label>
@@ -12298,11 +12319,11 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             What shows up on our website and at events.
           </p>
 
-          <label style={labelCss}>Business name (optional)</label>
+          <label style={labelCss}>Business name {isEdit ? '(optional)' : '*'}</label>
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '6px' }}>
-            Your brand / shop name. Leave blank to use your personal name above.
+            Your brand / shop name.
           </div>
-          <input value={form.business_name} onChange={setField('business_name')} placeholder="e.g. Mint 9 Slabs" style={inputCss} />
+          <input required={!isEdit} value={form.business_name} onChange={setField('business_name')} placeholder="e.g. Mint 9 Slabs" style={inputCss} />
 
           <label style={labelCss}>Vendor logo {isEdit ? '(optional)' : '*'}</label>
           <div style={{ fontSize: '0.78rem', color: '#999', marginBottom: '8px' }}>
@@ -12316,12 +12337,12 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             onRemoveExisting={isEdit ? () => setRemoveExistingLogo(true) : null}
           />
 
-          <label style={labelCss}>Phone</label>
-          <input type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
+          <label style={labelCss}>Phone {isEdit ? '(optional)' : '*'}</label>
+          <input required={!isEdit} type="tel" value={form.phone} onChange={setField('phone')} placeholder="(714) 555-1234" style={inputCss} />
 
           <div style={{ height: '8px' }} />
-          <label style={labelCss}>Instagram handle</label>
-          <input value={form.ig_handle} onChange={setField('ig_handle')} placeholder="@yourhandle" style={inputCss} />
+          <label style={labelCss}>Instagram handle {isEdit ? '(optional)' : '*'}</label>
+          <input required={!isEdit} value={form.ig_handle} onChange={setField('ig_handle')} placeholder="@yourhandle" style={inputCss} />
 
           <label style={labelCss}>TikTok handle</label>
           <input value={form.tiktok_handle} onChange={setField('tiktok_handle')} placeholder="@yourhandle" style={inputCss} />
@@ -12330,8 +12351,8 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           <input value={form.fb_handle} onChange={setField('fb_handle')} placeholder="Your page name or handle" style={inputCss} />
 
           <div style={{ height: '8px' }} />
-          <label style={labelCss}>What you specialize in</label>
-          <select value={form.specialty} onChange={setField('specialty')} style={{ ...inputCss, cursor: 'pointer' }}>
+          <label style={labelCss}>What you specialize in {isEdit ? '(optional)' : '*'}</label>
+          <select required={!isEdit} value={form.specialty} onChange={setField('specialty')} style={{ ...inputCss, cursor: 'pointer' }}>
             <option value="">Pick one</option>
             <option value="Singles">Singles</option>
             <option value="Sealed">Sealed product</option>
