@@ -14981,12 +14981,34 @@ function FitStatusModal({ vendor, onClose, onSave }) {
   );
 }
 
-function VendorDetailModal({ vendor, profilesById, onClose }) {
+function VendorDetailModal({ vendor, profilesById, onClose, showNotes = false }) {
   // Pull every vendor_application this vendor has on file so staff can see
   // attendance history + upcoming commitments inline. Hooks must run before
   // the early-return below to keep React happy.
   const [apps, setApps] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
+  // Read-only staff notes — only fetched when the caller opts in (showNotes).
+  // This modal is a look-only reference; editing notes lives in VendorNotesModal.
+  const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showNotes || !vendor?.id) { setNotes([]); return; }
+    let cancelled = false;
+    setNotesLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from('vendor_notes')
+        .select('id, author_user_id, body, created_at')
+        .eq('vendor_id', vendor.id)
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) { console.warn('[VendorDetailModal] notes fetch failed', error); setNotes([]); }
+      else setNotes(data || []);
+      setNotesLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [showNotes, vendor?.id]);
 
   useEffect(() => {
     if (!vendor?.id) {
@@ -15308,6 +15330,32 @@ function VendorDetailModal({ vendor, profilesById, onClose }) {
             </>
           )}
         </DetailSection>
+
+        {showNotes && (
+          <DetailSection label="Staff notes">
+            {notesLoading ? (
+              <div style={{ color: '#888', fontSize: '0.85rem' }}>Loading…</div>
+            ) : notes.length === 0 ? (
+              <div style={{ color: '#888', fontSize: '0.85rem' }}>No notes on this vendor yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {notes.map(n => {
+                  const author = (profilesById || {})[n.author_user_id];
+                  const authorLabel = author?.name || author?.email || 'Staff';
+                  const when = n.created_at
+                    ? new Date(n.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+                    : '';
+                  return (
+                    <div key={n.id} style={{ backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '8px', padding: '10px 12px' }}>
+                      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: '0.88rem', color: '#1a1a1a' }}>{n.body}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#999', marginTop: '6px' }}>{authorLabel}{when && ` · ${when}`}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </DetailSection>
+        )}
       </div>
     </div>
   );
@@ -16784,6 +16832,340 @@ function ExpressVendorPage({ isMobile }) {
 // flags (stripe_settings singleton, written by the stripe-connect
 // edge function). Once charges + payouts are enabled, table-fee
 // collection and the online store both charge on this account.
+// ─── Table-fee split (mirrors stripe-vendor-payment.platformFeeCents) ──
+// App Catalyst and Trainer Center split what's left after Stripe's own
+// processing cut. The App Catalyst figure equals the application_fee that
+// was actually taken on the charge; the Stripe fee is an estimate at the
+// standard domestic card rate (the true fee isn't known until settlement).
+function feeSplit(grossCents) {
+  const gross = grossCents || 0;
+  const stripeFee = gross > 0 ? Math.round(gross * 0.029) + 30 : 0;
+  const remainder = Math.max(gross - stripeFee, 0);
+  const appCatalyst = Math.round(remainder / 2); // platform fee
+  const trainerCenter = remainder - appCatalyst; // store net
+  return { gross, stripeFee, appCatalyst, trainerCenter };
+}
+
+// Build a clean, self-contained printable document for one or more events.
+// Opened in a fresh window so it prints without any of the app chrome.
+function buildReceiptsDoc(events, heading) {
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const m = (c) => `$${((c || 0) / 100).toFixed(2)}`;
+  const dateStr = (d) => {
+    if (!d) return '';
+    const [y, mo, da] = d.split('-').map(Number);
+    return new Date(y, mo - 1, da).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  };
+
+  let grand = { gross: 0, stripeFee: 0, appCatalyst: 0, trainerCenter: 0, count: 0 };
+  const sections = events.map(ev => {
+    let t = { gross: 0, stripeFee: 0, appCatalyst: 0, trainerCenter: 0 };
+    const rows = ev.rows.map(r => {
+      const s = feeSplit(r.charged_amount_cents);
+      t.gross += s.gross; t.stripeFee += s.stripeFee; t.appCatalyst += s.appCatalyst; t.trainerCenter += s.trainerCenter;
+      return `<tr>
+        <td>${esc(r.vendor_name)}</td>
+        <td class="r">${m(s.gross)}</td>
+        <td class="r muted">-${m(s.stripeFee)}</td>
+        <td class="r">${m(s.appCatalyst)}</td>
+        <td class="r">${m(s.trainerCenter)}</td>
+      </tr>`;
+    }).join('');
+    grand.gross += t.gross; grand.stripeFee += t.stripeFee; grand.appCatalyst += t.appCatalyst; grand.trainerCenter += t.trainerCenter; grand.count += ev.rows.length;
+    return `<section>
+      <h2>${esc(ev.title || 'Vendor Day')}</h2>
+      <div class="date">${esc(dateStr(ev.event_date))} · ${ev.rows.length} paid ${ev.rows.length === 1 ? 'vendor' : 'vendors'}</div>
+      <table>
+        <thead><tr><th>Vendor</th><th class="r">Paid</th><th class="r">Stripe fee (est)</th><th class="r">App Catalyst 50%</th><th class="r">Trainer Center 50%</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr>
+          <td>Event total</td>
+          <td class="r">${m(t.gross)}</td>
+          <td class="r muted">-${m(t.stripeFee)}</td>
+          <td class="r">${m(t.appCatalyst)}</td>
+          <td class="r">${m(t.trainerCenter)}</td>
+        </tr></tfoot>
+      </table>
+    </section>`;
+  }).join('');
+
+  const grandBlock = events.length > 1 ? `<section class="grand">
+    <h2>All events — grand total</h2>
+    <div class="date">${grand.count} paid vendors across ${events.length} events</div>
+    <table><tbody>
+      <tr><td>Total collected</td><td class="r">${m(grand.gross)}</td></tr>
+      <tr><td>Stripe fees (est)</td><td class="r muted">-${m(grand.stripeFee)}</td></tr>
+      <tr><td>App Catalyst share (50%)</td><td class="r">${m(grand.appCatalyst)}</td></tr>
+      <tr><td>Trainer Center share (50%)</td><td class="r">${m(grand.trainerCenter)}</td></tr>
+    </tbody></table>
+  </section>` : '';
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(heading)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; margin: 32px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: #666; font-size: 13px; margin: 0 0 24px; }
+    section { margin-bottom: 28px; page-break-inside: avoid; }
+    h2 { font-size: 16px; margin: 0 0 2px; color: #C8102E; }
+    .date { color: #666; font-size: 12px; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
+    th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }
+    .r { text-align: right; }
+    .muted { color: #999; }
+    tfoot td { font-weight: 800; border-top: 2px solid #1a1a1a; border-bottom: none; }
+    .grand table { max-width: 360px; }
+    .grand tfoot td, .grand td { font-size: 14px; }
+    @media print { body { margin: 0; } }
+  </style></head><body>
+    <h1>${esc(heading)}</h1>
+    <div class="sub">Trainer Center HB · Table-fee receipts · generated for owner records</div>
+    ${sections}
+    ${grandBlock}
+  </body></html>`;
+}
+
+function printReceipts(events, heading) {
+  const w = window.open('', '_blank');
+  if (!w) { alert('Please allow pop-ups to print receipts.'); return; }
+  w.document.write(buildReceiptsDoc(events, heading));
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try { w.print(); } catch (_e) {} }, 300);
+}
+
+// ─── Event Receipts (inside /staff/banking) ────────────────
+function EventReceiptsSection({ isMobile }) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(() => new Set());
+  // Read-only vendor lookup — click a paid vendor to see their contact info
+  // and notes (e.g. to call them). No editing from here.
+  const [detailVendor, setDetailVendor] = useState(null);
+  const [profilesById, setProfilesById] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      supabase
+        .from('vendor_applications')
+        .select('id, charged_amount_cents, charged_at, receipt_url, vendor:vendors(*), event:events(id, title, event_date)')
+        .eq('payment_status', 'charged'),
+      supabase.from('profiles').select('id, name, email'),
+    ]).then(([{ data, error }, profRes]) => {
+        if (cancelled) return;
+        if (error) { console.error('[EventReceipts]', error); setLoading(false); return; }
+        const prof = {};
+        (profRes.data || []).forEach(p => { prof[p.id] = p; });
+        setProfilesById(prof);
+        const byEvent = new Map();
+        (data || []).forEach(r => {
+          if (!r.event) return;
+          if (!byEvent.has(r.event.id)) {
+            byEvent.set(r.event.id, { id: r.event.id, title: r.event.title, event_date: r.event.event_date, rows: [] });
+          }
+          byEvent.get(r.event.id).rows.push({
+            id: r.id,
+            vendor: r.vendor || null,
+            vendor_name: r.vendor?.name || 'Unknown vendor',
+            charged_amount_cents: r.charged_amount_cents || 0,
+            receipt_url: r.receipt_url,
+          });
+        });
+        const list = [...byEvent.values()].sort((a, b) => (b.event_date || '').localeCompare(a.event_date || ''));
+        setEvents(list);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggle = (id) => setOpen(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const eventTotals = (ev) => ev.rows.reduce((acc, r) => {
+    const s = feeSplit(r.charged_amount_cents);
+    acc.gross += s.gross; acc.stripeFee += s.stripeFee; acc.appCatalyst += s.appCatalyst; acc.trainerCenter += s.trainerCenter;
+    return acc;
+  }, { gross: 0, stripeFee: 0, appCatalyst: 0, trainerCenter: 0 });
+
+  const grand = events.reduce((acc, ev) => {
+    const t = eventTotals(ev);
+    acc.gross += t.gross; acc.stripeFee += t.stripeFee; acc.appCatalyst += t.appCatalyst; acc.trainerCenter += t.trainerCenter;
+    acc.count += ev.rows.length;
+    return acc;
+  }, { gross: 0, stripeFee: 0, appCatalyst: 0, trainerCenter: 0, count: 0 });
+
+  const dateStr = (d) => {
+    if (!d) return '';
+    const [y, mo, da] = d.split('-').map(Number);
+    return new Date(y, mo - 1, da).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const smallBtn = {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    backgroundColor: '#fff', color: '#1a1a1a', border: '1px solid #ddd',
+    padding: '7px 12px', borderRadius: '8px', fontSize: '0.8rem',
+    fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+  };
+
+  const splitCol = (label, value, color) => (
+    <div style={{ textAlign: 'center', minWidth: '84px' }}>
+      <div style={{ fontSize: '1.05rem', fontWeight: '800', color, lineHeight: 1.15 }}>{emMoney(value)}</div>
+      <div style={{ fontSize: '0.68rem', color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em', marginTop: '2px' }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ marginTop: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <FileEdit size={18} style={{ color: '#16a34a' }} /> Event Receipts
+        </h2>
+        {events.length > 0 && (
+          <button style={smallBtn} onClick={() => printReceipts(events, 'All Vendor Day Receipts')}>
+            <FileEdit size={14} /> Print all events
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '30px', color: '#999' }}>
+          <Loader2 size={18} className="spin" /> Loading receipts…
+        </div>
+      ) : events.length === 0 ? (
+        <div style={{ backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px', padding: '26px', textAlign: 'center', color: '#888', fontSize: '0.9rem' }}>
+          No table fees have been collected yet. Charged fees will show up here per event.
+        </div>
+      ) : (
+        <>
+          {/* Grand total banner */}
+          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px 18px', marginBottom: '16px', display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Collected all-time</div>
+              <div style={{ fontSize: '1.7rem', fontWeight: '900', color: '#166534', lineHeight: 1.1 }}>{emMoney(grand.gross)}</div>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>{grand.count} paid vendors · {events.length} events</div>
+            </div>
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+              {splitCol('Stripe fee', grand.stripeFee, '#9ca3af')}
+              {splitCol('App Catalyst', grand.appCatalyst, '#1a1a1a')}
+              {splitCol('Trainer Center', grand.trainerCenter, '#16a34a')}
+            </div>
+          </div>
+
+          {events.map(ev => {
+            const t = eventTotals(ev);
+            const isOpen = open.has(ev.id);
+            return (
+              <div key={ev.id} style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px', marginBottom: '12px', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => toggle(ev.id)}
+                    style={{ flex: 1, minWidth: isMobile ? '100%' : 0, display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: 0 }}
+                  >
+                    <ChevronDown size={18} color="#999" style={{ transform: isOpen ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1a1a1a' }}>{ev.title || 'Vendor Day'}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#666' }}>{dateStr(ev.event_date)} · {ev.rows.length} paid</div>
+                    </div>
+                  </button>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    {splitCol('Collected', t.gross, '#16a34a')}
+                    {!isMobile && splitCol('App Catalyst', t.appCatalyst, '#1a1a1a')}
+                    {!isMobile && splitCol('Trainer Ctr', t.trainerCenter, '#16a34a')}
+                    <button style={smallBtn} onClick={() => printReceipts([ev], `${ev.title || 'Vendor Day'} — Receipt`)}>
+                      <FileEdit size={14} /> Print
+                    </button>
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <div style={{ borderTop: '1px solid #f0f0f0', padding: '4px 16px 12px' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', minWidth: '440px' }}>
+                        <thead>
+                          <tr style={{ color: '#888', textAlign: 'left' }}>
+                            <th style={{ padding: '8px 8px', fontWeight: '700', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Vendor</th>
+                            <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700', fontSize: '0.72rem', textTransform: 'uppercase' }}>Paid</th>
+                            <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700', fontSize: '0.72rem', textTransform: 'uppercase' }}>Stripe est</th>
+                            <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700', fontSize: '0.72rem', textTransform: 'uppercase' }}>App Catalyst</th>
+                            <th style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700', fontSize: '0.72rem', textTransform: 'uppercase' }}>Trainer Ctr</th>
+                            <th style={{ padding: '8px 8px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ev.rows.map(r => {
+                            const s = feeSplit(r.charged_amount_cents);
+                            return (
+                              <tr key={r.id} style={{ borderTop: '1px solid #f4f4f4' }}>
+                                <td style={{ padding: '8px 8px', fontWeight: '600' }}>
+                                  {r.vendor ? (
+                                    <button
+                                      onClick={() => setDetailVendor(r.vendor)}
+                                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, color: '#1d4ed8', textAlign: 'left' }}
+                                    >
+                                      {r.vendor_name}
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: '#1a1a1a' }}>{r.vendor_name}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700' }}>{emMoney(s.gross)}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'right', color: '#9ca3af' }}>-{emMoney(s.stripeFee)}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'right' }}>{emMoney(s.appCatalyst)}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'right', color: '#16a34a', fontWeight: '600' }}>{emMoney(s.trainerCenter)}</td>
+                                <td style={{ padding: '8px 8px', textAlign: 'right' }}>
+                                  {r.receipt_url && (
+                                    <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1d4ed8', display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '0.78rem', fontWeight: '700' }}>
+                                      <ExternalLink size={12} /> Receipt
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ borderTop: '2px solid #1a1a1a' }}>
+                            <td style={{ padding: '10px 8px', fontWeight: '800' }}>Event total</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800' }}>{emMoney(t.gross)}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#9ca3af' }}>-{emMoney(t.stripeFee)}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800' }}>{emMoney(t.appCatalyst)}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#16a34a' }}>{emMoney(t.trainerCenter)}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '10px', lineHeight: 1.5 }}>
+            The 50/50 split is calculated on what remains after Stripe's processing fee. The Stripe fee shown is an
+            estimate at the standard card rate; the App Catalyst figure is the exact platform fee taken on each charge.
+          </p>
+        </>
+      )}
+
+      {detailVendor && (
+        <VendorDetailModal
+          vendor={detailVendor}
+          profilesById={profilesById}
+          showNotes
+          onClose={() => setDetailVendor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function StaffBankingPage({ isMobile }) {
   const { user, isOwner, isLoading: authLoading } = useAuth();
   const [status, setStatus] = useState(null);   // null until first check_status returns
@@ -17016,6 +17398,11 @@ function StaffBankingPage({ isMobile }) {
             </>
           )}
         </div>
+
+        {/* Owner-only money records: who paid, the 50/50 split, per-event
+            totals, printable. Shown regardless of payout-review state since
+            fees may already have been collected. */}
+        <EventReceiptsSection isMobile={isMobile} />
       </div>
     </PageWrapper>
   );

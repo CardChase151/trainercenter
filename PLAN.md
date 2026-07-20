@@ -1,6 +1,28 @@
 # TrainerCenter
 
-## ACTIVE TICKET — Staff Event Manager (new vendor dashboard)
+## ACTIVE TICKET — Banking: Event Receipts
+
+Add an Event Receipts area to /staff/banking (owner-only). Per event show
+who paid, what they paid, the post-Stripe 50/50 split (App Catalyst vs
+Trainer Center), event totals, and a grand total. Print per event or all.
+
+- Split mirrors the charge fn exactly: stripeFee = round(gross*0.029)+30,
+  remainder = gross - stripeFee, App Catalyst = round(remainder/2),
+  Trainer Center = remainder - that. App Catalyst figure is the EXACT
+  application_fee that was taken; Stripe fee is labeled an estimate.
+- Data: vendor_applications where payment_status='charged', joined to
+  events + vendors. No backend change.
+- Print: open a clean self-contained window + window.print().
+
+- [x] Recon Banking page + split math
+- [x] Build EventReceiptsSection + printable doc
+- [x] Wire into StaffBankingPage
+- [x] Build + verify (no new warnings)
+- [ ] **WAITING ON CHASE** — review on localhost:3000/staff/banking, then go to publish
+
+---
+
+## DONE — Staff Event Manager (new vendor dashboard)  [published ab3bba3]
 
 Rebuild of the staff-side vendor screen as a **parallel** surface so the old one
 stays live for side-by-side comparison. Nothing on the existing `/staff/vendors`
