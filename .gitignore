@@ -57,3 +57,6 @@ TOMORROW.md
 # never commit. Used by scripts/import-ig-contacts.js.
 /instagram-archive
 vendor-emails/move-campaign/
+
+# Local MCP tooling config
+.mcp.json

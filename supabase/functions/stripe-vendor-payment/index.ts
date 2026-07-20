@@ -162,8 +162,14 @@ Deno.serve(async (req) => {
       // treat it as "the application just became real" the first time the
       // card actually lands, not on a replay.
       const wasAlreadySaved = app.payment_status === 'card_saved'
+      // Keep the stored customer consistent with the card we just saved.
+      // Checkout attaches the setup_intent's payment method to the session
+      // customer, so read it back from the intent and persist BOTH together —
+      // this is what stops the card and customer from ever drifting apart.
+      const siCustomer = typeof si?.customer === 'string' ? si.customer : si?.customer?.id || null
       await supabase.from('vendor_applications').update({
         stripe_payment_method_id: pm,
+        ...(siCustomer ? { stripe_customer_id: siCustomer } : {}),
         payment_status: 'card_saved',
       }).eq('id', app.id)
 
@@ -361,7 +367,37 @@ Deno.serve(async (req) => {
         return json({ ok: true, waived: true })
       }
 
-      if (!app.stripe_customer_id || !app.stripe_payment_method_id) {
+      if (!app.stripe_payment_method_id) {
+        return json({ ok: false, decline: 'No card on file — send a pay link instead.' })
+      }
+
+      // The saved card is the source of truth for WHO to charge. A card can
+      // only be drafted off-session through the customer it's attached to, and
+      // the customer id we wrote onto the application can drift from that (a
+      // returning vendor re-saving a card once spawned a duplicate customer).
+      // So resolve the card's real owner from Stripe and charge that — then
+      // heal the stored customer id so the row stops lying. Falls back to the
+      // stored customer only if the card isn't attached to anyone.
+      let chargeCustomer = app.stripe_customer_id as string | null
+      try {
+        const pm = await stripe.paymentMethods.retrieve(app.stripe_payment_method_id, onAcct)
+        const trueOwner = typeof pm.customer === 'string' ? pm.customer : pm.customer?.id || null
+        if (trueOwner) {
+          if (trueOwner !== app.stripe_customer_id) {
+            // Self-heal: point the application at the card's real customer.
+            await supabase.from('vendor_applications')
+              .update({ stripe_customer_id: trueOwner })
+              .eq('id', app.id)
+          }
+          chargeCustomer = trueOwner
+        }
+      } catch (lookupErr) {
+        console.error('[stripe-vendor-payment] payment method lookup failed', lookupErr)
+        // Fall through with the stored customer; the charge attempt below will
+        // surface a clean decline + pay-link fallback if it still can't run.
+      }
+
+      if (!chargeCustomer) {
         return json({ ok: false, decline: 'No card on file — send a pay link instead.' })
       }
 
@@ -369,7 +405,7 @@ Deno.serve(async (req) => {
         const pi = await stripe.paymentIntents.create({
           amount,
           currency: 'usd',
-          customer: app.stripe_customer_id,
+          customer: chargeCustomer,
           payment_method: app.stripe_payment_method_id,
           off_session: true,
           confirm: true,

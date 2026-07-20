@@ -5,7 +5,7 @@ import { GRADING_CARDS } from './gradingData';
 import { supabase } from './supabaseClient';
 import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
-import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw, Landmark } from 'lucide-react';
+import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, ChevronRight, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw, Landmark, DollarSign } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -597,6 +597,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
   const STAFF_TILES = [
     { key: 'calendar', label: 'Calendar', desc: 'Edit events and Vendor Days', icon: <CalendarIcon size={20} />, to: '/calendar', accent: '#C8102E' },
     { key: 'vendors',  label: 'Vendors',  desc: 'Approve, manage, review applications', icon: <Briefcase size={20} />, to: '/staff/vendors', accent: '#C8102E' },
+    { key: 'events',   label: 'Events',   desc: 'Manage each Vendor Day roster', icon: <CalendarIcon size={20} />, to: '/staff/events', accent: '#C8102E' },
     { key: 'members',  label: 'Members',  desc: 'Customer list and vote history', icon: <Users size={20} />, to: '/staff/members', accent: '#C8102E' },
     { key: 'comms',    label: 'Communication', desc: 'Compose a vendor or customer blast', icon: <Mail size={20} />, to: '/staff/comms', accent: '#C8102E' },
     { key: 'instagram', label: 'Instagram Contacts', desc: 'Tag followers as member, vendor, or influencer', icon: <IgIcon size={20} />, to: '/staff/instagram', accent: '#C8102E' },
@@ -20518,6 +20519,7 @@ const buildNavItems = ({ isStaff, isOwner, isVendor, isMember, isLoggedIn, hasRe
         ? [
             { label: 'Edit Calendar', to: '/calendar' },
             { label: 'Manage Vendors', to: '/staff/vendors' },
+            { label: 'Events', to: '/staff/events' },
             { label: 'Manage Members', to: '/staff/members' },
             { label: 'Communication', to: '/staff/comms' },
             { label: 'Instagram Contacts', to: '/staff/instagram' },
@@ -25052,6 +25054,917 @@ function UnsubscribePage({ isMobile }) {
 }
 
 // ─── Main App ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// ─── Staff Event Manager ───────────────────────────────────
+// Event-first rebuild of the staff vendor screen. Runs PARALLEL to
+// /staff/vendors — that page is untouched so the two can be compared
+// side by side before either one wins.
+//
+//   /staff/events                 → list of Vendor Days
+//   /staff/events/:eventId/manage → that event's roster, grouped
+//
+// Reads only. Every column here already exists; no migration backs this.
+// ═══════════════════════════════════════════════════════════
+
+const EM_MAX_WIDTH = '1100px';
+
+function emMoney(cents) {
+  const c = cents || 0;
+  return `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)}`;
+}
+
+// Settled = money collected, or deliberately forgiven. A free table is
+// settled by definition, which keeps free events out of the unpaid count.
+function emIsPaid(app) {
+  if (!app) return false;
+  if ((app.fee_cents || 0) === 0) return true;
+  return ['charged', 'waived'].includes(app.payment_status);
+}
+
+function emIsUnpaid(app) {
+  return !!app && (app.fee_cents || 0) > 0 && !emIsPaid(app);
+}
+
+function emEventDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
+// Small labelled count used across the event cards and group headers.
+function EmStat({ label, value, color = '#1a1a1a' }) {
+  return (
+    <div style={{ textAlign: 'center', minWidth: '64px' }}>
+      <div style={{ fontSize: '1.3rem', fontWeight: '800', color, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: '0.7rem', color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>{label}</div>
+    </div>
+  );
+}
+
+function EmPill({ bg, color, icon, children }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '5px',
+      backgroundColor: bg, color, padding: '4px 10px',
+      borderRadius: '999px', fontSize: '0.75rem', fontWeight: '700',
+    }}>
+      {icon}{children}
+    </span>
+  );
+}
+
+// Favorite / Not a Fit chip. NULL renders nothing.
+function EmFitPill({ vendor }) {
+  if (vendor?.staff_fit_status === 'favorite') {
+    return <EmPill bg="#f0fdf4" color="#15803d" icon={<Star size={12} />}>Favorite</EmPill>;
+  }
+  if (vendor?.staff_fit_status === 'not_fit') {
+    return <EmPill bg="#fef2f2" color="#b91c1c" icon={<XCircle size={12} />}>Not a fit</EmPill>;
+  }
+  return null;
+}
+
+// Payment chip for one application. Mirrors the vendor-side wording so
+// staff and vendor are reading the same status.
+function EmPayPill({ app }) {
+  if (!app || (app.fee_cents || 0) === 0) {
+    return <EmPill bg="#f3f4f6" color="#6b7280">Free table</EmPill>;
+  }
+  const paid = app.charged_amount_cents ?? app.fee_cents;
+  switch (app.payment_status) {
+    case 'charged':
+      return <EmPill bg="#f0fdf4" color="#15803d" icon={<CheckCircle2 size={12} />}>Paid {emMoney(paid)}</EmPill>;
+    case 'waived':
+      return <EmPill bg="#f0fdf4" color="#15803d" icon={<CheckCircle2 size={12} />}>Waived</EmPill>;
+    case 'refunded':
+      return <EmPill bg="#f3f4f6" color="#6b7280" icon={<RotateCcw size={12} />}>Refunded</EmPill>;
+    case 'failed':
+      return <EmPill bg="#fef2f2" color="#dc2626" icon={<AlertCircle size={12} />}>Card declined</EmPill>;
+    case 'card_saved':
+      return <EmPill bg="#eff6ff" color="#1d4ed8" icon={<CheckCircle2 size={12} />}>Card on file — {emMoney(app.fee_cents)}</EmPill>;
+    default:
+      return <EmPill bg="#fffbeb" color="#92400e" icon={<AlertCircle size={12} />}>Unpaid — {emMoney(app.fee_cents)}</EmPill>;
+  }
+}
+
+// ─── Screen 1: the event list ──────────────────────────────
+function StaffEventManagerPage({ isMobile, staff }) {
+  const isAdmin = !!staff?.isAdmin;
+  const [events, setEvents] = useState([]);
+  const [vendorCount, setVendorCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      supabase.from('events')
+        .select('id, title, event_date, cancelled, table_fee_cents, vendor_start_time, vendor_end_time, vendor_applications(id, vendor_id, status, fee_cents, payment_status, charged_amount_cents)')
+        .eq('has_vendors', true)
+        .order('event_date', { ascending: false })
+        .limit(100),
+      // Head-only count — the roster screen loads the actual vendor rows.
+      supabase.from('vendors').select('id', { count: 'exact', head: true }).neq('status', 'suspended'),
+    ]).then(([evRes, vcRes]) => {
+      if (cancelled) return;
+      if (evRes.error) console.error('[EventManager] events', evRes.error);
+      if (vcRes.error) console.error('[EventManager] vendor count', vcRes.error);
+      setEvents(evRes.data || []);
+      setVendorCount(vcRes.count || 0);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="Staff only" subtitle="You need to be logged in as staff to manage events" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  const statsFor = (ev) => {
+    const apps = ev.vendor_applications || [];
+    const approved = apps.filter(a => a.status === 'approved');
+    const applied = apps.filter(a => a.status === 'pending');
+    const unpaid = approved.filter(emIsUnpaid);
+    const collected = approved
+      .filter(a => a.payment_status === 'charged')
+      .reduce((sum, a) => sum + (a.charged_amount_cents ?? a.fee_cents ?? 0), 0);
+    return {
+      approved: approved.length,
+      applied: applied.length,
+      // Everyone on the books who never put in a request for this event.
+      neverApplied: Math.max(0, vendorCount - apps.length),
+      unpaid: unpaid.length,
+      collected,
+    };
+  };
+
+  const todayStr = todayISO();
+  const upcoming = events
+    .filter(ev => ev.event_date >= todayStr)
+    .slice()
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const past = events
+    .filter(ev => ev.event_date < todayStr)
+    .slice()
+    .sort((a, b) => b.event_date.localeCompare(a.event_date));
+
+  const q = search.trim().toLowerCase();
+  const list = (filter === 'upcoming' ? upcoming : past)
+    .filter(ev => !q || (ev.title || '').toLowerCase().includes(q));
+
+  const segBtn = (active) => ({
+    flex: 1, padding: '10px 14px',
+    backgroundColor: active ? '#1a1a1a' : '#fff',
+    color: active ? '#fff' : '#666',
+    borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700',
+    cursor: 'pointer', fontFamily: 'inherit',
+    border: active ? '1px solid #1a1a1a' : '1px solid #ddd',
+  });
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <SectionHeader title="Events" subtitle="Pick a Vendor Day to manage its roster" />
+
+        <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button onClick={() => setFilter('upcoming')} style={segBtn(filter === 'upcoming')}>
+              Upcoming ({upcoming.length})
+            </button>
+            <button onClick={() => setFilter('past')} style={segBtn(filter === 'past')}>
+              Past ({past.length})
+            </button>
+          </div>
+
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search events by name…"
+            style={{
+              width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+              border: '1px solid #ddd', borderRadius: '8px',
+              marginBottom: '16px', boxSizing: 'border-box', fontFamily: 'inherit',
+            }}
+          />
+
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+              <Loader2 size={20} className="spin" /> Loading events…
+            </div>
+          )}
+
+          {!loading && list.length === 0 && (
+            <div style={{
+              backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
+              padding: '32px 20px', textAlign: 'center', color: '#888', fontSize: '0.9rem',
+            }}>
+              {q ? 'No events match that search.' : `No ${filter} Vendor Days.`}
+            </div>
+          )}
+
+          {!loading && list.map(ev => {
+            const s = statsFor(ev);
+            return (
+              <Link
+                key={ev.id}
+                to={`/staff/events/${ev.id}/manage`}
+                style={{
+                  display: 'block', textDecoration: 'none', color: 'inherit',
+                  backgroundColor: '#fff', border: '1px solid #eee',
+                  borderRadius: '12px', padding: '16px 18px', marginBottom: '12px',
+                }}
+              >
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '16px',
+                  flexWrap: isMobile ? 'wrap' : 'nowrap',
+                }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1a1a1a' }}>
+                        {ev.title || 'Vendor Day'}
+                      </span>
+                      {ev.cancelled && (
+                        <EmPill bg="#fef2f2" color="#b91c1c" icon={<XCircle size={12} />}>Cancelled</EmPill>
+                      )}
+                      {s.unpaid > 0 && (
+                        <EmPill bg="#fffbeb" color="#92400e" icon={<AlertCircle size={12} />}>
+                          {s.unpaid} unpaid
+                        </EmPill>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                      {emEventDate(ev.event_date)}
+                      {(ev.table_fee_cents || 0) > 0 && ` · ${emMoney(ev.table_fee_cents)} table`}
+                      {s.collected > 0 && ` · ${emMoney(s.collected)} collected`}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                    <EmStat label="Approved" value={s.approved} color="#15803d" />
+                    <EmStat label="Applied" value={s.applied} color="#c2410c" />
+                    <EmStat label="No request" value={s.neverApplied} color="#9ca3af" />
+                    {!isMobile && <ChevronRight size={18} color="#ccc" />}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Screen 2: one event's roster ──────────────────────────
+// Three groups — Approved, Applied, Never applied — with paid/unpaid and
+// favorite/not-a-fit filters riding across all of them. Declined and
+// cancelled get their own collapsed group so nothing silently disappears.
+function EventVendorManagerPage({ isMobile, staff }) {
+  const { eventId } = useParams();
+  const isAdmin = !!staff?.isAdmin;
+
+  const [event, setEvent] = useState(null);
+  const [apps, setApps] = useState([]);
+  const [allVendors, setAllVendors] = useState([]);
+  const [attendance, setAttendance] = useState({});   // vendor_id → row
+  const [emailLog, setEmailLog] = useState({});       // vendor_id → [rows]
+  const [profilesById, setProfilesById] = useState({});
+  const [surveyed, setSurveyed] = useState(() => new Set());
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Filters — shared across every group.
+  const [search, setSearch] = useState('');
+  const [payFilter, setPayFilter] = useState('all');  // all | paid | unpaid
+  const [fitFilter, setFitFilter] = useState('all');  // all | favorite | not_fit | unrated
+
+  const [collapsed, setCollapsed] = useState(() => new Set(['other']));
+  const [selected, setSelected] = useState(null);     // { vendor, app }
+
+  // Existing modals, reused as-is.
+  const [detailVendor, setDetailVendor] = useState(null);
+  const [notesVendor, setNotesVendor] = useState(null);
+  const [fitVendor, setFitVendor] = useState(null);
+  const [surveyTarget, setSurveyTarget] = useState(null);
+  const [chargeTarget, setChargeTarget] = useState(null);
+
+  const refresh = () => setRefreshKey(k => k + 1);
+
+  useEffect(() => {
+    if (!isAdmin || !eventId) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      supabase.from('events').select('*').eq('id', eventId).single(),
+      supabase.from('vendor_applications').select('*, vendor:vendors(*)').eq('event_id', eventId),
+      supabase.from('vendors').select('*').neq('status', 'suspended').order('name'),
+      supabase.from('vendor_attendance').select('*').eq('event_id', eventId),
+      supabase.from('vendor_email_log').select('vendor_id, step_key, sent_at').eq('event_id', eventId),
+      supabase.from('profiles').select('id, name, email'),
+      supabase.from('vendor_event_surveys').select('vendor_id').eq('event_id', eventId),
+    ]).then(([evRes, appRes, venRes, attRes, mailRes, profRes, survRes]) => {
+      if (cancelled) return;
+      if (evRes.error) console.error('[EventManager] event', evRes.error);
+      if (appRes.error) console.error('[EventManager] applications', appRes.error);
+      if (venRes.error) console.error('[EventManager] vendors', venRes.error);
+
+      setEvent(evRes.data || null);
+      setApps(appRes.data || []);
+      setAllVendors(venRes.data || []);
+
+      const att = {};
+      (attRes.data || []).forEach(r => { att[r.vendor_id] = r; });
+      setAttendance(att);
+
+      const log = {};
+      (mailRes.data || []).forEach(r => {
+        if (!log[r.vendor_id]) log[r.vendor_id] = [];
+        log[r.vendor_id].push(r);
+      });
+      setEmailLog(log);
+
+      const prof = {};
+      (profRes.data || []).forEach(p => { prof[p.id] = p; });
+      setProfilesById(prof);
+
+      setSurveyed(new Set((survRes.data || []).map(r => r.vendor_id)));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [isAdmin, eventId, refreshKey]);
+
+  // Keep the open side panel in sync after a decision or a charge — otherwise
+  // it keeps showing the state the row had when it was clicked.
+  useEffect(() => {
+    if (!selected) return;
+    const freshApp = apps.find(a => a.vendor_id === selected.vendor.id) || null;
+    const freshVendor = allVendors.find(v => v.id === selected.vendor.id) || selected.vendor;
+    setSelected(prev => prev && ({ vendor: freshVendor, app: freshApp }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apps, allVendors]);
+
+  if (!isAdmin) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ marginBottom: '64px', maxWidth: '560px', margin: '0 auto', textAlign: 'center' }}>
+          <SectionHeader title="Staff only" subtitle="You need to be logged in as staff to manage events" />
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  // ─── Actions ───
+  const finalizeDecision = async (appId, status, note) => {
+    const decidedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('vendor_applications')
+      .update({ status, decision_note: note || null, decided_at: decidedAt, decided_by: staff.id })
+      .eq('id', appId);
+    if (error) { alert('Error: ' + error.message); return; }
+    sendVendorEmail({ type: 'application_decided', application_id: appId });
+    setApps(prev => prev.map(a => a.id === appId
+      ? { ...a, status, decision_note: note || null, decided_at: decidedAt, decided_by: staff.id }
+      : a));
+  };
+
+  // Approving a paid application with money still outstanding routes through
+  // the charge modal first, same as the original screen.
+  const decide = async (app, status, note) => {
+    if (status === 'approved' && (app.fee_cents || 0) > 0 && !['charged', 'waived'].includes(app.payment_status)) {
+      setChargeTarget({ app, note: note || null });
+      return;
+    }
+    await finalizeDecision(app.id, status, note);
+  };
+
+  const setVendorRating = async (vendorId, rating) => {
+    const prevValue = allVendors.find(v => v.id === vendorId)?.staff_experience_rating;
+    const patch = (v) => v.id === vendorId ? { ...v, staff_experience_rating: rating } : v;
+    setAllVendors(prev => prev.map(patch));
+    setApps(prev => prev.map(a => a.vendor?.id === vendorId ? { ...a, vendor: patch(a.vendor) } : a));
+    const { error } = await supabase.from('vendors').update({ staff_experience_rating: rating }).eq('id', vendorId);
+    if (error) {
+      alert('Could not save rating: ' + error.message);
+      const revert = (v) => v.id === vendorId ? { ...v, staff_experience_rating: prevValue } : v;
+      setAllVendors(prev => prev.map(revert));
+      setApps(prev => prev.map(a => a.vendor?.id === vendorId ? { ...a, vendor: revert(a.vendor) } : a));
+    }
+  };
+
+  const setVendorFit = async (vendorId, { status, reason }) => {
+    const prev = allVendors.find(v => v.id === vendorId);
+    const patch = (v) => v.id === vendorId ? { ...v, staff_fit_status: status, staff_fit_reason: reason } : v;
+    setAllVendors(p => p.map(patch));
+    setApps(p => p.map(a => a.vendor?.id === vendorId ? { ...a, vendor: patch(a.vendor) } : a));
+    const { error } = await supabase
+      .from('vendors').update({ staff_fit_status: status, staff_fit_reason: reason }).eq('id', vendorId);
+    if (error) {
+      const revert = (v) => v.id === vendorId
+        ? { ...v, staff_fit_status: prev?.staff_fit_status ?? null, staff_fit_reason: prev?.staff_fit_reason ?? null }
+        : v;
+      setAllVendors(p => p.map(revert));
+      setApps(p => p.map(a => a.vendor?.id === vendorId ? { ...a, vendor: revert(a.vendor) } : a));
+      return false;
+    }
+    return true;
+  };
+
+  // ─── Grouping ───
+  const appByVendor = {};
+  apps.forEach(a => { appByVendor[a.vendor_id] = a; });
+
+  const DEAD = ['declined', 'cancelled', 'not_interested', 'vendor_cancelled'];
+  const approvedRows = apps.filter(a => a.status === 'approved').map(a => ({ vendor: a.vendor, app: a }));
+  const appliedRows  = apps.filter(a => a.status === 'pending').map(a => ({ vendor: a.vendor, app: a }));
+  const otherRows    = apps.filter(a => DEAD.includes(a.status)).map(a => ({ vendor: a.vendor, app: a }));
+  const neverRows    = allVendors.filter(v => !appByVendor[v.id]).map(v => ({ vendor: v, app: null }));
+
+  // A row survives when it clears search + fit + payment. Payment can only be
+  // judged where an application exists, so any payment filter other than
+  // "all" necessarily empties the Never-applied group.
+  const passes = ({ vendor, app }) => {
+    if (!vendor) return false;
+    if (search.trim() && !vendorMatchesQuery(vendor, search)) return false;
+    if (fitFilter === 'favorite' && vendor.staff_fit_status !== 'favorite') return false;
+    if (fitFilter === 'not_fit'  && vendor.staff_fit_status !== 'not_fit') return false;
+    if (fitFilter === 'unrated'  && vendor.staff_fit_status) return false;
+    if (payFilter === 'paid'   && !emIsPaid(app)) return false;
+    if (payFilter === 'unpaid' && !emIsUnpaid(app)) return false;
+    return true;
+  };
+
+  const byName = (a, b) => vendorDisplayName(a.vendor).localeCompare(vendorDisplayName(b.vendor));
+  const groups = [
+    { key: 'approved', title: 'Approved',     color: '#15803d', rows: approvedRows.filter(passes).sort(byName) },
+    { key: 'applied',  title: 'Applied',      color: '#c2410c', rows: appliedRows.filter(passes).sort(byName) },
+    { key: 'never',    title: 'Never applied', color: '#6b7280', rows: neverRows.filter(passes).sort(byName) },
+    { key: 'other',    title: 'Declined / cancelled', color: '#b91c1c', rows: otherRows.filter(passes).sort(byName) },
+  ];
+
+  const toggleGroup = (key) => setCollapsed(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const chipStyle = (active) => ({
+    padding: '7px 13px', borderRadius: '999px',
+    backgroundColor: active ? '#1a1a1a' : '#fff',
+    color: active ? '#fff' : '#666',
+    border: active ? '1px solid #1a1a1a' : '1px solid #ddd',
+    fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+  });
+
+  const unpaidCount = approvedRows.filter(r => emIsUnpaid(r.app)).length;
+  const collected = approvedRows
+    .filter(r => r.app?.payment_status === 'charged')
+    .reduce((sum, r) => sum + (r.app.charged_amount_cents ?? r.app.fee_cents ?? 0), 0);
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ marginBottom: '64px' }}>
+        <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto 16px' }}>
+          <Link to="/staff/events" style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            color: '#666', textDecoration: 'none', fontSize: '0.85rem', fontWeight: '700',
+          }}>
+            <ArrowLeft size={14} /> All events
+          </Link>
+        </div>
+
+        <SectionHeader
+          title={event?.title || 'Vendor Day'}
+          subtitle={event ? emEventDate(event.event_date) : ''}
+        />
+
+        <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto' }}>
+          {/* Money summary — only meaningful on paid events */}
+          {(event?.table_fee_cents || 0) > 0 && (
+            <div style={{
+              display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap',
+              backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
+              padding: '14px 18px', marginBottom: '16px',
+            }}>
+              <EmStat label="Table fee" value={emMoney(event.table_fee_cents)} />
+              <EmStat label="Collected" value={emMoney(collected)} color="#15803d" />
+              <EmStat label="Unpaid" value={unpaidCount} color={unpaidCount > 0 ? '#92400e' : '#9ca3af'} />
+            </div>
+          )}
+
+          {/* Filters */}
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search vendor name, social, specialty, bio…"
+            style={{
+              width: '100%', padding: '10px 14px', fontSize: '0.9rem',
+              border: '1px solid #ddd', borderRadius: '8px',
+              marginBottom: '12px', boxSizing: 'border-box', fontFamily: 'inherit',
+            }}
+          />
+
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <DollarSign size={14} color="#999" />
+              <button onClick={() => setPayFilter('all')} style={chipStyle(payFilter === 'all')}>All</button>
+              <button onClick={() => setPayFilter('paid')} style={chipStyle(payFilter === 'paid')}>Paid</button>
+              <button onClick={() => setPayFilter('unpaid')} style={chipStyle(payFilter === 'unpaid')}>Unpaid</button>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <Star size={14} color="#999" />
+              <button onClick={() => setFitFilter('all')} style={chipStyle(fitFilter === 'all')}>All</button>
+              <button onClick={() => setFitFilter('favorite')} style={chipStyle(fitFilter === 'favorite')}>Favorites</button>
+              <button onClick={() => setFitFilter('not_fit')} style={chipStyle(fitFilter === 'not_fit')}>Not a fit</button>
+              <button onClick={() => setFitFilter('unrated')} style={chipStyle(fitFilter === 'unrated')}>Unrated</button>
+            </div>
+          </div>
+
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
+              <Loader2 size={20} className="spin" /> Loading roster…
+            </div>
+          )}
+
+          {!loading && groups.map(g => (
+            <div key={g.key} style={{ marginBottom: '20px' }}>
+              <button
+                onClick={() => toggleGroup(g.key)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                  backgroundColor: 'transparent', border: 'none', cursor: 'pointer',
+                  padding: '6px 0', fontFamily: 'inherit', textAlign: 'left',
+                }}
+              >
+                <ChevronDown
+                  size={18}
+                  color="#999"
+                  style={{
+                    transform: collapsed.has(g.key) ? 'rotate(-90deg)' : 'none',
+                    transition: 'transform 0.15s',
+                  }}
+                />
+                <span style={{ fontSize: '1rem', fontWeight: '800', color: g.color }}>{g.title}</span>
+                <span style={{
+                  backgroundColor: '#f3f4f6', color: '#6b7280', borderRadius: '999px',
+                  padding: '2px 9px', fontSize: '0.78rem', fontWeight: '700',
+                }}>{g.rows.length}</span>
+              </button>
+
+              {!collapsed.has(g.key) && (
+                g.rows.length === 0 ? (
+                  <div style={{
+                    backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '10px',
+                    padding: '18px', textAlign: 'center', color: '#999', fontSize: '0.85rem',
+                  }}>
+                    {g.key === 'never' && payFilter !== 'all'
+                      ? 'Vendors with no application have no payment status — clear the paid filter to see them.'
+                      : 'Nobody here.'}
+                  </div>
+                ) : (
+                  g.rows.map(row => (
+                    <EmVendorRow
+                      key={row.vendor.id}
+                      vendor={row.vendor}
+                      app={row.app}
+                      attendance={attendance[row.vendor.id]}
+                      isSelected={selected?.vendor?.id === row.vendor.id}
+                      onClick={() => setSelected(row)}
+                      isMobile={isMobile}
+                    />
+                  ))
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selected && (
+        <EmVendorPanel
+          vendor={selected.vendor}
+          app={selected.app}
+          event={event}
+          attendance={attendance[selected.vendor.id]}
+          emails={emailLog[selected.vendor.id] || []}
+          hasSurvey={surveyed.has(selected.vendor.id)}
+          profilesById={profilesById}
+          isMobile={isMobile}
+          onClose={() => setSelected(null)}
+          onDecide={decide}
+          onCollect={(app) => setChargeTarget({ app, note: null, collectOnly: true })}
+          onRatingChange={setVendorRating}
+          onOpenFull={() => setDetailVendor(selected.vendor)}
+          onOpenNotes={() => setNotesVendor(selected.vendor)}
+          onOpenFit={() => setFitVendor(selected.vendor)}
+          onOpenSurvey={() => setSurveyTarget({ vendor: selected.vendor, event })}
+        />
+      )}
+
+      {detailVendor && (
+        <VendorDetailModal vendor={detailVendor} profilesById={profilesById} onClose={() => setDetailVendor(null)} />
+      )}
+      {notesVendor && (
+        <VendorNotesModal vendor={notesVendor} currentUserId={staff?.id} profilesById={profilesById} onClose={() => setNotesVendor(null)} />
+      )}
+      {fitVendor && (
+        <FitStatusModal
+          vendor={fitVendor}
+          onClose={() => setFitVendor(null)}
+          onSave={({ status, reason }) => setVendorFit(fitVendor.id, { status, reason })}
+        />
+      )}
+      {surveyTarget && (
+        <VendorSurveyResultsModal
+          vendor={surveyTarget.vendor}
+          event={surveyTarget.event}
+          isMobile={isMobile}
+          onClose={() => setSurveyTarget(null)}
+        />
+      )}
+      {chargeTarget && (
+        <TableFeeChargeModal
+          app={chargeTarget.app}
+          collectOnly={!!chargeTarget.collectOnly}
+          onClose={() => setChargeTarget(null)}
+          onFinalized={() => chargeTarget.collectOnly
+            ? Promise.resolve()
+            : finalizeDecision(chargeTarget.app.id, 'approved', chargeTarget.note)}
+          onRefresh={refresh}
+        />
+      )}
+    </PageWrapper>
+  );
+}
+
+// ─── One vendor line in a group ────────────────────────────
+function EmVendorRow({ vendor, app, attendance, isSelected, onClick, isMobile }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+        backgroundColor: isSelected ? '#fff7f8' : '#fff',
+        border: isSelected ? '1px solid #C8102E' : '1px solid #eee',
+        borderRadius: '10px', padding: '12px 14px', marginBottom: '8px',
+        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+      }}
+    >
+      <VendorAvatar vendor={vendor} size={40} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '0.95rem', fontWeight: '700', color: '#1a1a1a',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {vendorDisplayName(vendor)}
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '5px', alignItems: 'center' }}>
+          <EmFitPill vendor={vendor} />
+          {app && <EmPayPill app={app} />}
+          {!app && <EmPill bg="#f3f4f6" color="#6b7280">No request</EmPill>}
+          {attendance && (
+            <EmPill bg="#eff6ff" color="#1d4ed8" icon={<CheckCircle2 size={12} />}>Checked in</EmPill>
+          )}
+        </div>
+      </div>
+      {!isMobile && <ChevronRight size={16} color="#ccc" />}
+    </button>
+  );
+}
+
+// ─── Vendor detail panel ───────────────────────────────────
+// Slides in from the right on desktop, full sheet on mobile. Shows the
+// picture at a glance; the buttons open the deeper existing modals.
+// Defined at module scope on purpose — nesting these inside EmVendorPanel
+// makes React treat them as a new component type every render, remounting
+// the subtree and stealing focus from the rating dropdown mid-change.
+function EmRow({ label, children }) {
+  if (children === null || children === undefined || children === '') return null;
+  return (
+    <div style={{ display: 'flex', gap: '10px', padding: '7px 0', borderBottom: '1px solid #f4f4f4' }}>
+      <div style={{ minWidth: '120px', fontSize: '0.78rem', color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+        {label}
+      </div>
+      <div style={{ flex: 1, fontSize: '0.88rem', color: '#333', wordBreak: 'break-word' }}>{children}</div>
+    </div>
+  );
+}
+
+function EmSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: '22px' }}>
+      <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EmVendorPanel({
+  vendor, app, event, attendance, emails = [], hasSurvey, profilesById, isMobile,
+  onClose, onDecide, onCollect, onRatingChange,
+  onOpenFull, onOpenNotes, onOpenFit, onOpenSurvey,
+}) {
+  const RATINGS = ['beginner', 'novice', 'intermediate', 'advanced', 'expert'];
+  const decider = app?.decided_by ? profilesById[app.decided_by] : null;
+  const isPast = event?.event_date && event.event_date < todayISO();
+
+  const btn = (bg, color, borderColor) => ({
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    backgroundColor: bg, color,
+    border: `1px solid ${borderColor}`,
+    padding: '9px 14px', borderRadius: '8px',
+    fontSize: '0.83rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+  });
+
+  const when = (ts) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)',
+        zIndex: 1000, display: 'flex', justifyContent: 'flex-end',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: '#fff',
+          width: isMobile ? '100%' : '460px',
+          maxWidth: '100%', height: '100%',
+          overflowY: 'auto', padding: '20px 22px 60px',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+            <X size={20} color="#999" />
+          </button>
+        </div>
+
+        {/* Header */}
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '8px' }}>
+          <VendorAvatar vendor={vendor} size={56} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
+              {vendorDisplayName(vendor)}
+            </div>
+            {vendor.tagline && (
+              <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>{vendor.tagline}</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '22px' }}>
+          <VendorStatusBadge status={vendor.status} />
+          <EmFitPill vendor={vendor} />
+          {attendance && (
+            <EmPill bg="#eff6ff" color="#1d4ed8" icon={<CheckCircle2 size={12} />}>
+              Checked in{attendance.geo_verified ? ' (verified)' : ''}
+            </EmPill>
+          )}
+        </div>
+
+        {/* This event */}
+        <EmSection title="This event">
+          {app ? (
+            <>
+              <EmRow label="Status">
+                {app.status === 'approved' ? 'Approved'
+                  : app.status === 'pending' ? 'Applied — awaiting decision'
+                  : app.status}
+              </EmRow>
+              <EmRow label="Applied">{when(app.applied_at)}</EmRow>
+              <EmRow label="Decided">
+                {app.decided_at ? `${when(app.decided_at)}${decider ? ` by ${decider.name || decider.email}` : ''}` : null}
+              </EmRow>
+              <EmRow label="Table size">{app.requested_table_size && app.requested_table_size !== 'tbd' ? app.requested_table_size : null}</EmRow>
+              <EmRow label="Confirmed">{when(app.confirmed_at)}</EmRow>
+              <EmRow label="Confirm call">{when(app.confirmation_call_at)}</EmRow>
+              <EmRow label="Vendor note">{app.vendor_note}</EmRow>
+              <EmRow label="Decision note">{app.decision_note}</EmRow>
+            </>
+          ) : (
+            <div style={{ fontSize: '0.88rem', color: '#888', padding: '8px 0' }}>
+              No application on file for this event.
+            </div>
+          )}
+        </EmSection>
+
+        {/* Money */}
+        {app && (
+          <EmSection title="Table fee">
+            <div style={{ marginBottom: '10px' }}><EmPayPill app={app} /></div>
+            {app.receipt_url && (
+              <a href={app.receipt_url} target="_blank" rel="noopener noreferrer" style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                fontSize: '0.83rem', color: '#1d4ed8', fontWeight: '700',
+              }}>
+                <ExternalLink size={13} /> View receipt
+              </a>
+            )}
+            {emIsUnpaid(app) && (
+              <button onClick={() => onCollect(app)} style={{ ...btn('#C8102E', '#fff', '#C8102E'), marginTop: '10px' }}>
+                <DollarSign size={14} /> Collect {emMoney(app.fee_cents)}
+              </button>
+            )}
+          </EmSection>
+        )}
+
+        {/* Contact */}
+        <EmSection title="Contact">
+          <EmRow label="Email">{vendor.email}</EmRow>
+          <EmRow label="Phone">{vendor.phone}</EmRow>
+          <EmRow label="Instagram">
+            {vendor.ig_handle ? (
+              <a href={`https://instagram.com/${vendor.ig_handle.replace('@', '')}`} target="_blank" rel="noopener noreferrer" style={{ color: '#1d4ed8' }}>
+                @{vendor.ig_handle.replace('@', '')}
+              </a>
+            ) : null}
+          </EmRow>
+          <EmRow label="TikTok">{vendor.tiktok_handle}</EmRow>
+          <EmRow label="Facebook">{vendor.fb_handle}</EmRow>
+          <EmRow label="Specialty">{vendor.specialty}</EmRow>
+        </EmSection>
+
+        {/* Staff assessment */}
+        <EmSection title="Staff read">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', color: '#999', fontWeight: '700' }}>Experience</span>
+            <select
+              value={vendor.staff_experience_rating || ''}
+              onChange={e => onRatingChange(vendor.id, e.target.value || null)}
+              style={{
+                padding: '7px 10px', borderRadius: '8px', border: '1px solid #ddd',
+                fontSize: '0.83rem', fontFamily: 'inherit', backgroundColor: '#fff',
+              }}
+            >
+              <option value="">Unrated</option>
+              {RATINGS.map(r => (
+                <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+          {vendor.staff_fit_reason && (
+            <div style={{ fontSize: '0.85rem', color: '#555', fontStyle: 'italic', marginBottom: '8px' }}>
+              “{vendor.staff_fit_reason}”
+            </div>
+          )}
+          <EmRow label="Emails sent">{emails.length > 0 ? `${emails.length} for this event` : null}</EmRow>
+          <EmRow label="Heard from">{vendor.heard_from}</EmRow>
+          <EmRow label="Referred by">{vendor.referred_by_name}</EmRow>
+        </EmSection>
+
+        {/* Deeper info + actions */}
+        <EmSection title="More">
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button onClick={onOpenFull} style={btn('#fff', '#1a1a1a', '#ddd')}>
+              <Eye size={14} /> Full profile
+            </button>
+            <button onClick={onOpenNotes} style={btn('#fff', '#1a1a1a', '#ddd')}>
+              <StickyNote size={14} /> Notes
+            </button>
+            <button onClick={onOpenFit} style={btn('#fff', '#1a1a1a', '#ddd')}>
+              <Star size={14} /> Fit status
+            </button>
+            {isPast && (
+              <button onClick={onOpenSurvey} style={btn('#fff', hasSurvey ? '#C8102E' : '#999', '#ddd')}>
+                <FileEdit size={14} /> Survey results
+              </button>
+            )}
+          </div>
+        </EmSection>
+
+        {/* Decision buttons — only where a decision is still open */}
+        {app && ['pending', 'declined'].includes(app.status) && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px' }}>
+            <button onClick={() => onDecide(app, 'approved')} style={btn('#15803d', '#fff', '#15803d')}>
+              <Check size={14} /> Approve
+            </button>
+            {app.status === 'pending' && (
+              <button onClick={() => onDecide(app, 'declined')} style={btn('#fff', '#b91c1c', '#fecaca')}>
+                <X size={14} /> Decline
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // Log every route change to public.page_visits so the daily SEO digest
   // can break down most-viewed pages + pages-per-session metrics.
@@ -25755,6 +26668,10 @@ function App() {
         <Route path="/guest/dashboard" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/staff/vendors" element={<StaffVendorsPage isMobile={isMobile} staff={staff} />} />
+        {/* New event-first vendor manager. Parallel to /staff/vendors while
+            the two layouts are being compared. */}
+        <Route path="/staff/events" element={<StaffEventManagerPage isMobile={isMobile} staff={staff} />} />
+        <Route path="/staff/events/:eventId/manage" element={<EventVendorManagerPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/timemap" element={<EventTimeMapPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/tables" element={<EventTablesPage isMobile={isMobile} staff={staff} />} />
         <Route path="/staff/events/:eventId/sizzle" element={<EventSizzlePage isMobile={isMobile} staff={staff} />} />
