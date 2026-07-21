@@ -25835,6 +25835,29 @@ function EventVendorManagerPage({ isMobile, staff }) {
     await finalizeDecision(app.id, status, note);
   };
 
+  // Cancel a vendor's spot for this event — works from any live status
+  // (approved or pending). Silent: no vendor email fires, it's a staff-side
+  // roster cleanup. Money is NOT touched; if they already paid, staff are
+  // warned to refund separately.
+  const cancelApplication = async (app) => {
+    if (!app) return;
+    const paid = (app.fee_cents || 0) > 0 && ['charged', 'waived'].includes(app.payment_status);
+    const who = vendorDisplayName(app.vendor);
+    const msg = paid
+      ? `Cancel ${who}'s spot for this event?\n\nThis vendor ALREADY PAID — cancelling here does NOT refund them. Handle the refund separately if needed.`
+      : `Cancel ${who}'s application for this event?`;
+    if (!window.confirm(msg)) return;
+    const decidedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('vendor_applications')
+      .update({ status: 'cancelled', decision_note: 'Cancelled by staff', decided_at: decidedAt, decided_by: staff.id })
+      .eq('id', app.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    setApps(prev => prev.map(a => a.id === app.id
+      ? { ...a, status: 'cancelled', decision_note: 'Cancelled by staff', decided_at: decidedAt, decided_by: staff.id }
+      : a));
+  };
+
   const setVendorRating = async (vendorId, rating) => {
     const prevValue = allVendors.find(v => v.id === vendorId)?.staff_experience_rating;
     const patch = (v) => v.id === vendorId ? { ...v, staff_experience_rating: rating } : v;
@@ -26049,6 +26072,7 @@ function EventVendorManagerPage({ isMobile, staff }) {
           isMobile={isMobile}
           onClose={() => setSelected(null)}
           onDecide={decide}
+          onCancel={cancelApplication}
           onCollect={(app) => setChargeTarget({ app, note: null, collectOnly: true })}
           onRatingChange={setVendorRating}
           onOpenFull={() => setDetailVendor(selected.vendor)}
@@ -26160,7 +26184,7 @@ function EmSection({ title, children }) {
 
 function EmVendorPanel({
   vendor, app, event, attendance, emails = [], hasSurvey, profilesById, isMobile,
-  onClose, onDecide, onCollect, onRatingChange,
+  onClose, onDecide, onCancel, onCollect, onRatingChange,
   onOpenFull, onOpenNotes, onOpenFit, onOpenSurvey,
 }) {
   const RATINGS = ['beginner', 'novice', 'intermediate', 'advanced', 'expert'];
@@ -26334,15 +26358,26 @@ function EmVendorPanel({
           </div>
         </EmSection>
 
-        {/* Decision buttons — only where a decision is still open */}
-        {app && ['pending', 'declined'].includes(app.status) && (
+        {/* Decision + cancel buttons.
+            - Approve/Decline show while a decision is still open (pending/declined).
+            - Cancel shows for any LIVE spot (approved or pending) so an already-
+              approved vendor like a no-show or a change of mind can be pulled.
+            - Already cancelled/declined shows nothing here. */}
+        {app && ['pending', 'declined', 'approved'].includes(app.status) && (
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px' }}>
-            <button onClick={() => onDecide(app, 'approved')} style={btn('#15803d', '#fff', '#15803d')}>
-              <Check size={14} /> Approve
-            </button>
+            {['pending', 'declined'].includes(app.status) && (
+              <button onClick={() => onDecide(app, 'approved')} style={btn('#15803d', '#fff', '#15803d')}>
+                <Check size={14} /> Approve
+              </button>
+            )}
             {app.status === 'pending' && (
               <button onClick={() => onDecide(app, 'declined')} style={btn('#fff', '#b91c1c', '#fecaca')}>
                 <X size={14} /> Decline
+              </button>
+            )}
+            {['pending', 'approved'].includes(app.status) && (
+              <button onClick={() => onCancel(app)} style={btn('#fff', '#b91c1c', '#fecaca')}>
+                <XCircle size={14} /> Cancel spot
               </button>
             )}
           </div>
