@@ -11380,7 +11380,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     else setShowChoice(true);
   }, [autoOpenApply, application, isPast, event.cancelled, hasAttendanceHistory]);
 
-  const submitApplication = async ({ requested_start_time, requested_end_time, requested_table_size, vendor_note }) => {
+  const submitApplication = async ({ requested_start_time, requested_end_time, requested_table_size, vendor_note, terms_agreed_at }) => {
     // The apply modal enforces non-null times; if we somehow get here
     // without them, fail loudly instead of writing null. The DB also
     // has a NOT NULL constraint on these columns now (see migration
@@ -11402,6 +11402,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         vendor_note: vendor_note || null,
         fee_cents: feeCents,
         payment_status: feeCents > 0 ? 'card_pending' : 'none',
+        terms_agreed_at: terms_agreed_at || null,
       })
       .select()
       .single();
@@ -11456,6 +11457,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         fee_cents: 0,
         payment_status: 'none',
         vendor_note: 'First-time vendor — free shared half-table (confirmed table-sharing; attested never vended with us before).',
+        terms_agreed_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -12782,6 +12784,10 @@ function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullT
   const [attested, setAttested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [agreed, setAgreed] = useState({});
+  const rulesOk = allRulesAgreed(event, agreed);
+  const toggleRule = (key, on) => setAgreed(prev => ({ ...prev, [key]: on }));
+  const freeReady = confirmed && attested && rulesOk;
 
   const dateLabel = new Date(event.event_date + 'T12:00:00')
     .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -12882,15 +12888,18 @@ function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullT
               understand my spot will be switched to a regular paid table.
             </span>
           </label>
+          <div style={{ marginBottom: '4px' }}>
+            <VendorRulesChecklist event={event} agreed={agreed} onToggle={toggleRule} accent="#15803d" />
+          </div>
           <button
             type="button"
             onClick={handleFreeHalfTable}
-            disabled={!confirmed || !attested || submitting}
+            disabled={!freeReady || submitting}
             style={{
               width: '100%', padding: '12px',
-              backgroundColor: (!confirmed || !attested || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
+              backgroundColor: (!freeReady || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
               border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
-              cursor: (!confirmed || !attested || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              cursor: (!freeReady || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
             }}
           >
             {submitting ? 'Reserving…' : 'Reserve my free half-table'}
@@ -12930,11 +12939,113 @@ function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullT
 // Center handles table assignments). Collects only an optional
 // vendor_note. The requested_* columns are NOT NULL in the DB, so we
 // persist the event's vendor window and 'tbd' for table size.
+// ─── Vendor event rules ───────────────────────────────────
+// Every rule has to be ticked before an application can be submitted, on both
+// the paid and free first-timer paths. `hours` is filled in from the event's
+// real vendor window so it can never drift from what's actually scheduled.
+function vendorEventRules(event) {
+  const start = formatTime12h(event?.vendor_start_time || event?.start_time || '12:00:00') || '12 PM';
+  const end = formatTime12h(event?.vendor_end_time || event?.end_time || '22:00:00') || '10 PM';
+  return [
+    {
+      key: 'pokemon_only',
+      title: 'Pokemon only',
+      body: 'No Magic, no sports, no One Piece, no other TCGs. Bring Pokemon and nothing else.',
+    },
+    {
+      key: 'other_products',
+      title: 'Other products are welcome',
+      body: 'You can sell binders, toys, 3D prints, anything you would like in addition to cards. We just ask that you keep it Pokemon.',
+    },
+    {
+      key: 'no_recent_sealed',
+      title: 'No recent sealed product',
+      body: 'We are building a reputation that TC vendors are never scalpers, and we intend to deliver on that. '
+        + 'People can\'t tell these days if you are or are not a scalper EXCEPT for the massive sealed stack up. '
+        + 'So, nothing sealed that Pokemon has released in the last 12 months. Anything older is fair game. '
+        + 'If your setup reads as scalping, stacks of current ETBs and the like, we will ask you to change it.',
+      note: 'Sealed collectors absolutely come to our events, but they are looking for things from years back.',
+    },
+    {
+      key: 'full_window',
+      title: `The full window, ${start} to ${end}`,
+      body: `You are signing up for the whole day. You cannot pick a shorter time inside it. `
+        + 'There is daylight early on, so bring a canopy just in case. Once it gets dark, bring lights: '
+        + 'some for the look of your setup, and some that actually help people see the cards.',
+    },
+    {
+      key: 'rotate_spot',
+      title: 'Move your spot each event',
+      body: 'Please do not set up in the same place two events in a row. Pick a different table than you had last time.',
+    },
+    {
+      key: 'one_team',
+      title: 'One team, one event',
+      body: 'Meet the other vendors and support them. We are all running one event together, and the goal is the best experience for everyone there.',
+    },
+  ];
+}
+
+function VendorRulesChecklist({ event, agreed, onToggle, accent = '#C8102E' }) {
+  const rules = vendorEventRules(event);
+  return (
+    <div style={{
+      backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '10px',
+      padding: '14px 16px', marginBottom: '16px',
+    }}>
+      <div style={{
+        fontSize: '0.72rem', color: '#999', fontWeight: '700',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px',
+      }}>
+        Please read and agree
+      </div>
+      {rules.map((r, i) => (
+        <label
+          key={r.key}
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: '9px',
+            cursor: 'pointer', userSelect: 'none',
+            padding: '10px 0',
+            borderTop: i === 0 ? 'none' : '1px solid #eee',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={!!agreed[r.key]}
+            onChange={(e) => onToggle(r.key, e.target.checked)}
+            style={{ marginTop: '3px', width: '16px', height: '16px', cursor: 'pointer', accentColor: accent, flexShrink: 0 }}
+          />
+          <span>
+            <span style={{ display: 'block', fontSize: '0.88rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '3px' }}>
+              {r.title}
+            </span>
+            <span style={{ display: 'block', fontSize: '0.81rem', color: '#555', lineHeight: 1.5 }}>
+              {r.body}
+            </span>
+            {r.note && (
+              <span style={{ display: 'block', fontSize: '0.79rem', color: '#777', fontStyle: 'italic', lineHeight: 1.5, marginTop: '5px' }}>
+                {r.note}
+              </span>
+            )}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function allRulesAgreed(event, agreed) {
+  return vendorEventRules(event).every(r => !!agreed[r.key]);
+}
+
 function ApplyForEventModal({ event, onClose, onSubmit }) {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [feeConsent, setFeeConsent] = useState(false);
+  const [agreed, setAgreed] = useState({});
+  const rulesOk = allRulesAgreed(event, agreed);
+  const toggleRule = (key, on) => setAgreed(prev => ({ ...prev, [key]: on }));
 
   const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
   const vendorEnd = event.vendor_end_time || event.end_time || '20:00:00';
@@ -12947,6 +13058,10 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!rulesOk) {
+      setError('Please read and check every box above to continue.');
+      return;
+    }
     if (feeCents > 0 && !feeConsent) {
       setError('Please check the authorization box to continue.');
       return;
@@ -12959,6 +13074,7 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
         requested_end_time: vendorEnd.slice(0, 5),
         requested_table_size: 'tbd',
         vendor_note: note.trim() || null,
+        terms_agreed_at: new Date().toISOString(),
       });
       onClose();
     } catch (err) {
@@ -13023,6 +13139,8 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
           </div>
         </div>
 
+        <VendorRulesChecklist event={event} agreed={agreed} onToggle={toggleRule} />
+
         {feeCents > 0 && (
           <div style={{
             backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px',
@@ -13078,12 +13196,12 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
           }}>
             Cancel
           </button>
-          <button type="submit" disabled={submitting} style={{
+          <button type="submit" disabled={submitting || !rulesOk} style={{
             flex: 2, padding: '12px',
-            backgroundColor: submitting ? '#999' : '#C8102E', color: '#fff',
+            backgroundColor: (submitting || !rulesOk) ? '#9ca3af' : '#C8102E', color: '#fff',
             border: 'none', borderRadius: '10px',
             fontSize: '0.95rem', fontWeight: '700',
-            cursor: submitting ? 'wait' : 'pointer',
+            cursor: submitting ? 'wait' : !rulesOk ? 'not-allowed' : 'pointer',
           }}>
             {submitting ? 'Submitting…' : feeCents > 0 ? 'Submit & save card' : 'Submit application'}
           </button>
@@ -26458,6 +26576,14 @@ function EmVendorPanel({
               <EmRow label="Table size">{app.requested_table_size && app.requested_table_size !== 'tbd' ? app.requested_table_size : null}</EmRow>
               <EmRow label="Confirmed">{when(app.confirmed_at)}</EmRow>
               <EmRow label="Confirm call">{when(app.confirmation_call_at)}</EmRow>
+              <EmRow label="Agreed to rules">
+                {app.terms_agreed_at
+                  ? new Date(app.terms_agreed_at).toLocaleString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    })
+                  : 'Applied before the rules checklist existed'}
+              </EmRow>
               <EmRow label="Vendor note">{app.vendor_note}</EmRow>
               <EmRow label="Decision note">{app.decision_note}</EmRow>
             </>
