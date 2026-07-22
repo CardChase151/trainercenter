@@ -6202,6 +6202,16 @@ function vendorDisplayName(v) {
   return v?.business_name || v?.name || '';
 }
 
+// True when the IG handle actually adds information — i.e. it isn't just the
+// display name again. Vendors we only know as "@shopname" already show it as
+// their name; the ones worth surfacing are those filed under a person's name
+// whose shop handle is what staff actually recognize them by.
+function vendorHandleDiffers(v) {
+  const handle = (v?.ig_handle || '').replace('@', '').toLowerCase().trim();
+  if (!handle) return false;
+  return handle !== vendorDisplayName(v).replace('@', '').toLowerCase().trim();
+}
+
 function VendorAvatar({ vendor, size = 96 }) {
   const palette = ['#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#c026d3'];
   const hash = (vendor?.name || '?').split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
@@ -26227,6 +26237,11 @@ function EmVendorRow({ vendor, app, attendance, isSelected, onClick, isMobile })
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {vendorDisplayName(vendor)}
+          {vendorHandleDiffers(vendor) && (
+            <span style={{ fontWeight: '600', color: '#1d4ed8', marginLeft: '7px', fontSize: '0.85rem' }}>
+              @{vendor.ig_handle.replace('@', '')}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '5px', alignItems: 'center' }}>
           <EmFitPill vendor={vendor} />
@@ -26335,6 +26350,14 @@ function EmVendorPanel({
                 </div>
               );
             })()}
+            {/* Half of them are known to us only by their shop handle, so it
+                belongs in the header next to the name — not buried down in
+                Contact where you'd have to already know who you're looking at. */}
+            {vendor.ig_handle && vendorHandleDiffers(vendor) && (
+              <div style={{ fontSize: '0.83rem', color: '#1d4ed8', fontWeight: '600', marginTop: '2px' }}>
+                @{vendor.ig_handle.replace('@', '')}
+              </div>
+            )}
             {vendor.tagline && (
               <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>{vendor.tagline}</div>
             )}
