@@ -11071,6 +11071,7 @@ function VendorEventsListPage({ isMobile }) {
   const [events, setEvents] = useState([]);
   const [applications, setApplications] = useState({});
   const [attendance, setAttendance] = useState({});
+  const [vendedBefore, setVendedBefore] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -11085,7 +11086,15 @@ function VendorEventsListPage({ isMobile }) {
         .limit(20),
       supabase.from('vendor_applications').select('*').eq('vendor_id', vendor.id),
       supabase.from('vendor_attendance').select('*').eq('vendor_id', vendor.id),
-    ]).then(([evRes, appsRes, attRes]) => {
+      // Real vending history, which is NOT the same as check-in history:
+      // vendor_attendance only fills in when someone works the geo kiosk on
+      // the day, so gating the first-timer offer on it handed free tables to
+      // vendors who had already worked an event and simply never checked in.
+      supabase.from('vendor_applications')
+        .select('event_id, event:events!inner(event_date, cancelled)')
+        .eq('vendor_id', vendor.id)
+        .eq('status', 'approved'),
+    ]).then(([evRes, appsRes, attRes, histRes]) => {
       setEvents(evRes.data || []);
       const apps = {};
       (appsRes.data || []).forEach(a => { apps[a.event_id] = a; });
@@ -11093,6 +11102,10 @@ function VendorEventsListPage({ isMobile }) {
       const att = {};
       (attRes.data || []).forEach(a => { att[a.event_id] = a; });
       setAttendance(att);
+      const histToday = todayISO();
+      setVendedBefore((histRes.data || []).filter(r =>
+        r.event && !r.event.cancelled && r.event.event_date && r.event.event_date < histToday
+      ).length);
       setLoading(false);
     });
   }, [vendor, authRolesLoading, navigate]);
@@ -11143,7 +11156,8 @@ function VendorEventsListPage({ isMobile }) {
                 vendorId={vendor.id}
                 vendorStatus={vendor.status}
                 isFirstApplication={Object.keys(applications).length === 0}
-                hasAttendanceHistory={Object.keys(attendance).length > 0}
+                hasAttendanceHistory={Object.keys(attendance).length > 0 || vendedBefore > 0}
+                vendedBefore={vendedBefore}
                 onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
                 onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
                 isMobile={isMobile}
@@ -11322,7 +11336,7 @@ function VendorStatusBadge({ status }) {
 }
 
 // ─── Per-event card on vendor dashboard ───────────────────
-function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, onApplied, onCheckedIn, isMobile }) {
+function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, vendedBefore = 0, onApplied, onCheckedIn, isMobile }) {
   const [showApply, setShowApply] = useState(false); // open the apply modal
   const [showChoice, setShowChoice] = useState(false); // first-timer full-table-vs-free-half-table popup
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -11412,7 +11426,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         requested_table_size: 'half',
         fee_cents: 0,
         payment_status: 'none',
-        vendor_note: 'First-time vendor — free shared half-table (confirmed table-sharing).',
+        vendor_note: 'First-time vendor — free shared half-table (confirmed table-sharing; attested never vended with us before).',
       })
       .select()
       .single();
@@ -11775,6 +11789,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       {showChoice && (
         <FirstTimerChoiceModal
           event={event}
+          vendedBefore={vendedBefore}
           onClose={() => setShowChoice(false)}
           onChooseFullTable={() => { setShowChoice(false); setShowApply(true); }}
           onChooseFreeHalfTable={submitFreeHalfTableApplication}
@@ -12733,8 +12748,9 @@ function vendorMatchesQuery(vendor, query) {
 // unchanged) or a free shared half-table for first-timers only, no card
 // required. Returning vendors never see this — Apply goes straight to
 // ApplyForEventModal like it always has.
-function FirstTimerChoiceModal({ event, onClose, onChooseFullTable, onChooseFreeHalfTable }) {
+function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullTable, onChooseFreeHalfTable }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [attested, setAttested] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -12744,6 +12760,12 @@ function FirstTimerChoiceModal({ event, onClose, onChooseFullTable, onChooseFree
   const feeLabel = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`;
 
   const handleFreeHalfTable = async () => {
+    // Belt and braces: the offer shouldn't be reachable for a returning
+    // vendor at all, but never let the free row get written if it is.
+    if (vendedBefore > 0) {
+      setError('Our records show you have vended with us before, so the first-timer offer does not apply. Please apply for a regular table.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -12816,15 +12838,30 @@ function FirstTimerChoiceModal({ event, onClose, onChooseFullTable, onChooseFree
               I understand I'll share a table with another first-time vendor.
             </span>
           </label>
+          {/* The offer is genuinely once-per-vendor, so make the claim
+              explicit rather than implied. Staff can point at this. */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '12px' }}>
+            <input
+              type="checkbox"
+              checked={attested}
+              onChange={(e) => setAttested(e.target.checked)}
+              style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer', accentColor: '#15803d', flexShrink: 0 }}
+            />
+            <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, lineHeight: 1.5 }}>
+              I confirm this is my first time vending with Trainer Center and I have
+              never vended with you before. If that turns out not to be the case, I
+              understand my spot will be switched to a regular paid table.
+            </span>
+          </label>
           <button
             type="button"
             onClick={handleFreeHalfTable}
-            disabled={!confirmed || submitting}
+            disabled={!confirmed || !attested || submitting}
             style={{
               width: '100%', padding: '12px',
-              backgroundColor: (!confirmed || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
+              backgroundColor: (!confirmed || !attested || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
               border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
-              cursor: (!confirmed || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+              cursor: (!confirmed || !attested || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
             }}
           >
             {submitting ? 'Reserving…' : 'Reserve my free half-table'}
@@ -25878,6 +25915,36 @@ function EventVendorManagerPage({ isMobile, staff }) {
       : a));
   };
 
+  // "Nice try" lever: a vendor claimed the first-timer free half-table but has
+  // vended with us before. Send it back as a normal paid application at this
+  // event's real table fee instead of cancelling them outright — they keep
+  // their place in the queue, they just have to pay for it like everyone else.
+  const requirePayment = async (app) => {
+    if (!app) return;
+    const feeCents = event?.table_fee_cents || 0;
+    if (feeCents <= 0) { alert('This event has no table fee, so there is nothing to charge.'); return; }
+    if ((app.fee_cents || 0) > 0) { alert('This application is already set to the full table fee.'); return; }
+    const who = vendorDisplayName(app.vendor);
+    if (!window.confirm(
+      `Send ${who}'s free first-timer spot back as a paid application?\n\n` +
+      `Their table fee becomes ${emMoney(feeCents)} and they'll need to save a card. ` +
+      `No email goes out from here — tell them yourself.`
+    )) return;
+    const patch = {
+      status: 'pending',
+      fee_cents: feeCents,
+      payment_status: 'card_pending',
+      requested_table_size: 'tbd',
+      vendor_note: null,
+      decision_note: 'Free first-timer table reversed by staff — vendor has vended with us before.',
+      decided_at: null,
+      decided_by: null,
+    };
+    const { error } = await supabase.from('vendor_applications').update(patch).eq('id', app.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    setApps(prev => prev.map(a => a.id === app.id ? { ...a, ...patch } : a));
+  };
+
   const setVendorRating = async (vendorId, rating) => {
     const prevValue = allVendors.find(v => v.id === vendorId)?.staff_experience_rating;
     const patch = (v) => v.id === vendorId ? { ...v, staff_experience_rating: rating } : v;
@@ -26094,6 +26161,7 @@ function EventVendorManagerPage({ isMobile, staff }) {
           onClose={() => setSelected(null)}
           onDecide={decide}
           onCancel={cancelApplication}
+          onRequirePayment={requirePayment}
           onCollect={(app) => setChargeTarget({ app, note: null, collectOnly: true })}
           onRatingChange={setVendorRating}
           onOpenFull={() => setDetailVendor(selected.vendor)}
@@ -26206,7 +26274,7 @@ function EmSection({ title, children }) {
 function EmVendorPanel({
   vendor, app, event, attendance, emails = [], hasSurvey, vendedBefore = 0,
   profilesById, isMobile,
-  onClose, onDecide, onCancel, onCollect, onRatingChange,
+  onClose, onDecide, onCancel, onRequirePayment, onCollect, onRatingChange,
   onOpenFull, onOpenNotes, onOpenFit, onOpenSurvey,
 }) {
   const RATINGS = ['beginner', 'novice', 'intermediate', 'advanced', 'expert'];
@@ -26316,6 +26384,30 @@ function EmVendorPanel({
             </div>
           )}
         </EmSection>
+
+        {/* A free first-timer table claimed by someone who has vended before.
+            Loud on purpose — this is the one that costs real money if it
+            slides past. */}
+        {app && (app.fee_cents || 0) === 0 && (event?.table_fee_cents || 0) > 0 && vendedBefore > 0 && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px',
+            padding: '14px 16px', marginBottom: '18px',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '7px',
+              fontSize: '0.9rem', fontWeight: '800', color: '#991b1b', marginBottom: '6px',
+            }}>
+              <AlertCircle size={15} /> Free table, but not a first-timer
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: '0.83rem', color: '#7f1d1d', lineHeight: 1.5 }}>
+              They took the free first-time half-table, but they've already vended
+              {` ${vendedBefore} time${vendedBefore === 1 ? '' : 's'}`} with us.
+            </p>
+            <button onClick={() => onRequirePayment(app)} style={btn('#C8102E', '#fff', '#C8102E')}>
+              <DollarSign size={14} /> Require the {emMoney(event.table_fee_cents)} fee
+            </button>
+          </div>
+        )}
 
         {/* Money */}
         {app && (
