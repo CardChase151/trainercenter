@@ -25728,6 +25728,7 @@ function EventVendorManagerPage({ isMobile, staff }) {
   const [emailLog, setEmailLog] = useState({});       // vendor_id → [rows]
   const [profilesById, setProfilesById] = useState({});
   const [surveyed, setSurveyed] = useState(() => new Set());
+  const [vendedBefore, setVendedBefore] = useState({});  // vendor_id → # past events vended
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -25760,7 +25761,12 @@ function EventVendorManagerPage({ isMobile, staff }) {
       supabase.from('vendor_email_log').select('vendor_id, step_key, sent_at').eq('event_id', eventId),
       supabase.from('profiles').select('id, name, email'),
       supabase.from('vendor_event_surveys').select('vendor_id').eq('event_id', eventId),
-    ]).then(([evRes, appRes, venRes, attRes, mailRes, profRes, survRes]) => {
+      // Track record: every approved application this vendor has, anywhere.
+      // Filtered down to past, non-cancelled, other events below.
+      supabase.from('vendor_applications')
+        .select('vendor_id, event_id, event:events!inner(event_date, cancelled)')
+        .eq('status', 'approved'),
+    ]).then(([evRes, appRes, venRes, attRes, mailRes, profRes, survRes, histRes]) => {
       if (cancelled) return;
       if (evRes.error) console.error('[EventManager] event', evRes.error);
       if (appRes.error) console.error('[EventManager] applications', appRes.error);
@@ -25786,6 +25792,20 @@ function EventVendorManagerPage({ isMobile, staff }) {
       setProfilesById(prof);
 
       setSurveyed(new Set((survRes.data || []).map(r => r.vendor_id)));
+
+      // "Vended with us before" = approved on an event that already happened
+      // and wasn't cancelled. The event being viewed never counts toward its
+      // own history, so this reads the same whether it's upcoming or past.
+      const today = todayISO();
+      const hist = {};
+      (histRes.data || []).forEach(r => {
+        const e = r.event;
+        if (!e || e.cancelled || !e.event_date) return;
+        if (r.event_id === eventId || e.event_date >= today) return;
+        hist[r.vendor_id] = (hist[r.vendor_id] || 0) + 1;
+      });
+      setVendedBefore(hist);
+
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -26068,6 +26088,7 @@ function EventVendorManagerPage({ isMobile, staff }) {
           attendance={attendance[selected.vendor.id]}
           emails={emailLog[selected.vendor.id] || []}
           hasSurvey={surveyed.has(selected.vendor.id)}
+          vendedBefore={vendedBefore[selected.vendor.id] || 0}
           profilesById={profilesById}
           isMobile={isMobile}
           onClose={() => setSelected(null)}
@@ -26183,7 +26204,8 @@ function EmSection({ title, children }) {
 }
 
 function EmVendorPanel({
-  vendor, app, event, attendance, emails = [], hasSurvey, profilesById, isMobile,
+  vendor, app, event, attendance, emails = [], hasSurvey, vendedBefore = 0,
+  profilesById, isMobile,
   onClose, onDecide, onCancel, onCollect, onRatingChange,
   onOpenFull, onOpenNotes, onOpenFit, onOpenSurvey,
 }) {
@@ -26232,6 +26254,19 @@ function EmVendorPanel({
             <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
               {vendorDisplayName(vendor)}
             </div>
+            {/* Most vendors sign up under a shop handle (@pokecreedcollection),
+                so the header alone doesn't say who you're actually talking to.
+                Show the human name right here instead of making staff open the
+                full profile for it. Same rule the detail modal uses. */}
+            {(() => {
+              const personFull = [vendor.first_name, vendor.last_name].filter(Boolean).join(' ').trim();
+              if (!personFull || personFull === vendorDisplayName(vendor).trim()) return null;
+              return (
+                <div style={{ fontSize: '0.9rem', color: '#444', fontWeight: '600', marginTop: '2px' }}>
+                  {personFull}
+                </div>
+              );
+            })()}
             {vendor.tagline && (
               <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>{vendor.tagline}</div>
             )}
@@ -26241,6 +26276,14 @@ function EmVendorPanel({
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '22px' }}>
           <VendorStatusBadge status={vendor.status} />
           <EmFitPill vendor={vendor} />
+          <EmPill
+            bg={vendedBefore > 0 ? '#f0fdf4' : '#f3f4f6'}
+            color={vendedBefore > 0 ? '#15803d' : '#6b7280'}
+            icon={<CalendarIcon size={12} />}
+          >
+            {vendedBefore === 0 ? 'First time with us'
+              : `Vended ${vendedBefore} time${vendedBefore === 1 ? '' : 's'} before`}
+          </EmPill>
           {attendance && (
             <EmPill bg="#eff6ff" color="#1d4ed8" icon={<CheckCircle2 size={12} />}>
               Checked in{attendance.geo_verified ? ' (verified)' : ''}
