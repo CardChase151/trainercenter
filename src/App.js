@@ -11078,6 +11078,12 @@ function VendorDashboardPage({ isMobile }) {
 function VendorEventsListPage({ isMobile }) {
   const { vendor, isLoading: authRolesLoading } = useAuth();
   const navigate = useNavigate();
+  // ?event=<id> — the shareable apply link staff hand out directly ("you're
+  // approved but not on the 31st yet, here you go"). Lands on the list with
+  // that event's apply flow already open, so it's one tap, not a scavenger
+  // hunt through the dashboard.
+  const [eventParams] = useSearchParams();
+  const autoOpenEventId = eventParams.get('event');
   const [events, setEvents] = useState([]);
   const [applications, setApplications] = useState({});
   const [attendance, setAttendance] = useState({});
@@ -11168,6 +11174,7 @@ function VendorEventsListPage({ isMobile }) {
                 isFirstApplication={Object.keys(applications).length === 0}
                 hasAttendanceHistory={Object.keys(attendance).length > 0 || vendedBefore > 0}
                 vendedBefore={vendedBefore}
+                autoOpenApply={ev.id === autoOpenEventId}
                 onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
                 onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
                 isMobile={isMobile}
@@ -11346,7 +11353,7 @@ function VendorStatusBadge({ status }) {
 }
 
 // ─── Per-event card on vendor dashboard ───────────────────
-function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, vendedBefore = 0, onApplied, onCheckedIn, isMobile }) {
+function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, vendedBefore = 0, autoOpenApply = false, onApplied, onCheckedIn, isMobile }) {
   const [showApply, setShowApply] = useState(false); // open the apply modal
   const [showChoice, setShowChoice] = useState(false); // first-timer full-table-vs-free-half-table popup
   const [showCheckIn, setShowCheckIn] = useState(false);
@@ -11360,6 +11367,18 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   const today = todayISO();
   const isToday = event.event_date === today;
   const isPast = event.event_date < today;
+
+  // Arriving from a staff-sent apply link: open the same flow the Apply
+  // button opens. Only when there's actually something to apply to — an
+  // existing application or a past date leaves the card alone.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpenApply || autoOpened.current) return;
+    if (application || isPast || event.cancelled) return;
+    autoOpened.current = true;
+    if (hasAttendanceHistory) setShowApply(true);
+    else setShowChoice(true);
+  }, [autoOpenApply, application, isPast, event.cancelled, hasAttendanceHistory]);
 
   const submitApplication = async ({ requested_start_time, requested_end_time, requested_table_size, vendor_note }) => {
     // The apply modal enforces non-null times; if we somehow get here
@@ -26218,6 +26237,47 @@ function EventVendorManagerPage({ isMobile, staff }) {
 }
 
 // ─── One vendor line in a group ────────────────────────────
+// Copy-to-clipboard for the direct apply link. Staff send this by DM or text
+// when a vendor says they applied but never actually landed a row.
+function EmCopyApplyLink({ eventId }) {
+  const [copied, setCopied] = useState(false);
+  if (!eventId) return null;
+  const url = `${window.location.origin}/vendors/events?event=${eventId}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copy this link:', url);
+    }
+  };
+  return (
+    <div>
+      <button
+        onClick={copy}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          backgroundColor: copied ? '#f0fdf4' : '#fff',
+          color: copied ? '#15803d' : '#1a1a1a',
+          border: `1px solid ${copied ? '#bbf7d0' : '#ddd'}`,
+          padding: '9px 14px', borderRadius: '8px',
+          fontSize: '0.83rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        {copied ? <Check size={14} /> : <Link2 size={14} />}
+        {copied ? 'Link copied' : 'Copy apply link'}
+      </button>
+      <div style={{
+        fontSize: '0.72rem', color: '#999', marginTop: '6px',
+        wordBreak: 'break-all', lineHeight: 1.4,
+      }}>
+        {url}
+      </div>
+    </div>
+  );
+}
+
 function EmVendorRow({ vendor, app, attendance, isSelected, onClick, isMobile }) {
   return (
     <button
@@ -26402,8 +26462,13 @@ function EmVendorPanel({
               <EmRow label="Decision note">{app.decision_note}</EmRow>
             </>
           ) : (
-            <div style={{ fontSize: '0.88rem', color: '#888', padding: '8px 0' }}>
-              No application on file for this event.
+            <div style={{ padding: '8px 0' }}>
+              <div style={{ fontSize: '0.88rem', color: '#888', marginBottom: '12px' }}>
+                No application on file for this event.
+              </div>
+              {/* Paste-into-a-DM link. Drops them straight into this event's
+                  apply flow instead of "go to your dashboard and find it". */}
+              <EmCopyApplyLink eventId={event?.id} />
             </div>
           )}
         </EmSection>
