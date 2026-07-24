@@ -269,8 +269,12 @@ Deno.serve(async (req) => {
       const token = (req.headers.get('Authorization') || '').replace('Bearer ', '')
       const { data: userData, error: userErr } = await supabase.auth.getUser(token)
       if (userErr || !userData?.user) return json({ error: 'Not logged in' }, 401)
-      const { data: prof } = await supabase.from('profiles').select('is_admin').eq('id', userData.user.id).maybeSingle()
-      if (!prof?.is_admin) return json({ error: 'Staff only' }, 403)
+      // Shiny Vault admin only. This runs on the service-role client, which
+      // bypasses RLS, so this check IS the authorization boundary for refunds —
+      // Trainer Center's is_admin must not be sufficient to move money here.
+      const { data: prof } = await supabase
+        .from('profiles').select('is_shinyvault_admin').eq('id', userData.user.id).maybeSingle()
+      if (!prof?.is_shinyvault_admin) return json({ error: 'Staff only' }, 403)
 
       const { data: order } = await supabase.from('orders').select('*').eq('id', body.order_id).maybeSingle()
       if (!order) return json({ error: 'Order not found' }, 404)
