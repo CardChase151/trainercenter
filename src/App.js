@@ -11089,6 +11089,12 @@ function VendorEventsListPage({ isMobile }) {
   const [attendance, setAttendance] = useState({});
   const [vendedBefore, setVendedBefore] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Partnership rules: asked once, ever. Partners who signed up after the
+  // checklist moved to signup already have this stamped. Everyone approved
+  // before it gets asked on their next application — this local flag flips
+  // the moment they agree so the second event card on the page drops it too.
+  const [termsDone, setTermsDone] = useState(false);
+  const needsTerms = !termsDone && vendorNeedsTerms(vendor);
 
   useEffect(() => {
     if (authRolesLoading) return;
@@ -11173,9 +11179,10 @@ function VendorEventsListPage({ isMobile }) {
                 vendorStatus={vendor.status}
                 isFirstApplication={Object.keys(applications).length === 0}
                 hasAttendanceHistory={Object.keys(attendance).length > 0 || vendedBefore > 0}
-                vendedBefore={vendedBefore}
+                needsTerms={needsTerms}
                 autoOpenApply={ev.id === autoOpenEventId}
                 onApplied={(app) => setApplications(prev => ({ ...prev, [ev.id]: app }))}
+                onAgreedToTerms={() => setTermsDone(true)}
                 onCheckedIn={(att) => setAttendance(prev => ({ ...prev, [ev.id]: att }))}
                 isMobile={isMobile}
               />
@@ -11353,9 +11360,8 @@ function VendorStatusBadge({ status }) {
 }
 
 // ─── Per-event card on vendor dashboard ───────────────────
-function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, vendedBefore = 0, autoOpenApply = false, onApplied, onCheckedIn, isMobile }) {
+function VendorEventCard({ event, application, attendance, vendorId, vendorStatus, isFirstApplication, hasAttendanceHistory, needsTerms = false, autoOpenApply = false, onApplied, onAgreedToTerms, onCheckedIn, isMobile }) {
   const [showApply, setShowApply] = useState(false); // open the apply modal
-  const [showChoice, setShowChoice] = useState(false); // first-timer full-table-vs-free-half-table popup
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showCancel, setShowCancel] = useState(false); // post-approval cancel modal
   const [showInfo, setShowInfo] = useState(false);     // "Cost & info" modal
@@ -11376,9 +11382,8 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
     if (!autoOpenApply || autoOpened.current) return;
     if (application || isPast || event.cancelled) return;
     autoOpened.current = true;
-    if (hasAttendanceHistory) setShowApply(true);
-    else setShowChoice(true);
-  }, [autoOpenApply, application, isPast, event.cancelled, hasAttendanceHistory]);
+    setShowApply(true);
+  }, [autoOpenApply, application, isPast, event.cancelled]);
 
   const submitApplication = async ({ requested_start_time, requested_end_time, requested_table_size, vendor_note, terms_agreed_at }) => {
     // The apply modal enforces non-null times; if we somehow get here
@@ -11408,6 +11413,17 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       .single();
     if (insertError) throw insertError;
     onApplied(data);
+    // They ticked the partnership rules on the apply screen because they'd
+    // never agreed before. Promote it to the vendor row so no future date
+    // asks them again. Non-fatal: the application already stands either way.
+    if (terms_agreed_at) {
+      const { error: termsErr } = await supabase
+        .from('vendors')
+        .update({ terms_agreed_at, terms_version: VENDOR_RULES_VERSION })
+        .eq('id', vendorId);
+      if (termsErr) console.warn('[vendor terms] could not save agreement', termsErr);
+      else onAgreedToTerms?.(terms_agreed_at);
+    }
     // Free event: nothing to gate on, so the application is "successful"
     // the moment it's submitted, same as always. Paid events wait — the
     // stripe-vendor-payment confirm_setup action fires this same email
@@ -11432,43 +11448,6 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         window.location.href = fn.url;
       }
     }
-    return data;
-  };
-
-  // First-timer path: free shared half-table, no card, no Stripe at all.
-  // fee_cents is deliberately 0 regardless of this event's real table fee —
-  // this is the free first-time-vendor offer, independent of what the event
-  // normally charges. requested_table_size 'half' feeds directly into the
-  // existing staff Tables-page pairing (auto-pair + manual override), so no
-  // new pairing UI is needed. vendor_note (not decision_note — that field
-  // gets wiped by finalizeDecision on every approve/decline) flags this row
-  // for staff.
-  const submitFreeHalfTableApplication = async () => {
-    const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
-    const vendorEnd = event.vendor_end_time || event.end_time || '20:00:00';
-    const { data, error: insertError } = await supabase
-      .from('vendor_applications')
-      .insert({
-        vendor_id: vendorId,
-        event_id: event.id,
-        requested_start_time: vendorStart.slice(0, 5),
-        requested_end_time: vendorEnd.slice(0, 5),
-        requested_table_size: 'half',
-        fee_cents: 0,
-        payment_status: 'none',
-        vendor_note: 'First-time vendor — free shared half-table (confirmed table-sharing; attested never vended with us before).',
-        terms_agreed_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-    if (insertError) throw insertError;
-    onApplied(data);
-    // Free — nothing to gate on, fires immediately same as any $0 application.
-    sendVendorEmail({
-      type: 'application_received',
-      application_id: data.id,
-      is_first_time: true,
-    });
     return data;
   };
 
@@ -11596,7 +11575,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       // hides past events from the "no application" branch.
       actionEl = (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: '6px' }}>
-          <button onClick={() => hasAttendanceHistory ? setShowApply(true) : setShowChoice(true)} style={primaryBtnStyle('#C8102E')}>
+          <button onClick={() => setShowApply(true)} style={primaryBtnStyle('#C8102E')}>
             <Plus size={16} /> Apply for this date
           </button>
           {!isPast && (
@@ -11817,18 +11796,10 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           </div>
         </div>
       </div>
-      {showChoice && (
-        <FirstTimerChoiceModal
-          event={event}
-          vendedBefore={vendedBefore}
-          onClose={() => setShowChoice(false)}
-          onChooseFullTable={() => { setShowChoice(false); setShowApply(true); }}
-          onChooseFreeHalfTable={submitFreeHalfTableApplication}
-        />
-      )}
       {showApply && (
         <ApplyForEventModal
           event={event}
+          needsTerms={needsTerms}
           onClose={() => setShowApply(false)}
           onSubmit={submitApplication}
         />
@@ -12141,6 +12112,11 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
   const [removeExistingLogo, setRemoveExistingLogo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Partnership rules — signup only. Editing a profile never re-asks; the
+  // agreement already lives on the vendor row.
+  const [agreed, setAgreed] = useState({});
+  const rulesOk = isEdit || allRulesAgreed(agreed);
+  const toggleRule = (key, on) => setAgreed(prev => ({ ...prev, [key]: on }));
 
   const setField = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
@@ -12178,6 +12154,10 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
       }
       if (!form.specialty) {
         setError('Please pick what you specialize in.');
+        return;
+      }
+      if (!rulesOk) {
+        setError('Please read and check every rule at the bottom to continue.');
         return;
       }
     }
@@ -12234,6 +12214,10 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
           referred_by_name: form.referred_by_name.trim() || null,
           referred_by_contact: form.referred_by_contact.trim() || null,
           referred_by_handle: cleanHandle(form.referred_by_handle),
+          // Agreed at the partnership level, so no future date application
+          // asks them again.
+          terms_agreed_at: new Date().toISOString(),
+          terms_version: VENDOR_RULES_VERSION,
         })
         .select()
         .single();
@@ -12478,6 +12462,24 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             </>
           )}
 
+          {/* Partnership rules — signup only. This is the one and only time
+              they're asked; after this, applying for a date is two clicks. */}
+          {!isEdit && (
+            <>
+              <div style={{ height: '18px' }} />
+              <div style={{
+                backgroundColor: '#fff0f0', border: '1px solid #fecaca', borderRadius: '10px',
+                padding: '12px 14px', marginBottom: '12px',
+              }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#7f1d1d', lineHeight: 1.55 }}>
+                  <strong>How we run our events.</strong> Read these and check each one. You agree to
+                  them once, right here — you will not have to do this again every time you apply for a date.
+                </p>
+              </div>
+              <VendorRulesChecklist agreed={agreed} onToggle={toggleRule} />
+            </>
+          )}
+
           {error && (() => {
             // Quick-validation errors (first name / logo missing) are
             // user-actionable on the spot — no need to route them to IG.
@@ -12523,12 +12525,12 @@ function VendorOnboardingForm({ isMobile, session, onComplete, existingVendor })
             );
           })()}
 
-          <button type="submit" disabled={submitting} style={{
+          <button type="submit" disabled={submitting || !rulesOk} style={{
             width: '100%', padding: '14px',
-            backgroundColor: submitting ? '#999' : '#C8102E', color: '#fff',
+            backgroundColor: (submitting || !rulesOk) ? '#999' : '#C8102E', color: '#fff',
             border: 'none', borderRadius: '10px',
             fontSize: '1rem', fontWeight: '700',
-            cursor: submitting ? 'wait' : 'pointer',
+            cursor: submitting ? 'wait' : !rulesOk ? 'not-allowed' : 'pointer',
           }}>
             {submitting
               ? (isEdit ? 'Saving...' : 'Submitting...')
@@ -12772,166 +12774,6 @@ function vendorMatchesQuery(vendor, query) {
   return false;
 }
 
-// ─── First-timer choice modal ──────────────────────────────
-// Shown instead of ApplyForEventModal when the vendor has no real
-// attendance history (never actually checked in to a Vendor Day). Offers a
-// full-price full table (hands off to the normal ApplyForEventModal,
-// unchanged) or a free shared half-table for first-timers only, no card
-// required. Returning vendors never see this — Apply goes straight to
-// ApplyForEventModal like it always has.
-function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullTable, onChooseFreeHalfTable }) {
-  const [confirmed, setConfirmed] = useState(false);
-  const [attested, setAttested] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [agreed, setAgreed] = useState({});
-  const rulesOk = allRulesAgreed(event, agreed);
-  const toggleRule = (key, on) => setAgreed(prev => ({ ...prev, [key]: on }));
-  const freeReady = confirmed && attested && rulesOk;
-
-  const dateLabel = new Date(event.event_date + 'T12:00:00')
-    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const feeCents = event.table_fee_cents || 0;
-  const feeLabel = `$${(feeCents / 100).toFixed(feeCents % 100 === 0 ? 0 : 2)}`;
-
-  const handleFreeHalfTable = async () => {
-    // Belt and braces: the offer shouldn't be reachable for a returning
-    // vendor at all, but never let the free row get written if it is.
-    if (vendedBefore > 0) {
-      setError('Our records show you have vended with us before, so the first-timer offer does not apply. Please apply for a regular table.');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    try {
-      await onChooseFreeHalfTable();
-      onClose();
-    } catch (err) {
-      setSubmitting(false);
-      setError(err.message || 'Something went wrong.');
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '16px', zIndex: 1000,
-    }} onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="modal-safe-bottom smooth-scroll"
-        style={{
-          backgroundColor: '#fff', borderRadius: '14px',
-          padding: '24px', maxWidth: '460px', width: '100%',
-          maxHeight: '90vh', overflow: 'auto',
-        }}
-      >
-        <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: '800', color: '#1a1a1a' }}>
-          First time vending with us?
-        </h3>
-        <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: '#666' }}>
-          {event.title || 'Vendor Day'} · {dateLabel}
-        </p>
-
-        <button
-          type="button"
-          onClick={onChooseFullTable}
-          style={{
-            width: '100%', textAlign: 'left', padding: '14px 16px',
-            backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '10px',
-            cursor: 'pointer', fontFamily: 'inherit', marginBottom: '14px',
-          }}
-        >
-          <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a', marginBottom: '2px' }}>
-            Apply for a full table
-          </div>
-          <div style={{ fontSize: '0.82rem', color: '#666' }}>
-            {feeCents > 0 ? `${feeLabel} table fee, only charged if approved` : 'Free'}
-          </div>
-        </button>
-
-        <div style={{
-          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px',
-          padding: '14px 16px',
-        }}>
-          <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#15803d', marginBottom: '6px' }}>
-            First-timer? Get a free shared half-table
-          </div>
-          <p style={{ margin: '0 0 12px', fontSize: '0.82rem', color: '#166534', lineHeight: 1.5 }}>
-            New vendors can try us out with a half-table, shared with another first-time vendor,
-            at no cost. No card needed.
-          </p>
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '12px' }}>
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer', accentColor: '#15803d', flexShrink: 0 }}
-            />
-            <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, lineHeight: 1.5 }}>
-              I understand I'll share a table with another first-time vendor.
-            </span>
-          </label>
-          {/* The offer is genuinely once-per-vendor, so make the claim
-              explicit rather than implied. Staff can point at this. */}
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '12px' }}>
-            <input
-              type="checkbox"
-              checked={attested}
-              onChange={(e) => setAttested(e.target.checked)}
-              style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer', accentColor: '#15803d', flexShrink: 0 }}
-            />
-            <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: 600, lineHeight: 1.5 }}>
-              I confirm this is my first time vending with Trainer Center and I have
-              never vended with you before. If that turns out not to be the case, I
-              understand my spot will be switched to a regular paid table.
-            </span>
-          </label>
-          <div style={{ marginBottom: '4px' }}>
-            <VendorRulesChecklist event={event} agreed={agreed} onToggle={toggleRule} accent="#15803d" />
-          </div>
-          <button
-            type="button"
-            onClick={handleFreeHalfTable}
-            disabled={!freeReady || submitting}
-            style={{
-              width: '100%', padding: '12px',
-              backgroundColor: (!freeReady || submitting) ? '#9ca3af' : '#15803d', color: '#fff',
-              border: 'none', borderRadius: '10px', fontSize: '0.95rem', fontWeight: '700',
-              cursor: (!freeReady || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            {submitting ? 'Reserving…' : 'Reserve my free half-table'}
-          </button>
-        </div>
-
-        {error && (
-          <div style={{
-            backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-            color: '#dc2626', borderRadius: '8px', padding: '10px 12px',
-            fontSize: '0.85rem', margin: '14px 0 0',
-            display: 'flex', alignItems: 'center', gap: '8px'
-          }}>
-            <AlertCircle size={16} />
-            {error}
-          </div>
-        )}
-
-        <button type="button" onClick={onClose} disabled={submitting} style={{
-          width: '100%', padding: '12px', marginTop: '14px',
-          backgroundColor: '#fff', color: '#666',
-          border: '1px solid #ddd', borderRadius: '10px',
-          fontSize: '0.9rem', fontWeight: '700', fontFamily: 'inherit',
-          cursor: submitting ? 'wait' : 'pointer',
-        }}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Apply-for-event modal ────────────────────────────────
 // Shown when a logged-in approved vendor clicks "Apply for this date" on
 // their dashboard. Simple confirmation: shows the event's date + vendor
@@ -12939,13 +12781,21 @@ function FirstTimerChoiceModal({ event, vendedBefore = 0, onClose, onChooseFullT
 // Center handles table assignments). Collects only an optional
 // vendor_note. The requested_* columns are NOT NULL in the DB, so we
 // persist the event's vendor window and 'tbd' for table size.
-// ─── Vendor event rules ───────────────────────────────────
-// Every rule has to be ticked before an application can be submitted, on both
-// the paid and free first-timer paths. `hours` is filled in from the event's
-// real vendor window so it can never drift from what's actually scheduled.
-function vendorEventRules(event) {
-  const start = formatTime12h(event?.vendor_start_time || event?.start_time || '12:00:00') || '12 PM';
-  const end = formatTime12h(event?.vendor_end_time || event?.end_time || '22:00:00') || '10 PM';
+// ─── Vendor partnership rules ─────────────────────────────
+// These are PARTNERSHIP terms, not per-date terms. Every box has to be ticked
+// once — at signup for new partners, or on the next date application for
+// partners who were approved before the checklist moved up. After that they're
+// never asked again (vendors.terms_agreed_at is the gate).
+//
+// Bump VENDOR_RULES_VERSION whenever the wording of a rule materially changes.
+// Anyone whose stored version is behind gets asked to agree one more time,
+// because consenting to the old wording isn't consenting to the new one.
+const VENDOR_RULES_VERSION = 1;
+
+// Deliberately static, including the hours. Events are typically the last
+// Friday of the month, 12 to 10, and the point of the window rule is "can you
+// commit to a day like that" — not "here are this specific event's minutes."
+function vendorEventRules() {
   return [
     {
       key: 'pokemon_only',
@@ -12968,10 +12818,12 @@ function vendorEventRules(event) {
     },
     {
       key: 'full_window',
-      title: `The full window, ${start} to ${end}`,
-      body: `You are signing up for the whole day. You cannot pick a shorter time inside it. `
-        + 'There is daylight early on, so bring a canopy just in case. Once it gets dark, bring lights: '
-        + 'some for the look of your setup, and some that actually help people see the cards.',
+      title: 'I can do the full day, 12 PM to 10 PM',
+      body: 'Our events are typically the last Friday of the month, 12 PM to 10 PM. You are signing up for '
+        + 'the whole day. You cannot pick a shorter time inside it. Only check this if you can actually '
+        + 'commit to that window. There is daylight early on, so bring a canopy just in case. Once it gets '
+        + 'dark, bring lights: some for the look of your setup, and some that actually help people see the cards.',
+      note: 'Exact hours are on each event, but plan for a full 12-to-10 day.',
     },
     {
       key: 'rotate_spot',
@@ -12986,8 +12838,8 @@ function vendorEventRules(event) {
   ];
 }
 
-function VendorRulesChecklist({ event, agreed, onToggle, accent = '#C8102E' }) {
-  const rules = vendorEventRules(event);
+function VendorRulesChecklist({ agreed, onToggle, accent = '#C8102E' }) {
+  const rules = vendorEventRules();
   return (
     <div style={{
       backgroundColor: '#fafafa', border: '1px solid #eee', borderRadius: '10px',
@@ -13034,17 +12886,29 @@ function VendorRulesChecklist({ event, agreed, onToggle, accent = '#C8102E' }) {
   );
 }
 
-function allRulesAgreed(event, agreed) {
-  return vendorEventRules(event).every(r => !!agreed[r.key]);
+function allRulesAgreed(agreed) {
+  return vendorEventRules().every(r => !!agreed[r.key]);
 }
 
-function ApplyForEventModal({ event, onClose, onSubmit }) {
+// Has this vendor already agreed to the current revision of the rules? NULL
+// terms_agreed_at means they predate the partner-level checklist, so they get
+// asked once on their next date application.
+function vendorNeedsTerms(vendor) {
+  if (!vendor) return true;
+  if (!vendor.terms_agreed_at) return true;
+  return (vendor.terms_version || 0) < VENDOR_RULES_VERSION;
+}
+
+// needsTerms: this vendor has never agreed to the partnership rules (they were
+// approved before the checklist moved to signup, or the rules were revised).
+// They get it once, here, and never see it again on a later date.
+function ApplyForEventModal({ event, needsTerms = false, onClose, onSubmit }) {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [feeConsent, setFeeConsent] = useState(false);
   const [agreed, setAgreed] = useState({});
-  const rulesOk = allRulesAgreed(event, agreed);
+  const rulesOk = !needsTerms || allRulesAgreed(agreed);
   const toggleRule = (key, on) => setAgreed(prev => ({ ...prev, [key]: on }));
 
   const vendorStart = event.vendor_start_time || event.start_time || '12:00:00';
@@ -13074,7 +12938,11 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
         requested_end_time: vendorEnd.slice(0, 5),
         requested_table_size: 'tbd',
         vendor_note: note.trim() || null,
-        terms_agreed_at: new Date().toISOString(),
+        // Only stamp the application when they actually ticked the boxes on
+        // THIS screen. A vendor who agreed at signup gets null here and the
+        // staff panel falls back to their partner-level agreement date —
+        // backdating a consent they gave elsewhere would be a lie.
+        terms_agreed_at: needsTerms ? new Date().toISOString() : null,
       });
       onClose();
     } catch (err) {
@@ -13139,7 +13007,20 @@ function ApplyForEventModal({ event, onClose, onSubmit }) {
           </div>
         </div>
 
-        <VendorRulesChecklist event={event} agreed={agreed} onToggle={toggleRule} />
+        {needsTerms && (
+          <>
+            <div style={{
+              backgroundColor: '#fff0f0', border: '1px solid #fecaca', borderRadius: '10px',
+              padding: '12px 14px', marginBottom: '12px',
+            }}>
+              <p style={{ margin: 0, fontSize: '0.82rem', color: '#7f1d1d', lineHeight: 1.55 }}>
+                <strong>One time only.</strong> These are our partnership rules. Agree once here and
+                you will not be asked again on future dates.
+              </p>
+            </div>
+            <VendorRulesChecklist agreed={agreed} onToggle={toggleRule} />
+          </>
+        )}
 
         {feeCents > 0 && (
           <div style={{
@@ -19118,8 +18999,9 @@ function TableFeeChargeModal({ app, onClose, onFinalized, onRefresh, collectOnly
         </label>
         <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
           {quickBtn(`Full ${money(fee)}`, fee, amountCents === fee)}
-          {quickBtn(`50% ${money(Math.round(fee / 2))}`, Math.round(fee / 2), amountCents === Math.round(fee / 2) && fee !== Math.round(fee / 2))}
-          {quickBtn('Waive $0', 0, isWaive)}
+          {quickBtn(`-25% ${money(Math.round(fee * 0.75))}`, Math.round(fee * 0.75), amountCents === Math.round(fee * 0.75) && fee !== Math.round(fee * 0.75))}
+          {quickBtn(`-50% ${money(Math.round(fee / 2))}`, Math.round(fee / 2), amountCents === Math.round(fee / 2) && fee !== Math.round(fee / 2))}
+          {quickBtn('Free $0', 0, isWaive)}
         </div>
         <div style={{ position: 'relative', marginBottom: '12px' }}>
           <span style={{ position: 'absolute', left: '13px', top: '11px', fontSize: '0.95rem', color: '#6b7280', fontWeight: '600' }}>$</span>
@@ -26576,13 +26458,19 @@ function EmVendorPanel({
               <EmRow label="Table size">{app.requested_table_size && app.requested_table_size !== 'tbd' ? app.requested_table_size : null}</EmRow>
               <EmRow label="Confirmed">{when(app.confirmed_at)}</EmRow>
               <EmRow label="Confirm call">{when(app.confirmation_call_at)}</EmRow>
+              {/* Rules are a partnership-level agreement now. Prefer the
+                  moment they ticked the boxes on THIS application; otherwise
+                  fall back to when they agreed as a partner. */}
               <EmRow label="Agreed to rules">
-                {app.terms_agreed_at
-                  ? new Date(app.terms_agreed_at).toLocaleString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric',
-                      hour: 'numeric', minute: '2-digit',
-                    })
-                  : 'Applied before the rules checklist existed'}
+                {(() => {
+                  const fmt = (t) => new Date(t).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                  });
+                  if (app.terms_agreed_at) return `${fmt(app.terms_agreed_at)} (on this application)`;
+                  if (vendor?.terms_agreed_at) return `${fmt(vendor.terms_agreed_at)} (as a partner)`;
+                  return 'Never agreed — they will be asked on their next application';
+                })()}
               </EmRow>
               <EmRow label="Vendor note">{app.vendor_note}</EmRow>
               <EmRow label="Decision note">{app.decision_note}</EmRow>
