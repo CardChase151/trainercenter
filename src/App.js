@@ -26126,7 +26126,7 @@ function EventVendorManagerPage({ isMobile, staff }) {
             const approvedApps = apps.filter(a => a.status === 'approved');
             if (!approvedApps.length) return null;
             return (
-              <div style={{ display: 'flex', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
                 <button
                   onClick={() => {
                     const { numbers, skipped } = approvedPhonesForIMessage(approvedApps);
@@ -26148,6 +26148,25 @@ function EventVendorManagerPage({ isMobile, staff }) {
                   }}
                 >
                   <Phone size={15} /> Copy approved numbers ({approvedApps.length})
+                </button>
+                <button
+                  onClick={() => {
+                    const { numbers } = approvedPhonesForIMessage(approvedApps);
+                    if (!numbers.length) { alert('No usable phone numbers on the approved list.'); return; }
+                    // On iPhone an sms: link with comma-separated recipients opens a
+                    // fresh group message draft with everyone already added.
+                    window.location.href = 'sms:' + numbers.join(',');
+                  }}
+                  title="Open a new group text in Messages with every approved vendor (works on iPhone)"
+                  style={{
+                    backgroundColor: '#16a34a', color: '#fff',
+                    padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
+                    fontSize: '0.85rem', cursor: 'pointer', border: 'none',
+                    fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  }}
+                >
+                  <Send size={15} /> Start group text
                 </button>
               </div>
             );
