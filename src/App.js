@@ -26121,6 +26121,38 @@ function EventVendorManagerPage({ isMobile, staff }) {
         />
 
         <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto' }}>
+          {/* Copy approved vendors' numbers for a Messages group text */}
+          {(() => {
+            const approvedApps = apps.filter(a => a.status === 'approved');
+            if (!approvedApps.length) return null;
+            return (
+              <div style={{ display: 'flex', marginBottom: '16px' }}>
+                <button
+                  onClick={() => {
+                    const { numbers, skipped } = approvedPhonesForIMessage(approvedApps);
+                    if (!numbers.length) { alert('No usable phone numbers on the approved list.'); return; }
+                    const text = numbers.join(', ');
+                    const note = `Copied ${numbers.length} number${numbers.length === 1 ? '' : 's'}. Open Messages, start a new message, and paste into the To field.` + (skipped > 0 ? `\n\n${skipped} approved vendor${skipped === 1 ? '' : 's'} had no usable number and ${skipped === 1 ? 'was' : 'were'} skipped.` : '');
+                    navigator.clipboard.writeText(text).then(
+                      () => alert(note),
+                      () => window.prompt('Copy the numbers:', text)
+                    );
+                  }}
+                  title="Copy every approved vendor's phone number, formatted for a Messages group text"
+                  style={{
+                    backgroundColor: '#1a1a1a', color: '#fff',
+                    padding: '10px 16px', borderRadius: '8px', fontWeight: '700',
+                    fontSize: '0.85rem', cursor: 'pointer', border: 'none',
+                    fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  }}
+                >
+                  <Phone size={15} /> Copy approved numbers ({approvedApps.length})
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Money summary — only meaningful on paid events */}
           {(event?.table_fee_cents || 0) > 0 && (
             <div style={{
