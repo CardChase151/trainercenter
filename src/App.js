@@ -19735,6 +19735,27 @@ function VendorSurveyResultsModal({ vendor, event, isMobile, onClose }) {
   );
 }
 
+// Build an iMessage-ready recipient string from approved applications:
+// normalize each vendor phone to +1XXXXXXXXXX, drop blanks + dupes, and join
+// with ", " so it pastes straight into the Messages "To:" field as a group.
+// Returns { numbers: [...], skipped: n } — skipped counts approved vendors
+// whose phone wasn't a clean 10-digit US number.
+function approvedPhonesForIMessage(apps) {
+  const seen = new Set();
+  const numbers = [];
+  let skipped = 0;
+  for (const a of apps) {
+    let d = String((a.vendor || {}).phone || '').replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '1') d = d.slice(1);
+    if (d.length !== 10) { skipped++; continue; }
+    const e164 = `+1${d}`;
+    if (seen.has(e164)) continue;
+    seen.add(e164);
+    numbers.push(e164);
+  }
+  return { numbers, skipped };
+}
+
 function EventRosterList({ events, attendance, allVendors, profilesById, emailLog = {}, vendorNextEvent = {}, onDecide, onCollect, onOpenDetail, onOpenFit, onChange, staff, isMobile }) {
   const [cancelling, setCancelling] = useState(null); // event row when cancelling
   const [filter, setFilter] = useState('upcoming'); // 'upcoming' | 'past'
@@ -20226,6 +20247,32 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         >
                           No request ({noRequestSorted.length})
                         </button>
+                        {activeTab === 'approved' && approvedSorted.length > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const { numbers, skipped } = approvedPhonesForIMessage(approvedSorted);
+                              if (!numbers.length) { alert('No usable phone numbers on the approved list.'); return; }
+                              const text = numbers.join(', ');
+                              const note = `Copied ${numbers.length} number${numbers.length === 1 ? '' : 's'}. Open Messages, start a new message, and paste into the To field.` + (skipped > 0 ? `\n\n${skipped} approved vendor${skipped === 1 ? '' : 's'} had no usable number and ${skipped === 1 ? 'was' : 'were'} skipped.` : '');
+                              navigator.clipboard.writeText(text).then(
+                                () => alert(note),
+                                () => window.prompt('Copy the numbers:', text)
+                              );
+                            }}
+                            title="Copy every approved vendor's phone number, formatted for a Messages group text"
+                            style={{
+                              marginLeft: 'auto',
+                              backgroundColor: '#1a1a1a', color: '#fff',
+                              padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                              fontSize: '0.8rem', cursor: 'pointer', border: 'none',
+                              fontFamily: 'inherit',
+                              display: 'inline-flex', alignItems: 'center', gap: '5px',
+                            }}
+                          >
+                            <Phone size={12} /> Copy numbers
+                          </button>
+                        )}
                         {activeTab === 'approved' && approvedSorted.length > 1 && (
                           <select
                             value={activeApprovedSort}
