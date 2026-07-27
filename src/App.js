@@ -19966,6 +19966,31 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         </span>
                       );
                     })()}
+                    {approved.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const { numbers, skipped } = approvedPhonesForIMessage(approved);
+                          if (!numbers.length) { alert('No usable phone numbers on the approved list.'); return; }
+                          const text = numbers.join(', ');
+                          const note = `Copied ${numbers.length} number${numbers.length === 1 ? '' : 's'}. Open Messages, start a new message, and paste into the To field.` + (skipped > 0 ? `\n\n${skipped} approved vendor${skipped === 1 ? '' : 's'} had no usable number and ${skipped === 1 ? 'was' : 'were'} skipped.` : '');
+                          navigator.clipboard.writeText(text).then(
+                            () => alert(note),
+                            () => window.prompt('Copy the numbers:', text)
+                          );
+                        }}
+                        title="Copy every approved vendor's phone number, formatted for a Messages group text"
+                        style={{
+                          backgroundColor: '#1a1a1a', color: '#fff',
+                          padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
+                          fontSize: '0.75rem', cursor: 'pointer', border: 'none',
+                          fontFamily: 'inherit',
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        }}
+                      >
+                        <Phone size={12} /> Numbers
+                      </button>
+                    )}
                     {ev.cancelled ? (
                       <span style={{
                         backgroundColor: '#fef2f2', color: '#dc2626',
@@ -20247,32 +20272,6 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                         >
                           No request ({noRequestSorted.length})
                         </button>
-                        {activeTab === 'approved' && approvedSorted.length > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const { numbers, skipped } = approvedPhonesForIMessage(approvedSorted);
-                              if (!numbers.length) { alert('No usable phone numbers on the approved list.'); return; }
-                              const text = numbers.join(', ');
-                              const note = `Copied ${numbers.length} number${numbers.length === 1 ? '' : 's'}. Open Messages, start a new message, and paste into the To field.` + (skipped > 0 ? `\n\n${skipped} approved vendor${skipped === 1 ? '' : 's'} had no usable number and ${skipped === 1 ? 'was' : 'were'} skipped.` : '');
-                              navigator.clipboard.writeText(text).then(
-                                () => alert(note),
-                                () => window.prompt('Copy the numbers:', text)
-                              );
-                            }}
-                            title="Copy every approved vendor's phone number, formatted for a Messages group text"
-                            style={{
-                              marginLeft: 'auto',
-                              backgroundColor: '#1a1a1a', color: '#fff',
-                              padding: '6px 12px', borderRadius: '6px', fontWeight: '700',
-                              fontSize: '0.8rem', cursor: 'pointer', border: 'none',
-                              fontFamily: 'inherit',
-                              display: 'inline-flex', alignItems: 'center', gap: '5px',
-                            }}
-                          >
-                            <Phone size={12} /> Copy numbers
-                          </button>
-                        )}
                         {activeTab === 'approved' && approvedSorted.length > 1 && (
                           <select
                             value={activeApprovedSort}
