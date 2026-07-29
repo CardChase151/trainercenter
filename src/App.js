@@ -26020,6 +26020,62 @@ function EventVendorManagerPage({ isMobile, staff }) {
     setApps(prev => prev.map(a => a.id === app.id ? { ...a, ...patch } : a));
   };
 
+  // ─── Recover an application removed from the roster (usually by accident) ───
+  // Declined / cancelled / opt-out rows sit in the "Declined / cancelled" group.
+  // These three put someone back without making staff re-issue anything. All
+  // silent except Approve — reopening or removing is a staff-side correction,
+  // not something the vendor should get an email about.
+
+  // Back to a pending decision — lands in the Applied group again.
+  const reopenToApplied = async (app) => {
+    if (!app) return;
+    const patch = { status: 'pending', decision_note: null, decided_at: null, decided_by: null };
+    const { error } = await supabase.from('vendor_applications').update(patch).eq('id', app.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    setApps(prev => prev.map(a => a.id === app.id ? { ...a, ...patch } : a));
+  };
+
+  // Drop the row entirely — the vendor falls back into "Never applied" (that
+  // group is computed as vendors with no application for this event). Guarded
+  // against nuking a real payment record.
+  const removeApplication = async (app) => {
+    if (!app) return;
+    const who = vendorDisplayName(app.vendor);
+    if (app.payment_status === 'charged') {
+      alert(`${who} has a charged payment on this application. Refund it first — deleting here would drop the payment record.`);
+      return;
+    }
+    if (!window.confirm(
+      `Move ${who} back to "Never applied" for this event?\n\n` +
+      `Their application for this date is removed, as if they never requested it. No email is sent.`
+    )) return;
+    const { error } = await supabase.from('vendor_applications').delete().eq('id', app.id);
+    if (error) { alert('Error: ' + error.message); return; }
+    setApps(prev => prev.filter(a => a.id !== app.id));
+    setSelected(null); // they now belong to the Never-applied group; close the panel
+  };
+
+  // Approve straight out of the declined/cancelled area. If a fee was never
+  // settled and there's no card on file, waive it to $0 so approval isn't
+  // blocked (staff asked for a $0 recovery). A card on file still routes
+  // through the charge modal so the fee can be collected normally.
+  const recoverApprove = async (app) => {
+    if (!app) return;
+    const fee = app.fee_cents || 0;
+    const settled = ['charged', 'waived'].includes(app.payment_status);
+    if (fee > 0 && !settled) {
+      if (app.stripe_payment_method_id) { setChargeTarget({ app, note: null }); return; }
+      const waive = {
+        payment_status: 'waived', charged_amount_cents: 0,
+        charged_at: new Date().toISOString(), payment_decided_by: staff.id,
+      };
+      const { error } = await supabase.from('vendor_applications').update(waive).eq('id', app.id);
+      if (error) { alert('Error: ' + error.message); return; }
+      setApps(prev => prev.map(a => a.id === app.id ? { ...a, ...waive } : a));
+    }
+    await finalizeDecision(app.id, 'approved', null);
+  };
+
   const setVendorRating = async (vendorId, rating) => {
     const prevValue = allVendors.find(v => v.id === vendorId)?.staff_experience_rating;
     const patch = (v) => v.id === vendorId ? { ...v, staff_experience_rating: rating } : v;
@@ -26287,6 +26343,9 @@ function EventVendorManagerPage({ isMobile, staff }) {
           onClose={() => setSelected(null)}
           onDecide={decide}
           onCancel={cancelApplication}
+          onRecoverApprove={recoverApprove}
+          onReopenToApplied={reopenToApplied}
+          onRemoveApplication={removeApplication}
           onRequirePayment={requirePayment}
           onCollect={(app) => setChargeTarget({ app, note: null, collectOnly: true })}
           onRatingChange={setVendorRating}
@@ -26446,7 +26505,8 @@ function EmSection({ title, children }) {
 function EmVendorPanel({
   vendor, app, event, attendance, emails = [], hasSurvey, vendedBefore = 0,
   profilesById, isMobile,
-  onClose, onDecide, onCancel, onRequirePayment, onCollect, onRatingChange,
+  onClose, onDecide, onCancel, onRecoverApprove, onReopenToApplied, onRemoveApplication,
+  onRequirePayment, onCollect, onRatingChange,
   onOpenFull, onOpenNotes, onOpenFit, onOpenSurvey,
 }) {
   const RATINGS = ['beginner', 'novice', 'intermediate', 'advanced', 'expert'];
@@ -26692,30 +26752,55 @@ function EmVendorPanel({
           </div>
         </EmSection>
 
-        {/* Decision + cancel buttons.
-            - Approve/Decline show while a decision is still open (pending/declined).
-            - Cancel shows for any LIVE spot (approved or pending) so an already-
-              approved vendor like a no-show or a change of mind can be pulled.
-            - Already cancelled/declined shows nothing here. */}
-        {app && ['pending', 'declined', 'approved'].includes(app.status) && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px' }}>
-            {['pending', 'declined'].includes(app.status) && (
-              <button onClick={() => onDecide(app, 'approved')} style={btn('#15803d', '#fff', '#15803d')}>
-                <Check size={14} /> Approve
-              </button>
-            )}
-            {app.status === 'pending' && (
-              <button onClick={() => onDecide(app, 'declined')} style={btn('#fff', '#b91c1c', '#fecaca')}>
-                <X size={14} /> Decline
-              </button>
-            )}
-            {['pending', 'approved'].includes(app.status) && (
-              <button onClick={() => onCancel(app)} style={btn('#fff', '#b91c1c', '#fecaca')}>
-                <XCircle size={14} /> Cancel spot
-              </button>
-            )}
-          </div>
-        )}
+        {/* Decision + recovery buttons.
+            - LIVE spot (pending/approved): Approve/Decline while open, Cancel to pull.
+            - REMOVED (declined/cancelled/opt-out): a recovery row to put them
+              back — often the row was declined or cancelled by accident. Approve
+              them, send them back to Applied, or drop the row so they read as
+              Never applied again. */}
+        {app && (() => {
+          const DEAD = ['declined', 'cancelled', 'not_interested', 'vendor_cancelled'];
+          if (DEAD.includes(app.status)) {
+            return (
+              <div style={{ paddingTop: '6px' }}>
+                <div style={{ fontSize: '0.78rem', color: '#999', fontWeight: '700', marginBottom: '8px' }}>
+                  Move this vendor back
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => onRecoverApprove(app)} style={btn('#15803d', '#fff', '#15803d')}>
+                    <Check size={14} /> Approve
+                  </button>
+                  <button onClick={() => onReopenToApplied(app)} style={btn('#fff', '#c2410c', '#fed7aa')}>
+                    <RotateCcw size={14} /> Move to Applied
+                  </button>
+                  <button onClick={() => onRemoveApplication(app)} style={btn('#fff', '#6b7280', '#e5e7eb')}>
+                    <Trash2 size={14} /> Move to Never applied
+                  </button>
+                </div>
+              </div>
+            );
+          }
+          if (['pending', 'approved'].includes(app.status)) {
+            return (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '6px' }}>
+                {app.status === 'pending' && (
+                  <button onClick={() => onDecide(app, 'approved')} style={btn('#15803d', '#fff', '#15803d')}>
+                    <Check size={14} /> Approve
+                  </button>
+                )}
+                {app.status === 'pending' && (
+                  <button onClick={() => onDecide(app, 'declined')} style={btn('#fff', '#b91c1c', '#fecaca')}>
+                    <X size={14} /> Decline
+                  </button>
+                )}
+                <button onClick={() => onCancel(app)} style={btn('#fff', '#b91c1c', '#fecaca')}>
+                  <XCircle size={14} /> Cancel spot
+                </button>
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
     </div>
   );
