@@ -346,8 +346,12 @@ Deno.serve(async (req) => {
     // Exclude staff: vendors whose user_id maps to a profile with is_admin=true
     // are people like Chef and Seth who also happen to be vendors. They don't
     // need the drip — they ARE the people sending it.
+    // Recruiting drip is gated per event: staff flip signup_drip_active off
+    // (Event Manager toggle) once the roster is full so approved partners stop
+    // getting "apply for this date" nudges. Lineup/prep reminders below are
+    // unaffected. Column defaults true, so undefined/null = still on.
     const signupStep = activeStep(SIGNUP_STEPS, daysUntil)
-    if (signupStep) {
+    if (signupStep && ev.signup_drip_active !== false) {
       const { data: approvedVendors } = await supabase
         .from('vendors').select('id, name, email, user_id, response_token').eq('status', 'approved')
       const { data: adminProfiles } = await supabase

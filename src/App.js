@@ -25861,6 +25861,20 @@ function EventVendorManagerPage({ isMobile, staff }) {
 
   const refresh = () => setRefreshKey(k => k + 1);
 
+  // Per-event recruiting-drip kill switch. Column defaults true, so an
+  // undefined/null value reads as ON. Flipping it off stops the daily
+  // vendor-event-drip "signup" nudges to approved partners who haven't applied
+  // (turn off once the roster is full). Prep reminders to approved vendors are
+  // a separate track and keep running.
+  const toggleRecruitingDrip = async () => {
+    if (!event) return;
+    const next = !(event.signup_drip_active !== false);
+    const prev = event;
+    setEvent(e => ({ ...e, signup_drip_active: next }));
+    const { error } = await supabase.from('events').update({ signup_drip_active: next }).eq('id', event.id);
+    if (error) { alert('Could not update recruiting toggle: ' + error.message); setEvent(prev); }
+  };
+
   useEffect(() => {
     if (!isAdmin || !eventId) return;
     let cancelled = false;
@@ -26175,6 +26189,36 @@ function EventVendorManagerPage({ isMobile, staff }) {
           title={event?.title || 'Vendor Day'}
           subtitle={event ? emEventDate(event.event_date) : ''}
         />
+
+        {/* Recruiting-drip kill switch — turn off once the roster is full so
+            approved partners stop getting "apply for this date" nudges. */}
+        {event && (() => {
+          const on = event.signup_drip_active !== false;
+          return (
+            <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto 18px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                onClick={toggleRecruitingDrip}
+                title="Daily recruiting emails to approved vendors who have not applied yet"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+                  backgroundColor: on ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${on ? '#15803d' : '#d1d5db'}`,
+                  color: on ? '#15803d' : '#6b7280',
+                  padding: '9px 15px', borderRadius: '999px',
+                  fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: '700',
+                }}
+              >
+                <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: on ? '#15803d' : '#9ca3af' }} />
+                Vendor recruiting emails: {on ? 'ON' : 'OFF'}
+              </button>
+              <span style={{ fontSize: '0.78rem', color: '#888', maxWidth: '440px', lineHeight: 1.45 }}>
+                {on
+                  ? 'Approved partners who haven’t applied still get “apply for this date” nudges. Turn off once your list is full.'
+                  : 'Recruiting nudges are paused for this event. Prep reminders to approved vendors still go out.'}
+              </span>
+            </div>
+          );
+        })()}
 
         <div style={{ maxWidth: EM_MAX_WIDTH, margin: '0 auto' }}>
           {/* Copy approved vendors' numbers for a Messages group text */}
