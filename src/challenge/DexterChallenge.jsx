@@ -505,12 +505,9 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'rgba(255,255,255,0.18)', padding: '5px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '14px' }}>
               <Sparkles size={13} />Dexter's Challenge
             </div>
-            <h1 style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 900, margin: '0 0 6px', lineHeight: 1.1 }}>
+            <h1 style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 900, margin: 0, lineHeight: 1.1 }}>
               The Pokedex Scavenger Hunt
             </h1>
-            <p style={{ fontSize: '14px', margin: 0, opacity: 0.95, lineHeight: 1.5 }}>
-              Match each card to the vendor who has it. Nail the whole list and you're in the raffle.
-            </p>
           </div>
 
           {/* Body */}
@@ -530,54 +527,35 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               </div>
             ) : (
               <>
-                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', marginBottom: '14px', lineHeight: 1.45 }}>
-                  We'll give you a list of cards. Your job is to find and match the vendor who has each one.
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#1a1a1a', marginBottom: '12px', lineHeight: 1.35 }}>
+                  Find the vendor who has each card!
                 </div>
-                <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.12em', color: '#999', fontWeight: 800, marginBottom: '8px' }}>
-                  How it works
-                </div>
-                <ol style={{ margin: '0 0 16px', paddingLeft: '20px', color: '#444', fontSize: '14px', lineHeight: 1.6 }}>
-                  <li>Go through the event and find the vendor who has each card.</li>
-                  <li>Tap a card and pick that vendor.</li>
-                  <li>Once you've matched the whole list, hit Submit.</li>
-                  <li>We'll tell you how many are right — never which. Keep trying as much as you like.</li>
+                <ol style={{ margin: '0 0 18px', paddingLeft: '22px', color: '#444', fontSize: '15px', lineHeight: 1.7 }}>
+                  <li>Get your list of cards.</li>
+                  <li>Find the vendor who has each one.</li>
+                  <li>Tap the card and pick that vendor.</li>
+                  <li>Tap Submit when you have them all.</li>
                 </ol>
 
-                {/* Completion = guaranteed prize */}
-                <div style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '14px 16px', marginBottom: '14px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#15803d', marginBottom: '4px' }}>
-                    Complete the list, win a prize — guaranteed.
+                <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '16px', marginBottom: '18px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '6px' }}>
+                    Finish the list and you win a prize!
                   </div>
-                  <div style={{ fontSize: '13px', color: '#3f6212', lineHeight: 1.5 }}>
-                    Getting them all correct (100%) means you completed it. Everyone who completes wins something.
-                  </div>
-                </div>
-
-                {/* Tiers = raffles for bigger prizes */}
-                <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '14px 16px', marginBottom: '18px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', fontWeight: 800, color: RED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
-                    <Trophy size={14} />Want to win more?
-                  </div>
-                  <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
-                    How fast you hit 100% also enters you in a raffle for a bigger prize:
+                  <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
+                    Get every card right and you're also in a raffle to win more:
                   </div>
                   {[
-                    ['Tier 1', 'Perfect on your 1st try', settings?.prize_tier1 || '$100 credit toward Aug 21'],
-                    ['Tier 2', 'Perfect on attempt 2 or 3', settings?.prize_tier2 || '$50 credit toward Aug 21'],
-                    ['Tier 3', 'Perfect on attempt 4 or 5', settings?.prize_tier3 || '$25 credit toward Aug 21'],
-                  ].map(([t, d, p]) => (
-                    <div key={t} style={{ marginBottom: '9px' }}>
-                      <div style={{ fontSize: '13px', color: '#444' }}><span style={{ fontWeight: 800, color: RED }}>{t}</span> · {d}</div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#1a1a1a', marginTop: '1px' }}>{p}</div>
+                    ['Tier 1', 'all right on try 1'],
+                    ['Tier 2', 'all right on tries 2-3'],
+                    ['Tier 3', 'all right on tries 4-5'],
+                  ].map(([t, d]) => (
+                    <div key={t} style={{ fontSize: '14px', color: '#444', marginBottom: '5px' }}>
+                      <span style={{ fontWeight: 800, color: RED }}>{t}</span> — {d}
                     </div>
                   ))}
-                  <div style={{ fontSize: '12px', color: '#888', marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                    Each tier is its own raffle. Completing already won you a prize — a tier is a shot at the bigger ones.
+                  <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
+                    Each tier is a raffle. All prizes are credit toward Aug 21.
                   </div>
-                </div>
-
-                <div style={{ fontSize: '12px', color: '#999', fontStyle: 'italic', marginBottom: '18px', textAlign: 'center' }}>
-                  Questions? Ask a staff member.
                 </div>
 
                 {/* One start — everyone who finishes wins a prize, accuracy ranks the raffle */}
@@ -1025,32 +1003,22 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                 </div>
               </div>
 
-              <div style={{ background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '14px 16px', marginBottom: '14px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 800, color: '#15803d', marginBottom: '4px' }}>Complete the list, win a prize — guaranteed.</div>
-                <div style={{ fontSize: '13px', color: '#3f6212', lineHeight: 1.5 }}>
-                  All correct (100%) means you completed it. Everyone who completes wins something.
-                </div>
-              </div>
-
-              <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '14px 16px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', fontWeight: 800, color: RED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
-                  <Trophy size={14} />Want to win more?
-                </div>
-                <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
-                  How fast you hit 100% enters you in a raffle for a bigger prize:
+              <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '6px' }}>Finish the list and you win a prize!</div>
+                <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
+                  Get every card right and you're also in a raffle to win more:
                 </div>
                 {[
-                  ['Tier 1', 'Perfect on your 1st try', settings?.prize_tier1 || '$100 credit toward Aug 21'],
-                  ['Tier 2', 'Perfect on attempt 2 or 3', settings?.prize_tier2 || '$50 credit toward Aug 21'],
-                  ['Tier 3', 'Perfect on attempt 4 or 5', settings?.prize_tier3 || '$25 credit toward Aug 21'],
-                ].map(([t, d, p]) => (
-                  <div key={t} style={{ marginBottom: '9px' }}>
-                    <div style={{ fontSize: '13px', color: '#444' }}><span style={{ fontWeight: 800, color: RED }}>{t}</span> · {d}</div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#1a1a1a', marginTop: '1px' }}>{p}</div>
+                  ['Tier 1', 'all right on try 1'],
+                  ['Tier 2', 'all right on tries 2-3'],
+                  ['Tier 3', 'all right on tries 4-5'],
+                ].map(([t, d]) => (
+                  <div key={t} style={{ fontSize: '14px', color: '#444', marginBottom: '5px' }}>
+                    <span style={{ fontWeight: 800, color: RED }}>{t}</span> — {d}
                   </div>
                 ))}
-                <div style={{ fontSize: '12px', color: '#888', marginTop: '4px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                  Each tier is its own raffle. Completing already won you a prize — a tier is a shot at the bigger ones.
+                <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
+                  Each tier is a raffle. All prizes are credit toward Aug 21.
                 </div>
               </div>
 
