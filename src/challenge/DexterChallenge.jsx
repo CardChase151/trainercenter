@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import DexterIntro from './DexterIntro';
 import {
   X, Search, Check, CheckCircle2, Loader2, ArrowRight, Trophy,
   Ticket, ShieldCheck, RotateCcw, AlertCircle, Delete, Sparkles, Star,
@@ -560,7 +559,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
 
                 {/* One start — everyone who finishes wins a prize, accuracy ranks the raffle */}
                 <button
-                  onClick={() => setPhase('video')}
+                  onClick={() => setPhase('play')}
                   style={{
                     width: '100%', background: `linear-gradient(135deg, ${RED} 0%, #FF1A8C 100%)`,
                     color: '#fff', border: 'none', borderRadius: '14px', padding: '16px',
@@ -580,19 +579,6 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   }
 
   // ── DEXTER BOOT VIDEO ──
-  if (phase === 'video') {
-    return (
-      <>
-        {styleTag}
-        <DexterIntro
-          imageSrc="/pokedex.png"
-          isMobile={isMobile}
-          onDone={() => setPhase('play')}
-        />
-      </>
-    );
-  }
-
   // ── 3-2-1 COUNTDOWN ──
   if (phase === 'countdown') {
     return (
