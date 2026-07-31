@@ -529,18 +529,23 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   }
 
   // ── Easy mode helpers ──
-  function easyMapFromRows(rows) {
+  // Sets the 3-choice options AND lights up the grid with the last submission's
+  // right/wrong immediately (no resubmit needed).
+  function applyEasyRows(rows) {
     const map = {};
+    const res = {};
     (Array.isArray(rows) ? rows : []).forEach(o => {
       const crossed = new Set((o.crossed_off || []).filter(Boolean));
       map[o.card_id] = { options: o.options || [], crossed_off: crossed, solved: !!o.solved };
+      if (o.last_correct === true || o.last_correct === false) res[o.card_id] = o.last_correct;
     });
-    return map;
+    setEasyOpts(map);
+    if (Object.keys(res).length) setCardResults(res);
   }
   async function loadEasy(rid) {
     try {
       const { data } = await supabase.rpc('get_easy_options', { p_run_id: rid });
-      setEasyOpts(easyMapFromRows(data));
+      applyEasyRows(data);
     } catch (e) { /* non-fatal */ }
   }
   async function enableEasy() {
@@ -549,8 +554,9 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
     try {
       const { data, error } = await supabase.rpc('enable_easy_mode', { p_run_id: runId });
       if (error) throw error;
-      setEasyOpts(easyMapFromRows(data));
+      applyEasyRows(data);
       setEasyMode(true);
+      setResult(null); // close any score popup so the lit-up grid is visible
     } catch (e) {
       setSubmitError(e?.message || 'Could not turn on easy mode.');
     } finally {
