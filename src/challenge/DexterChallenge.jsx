@@ -542,21 +542,19 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                     Finish the list and you win a prize!
                   </div>
                   <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '10px' }}>
-                    You also enter a raffle if you got all 10 right:
+                    Get 100% and you earn a raffle ticket:
                   </div>
                   {[
-                    ['$100', 'on your 1st try', 'Tier 1'],
-                    ['$50', 'on tries 2 or 3', 'Tier 2'],
-                    ['$25', 'on tries 4-7', 'Tier 3'],
-                  ].map(([amt, d, t]) => (
-                    <div key={t} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '14px', color: '#444', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 900, color: RED, minWidth: '46px' }}>{amt}</span>
-                      <span style={{ flex: 1 }}>{d}</span>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#999' }}>{t}</span>
+                    ['on your 1st try', '$100'],
+                    ['on tries 2-3', '$50'],
+                    ['on tries 4-7', '$25'],
+                  ].map(([d, amt]) => (
+                    <div key={amt} style={{ fontSize: '14px', color: '#444', marginBottom: '7px', lineHeight: 1.4 }}>
+                      100% correct {d} = 1 raffle ticket, chance to win <span style={{ fontWeight: 900, color: RED }}>{amt}</span>
                     </div>
                   ))}
                   <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                    Each tier is a raffle. Credit toward Aug 21.
+                    Winners drawn from all tickets. Credit toward Aug 21.
                   </div>
                 </div>
 
@@ -1008,21 +1006,19 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
                 <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '10px' }}>Finish the list and you win a prize!</div>
                 <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '10px' }}>
-                  You also enter a raffle if you got all 10 right:
+                  Get 100% and you earn a raffle ticket:
                 </div>
                 {[
-                  ['$100', 'on your 1st try', 'Tier 1'],
-                  ['$50', 'on tries 2 or 3', 'Tier 2'],
-                  ['$25', 'on tries 4-7', 'Tier 3'],
-                ].map(([amt, d, t]) => (
-                  <div key={t} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '14px', color: '#444', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 900, color: RED, minWidth: '46px' }}>{amt}</span>
-                    <span style={{ flex: 1 }}>{d}</span>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#999' }}>{t}</span>
+                  ['on your 1st try', '$100'],
+                  ['on tries 2-3', '$50'],
+                  ['on tries 4-7', '$25'],
+                ].map(([d, amt]) => (
+                  <div key={amt} style={{ fontSize: '14px', color: '#444', marginBottom: '7px', lineHeight: 1.4 }}>
+                    100% correct {d} = 1 raffle ticket, chance to win <span style={{ fontWeight: 900, color: RED }}>{amt}</span>
                   </div>
                 ))}
                 <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                  Each tier is a raffle. Credit toward Aug 21.
+                  Winners drawn from all tickets. Credit toward Aug 21.
                 </div>
               </div>
 
