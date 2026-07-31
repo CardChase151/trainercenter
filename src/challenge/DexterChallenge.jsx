@@ -88,18 +88,18 @@ function VendorPicker({ card, vendors, currentVendorId, onPick, onClear, onClose
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
-        display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center',
-        padding: isMobile ? 0 : '24px',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        padding: isMobile ? 'calc(8px + env(safe-area-inset-top)) 0 0' : '24px',
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#fff', width: '100%', maxWidth: '460px',
-          borderRadius: isMobile ? '20px 20px 0 0' : '18px',
-          maxHeight: isMobile ? '82vh' : '78vh',
+          borderRadius: isMobile ? '0 0 20px 20px' : '18px',
+          maxHeight: isMobile ? '72dvh' : '78vh',
           display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', boxShadow: '0 -8px 40px rgba(0,0,0,0.3)',
+          overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
           animation: 'fadeSlide 0.25s ease-out',
         }}
       >
