@@ -11083,6 +11083,28 @@ function VendorDashboardPage({ isMobile }) {
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
 
+        {/* Dexter's Challenge — vendors mark which scavenger cards they also carry */}
+        {isApproved && (
+          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+            <Link to="/vendors/challenge" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '12px',
+              padding: isMobile ? '14px 16px' : '16px 20px', textDecoration: 'none', color: '#1a1a1a',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#16a34a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Award size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '2px' }}>Pokedex Challenge — mark your cards</div>
+                  <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>Check off any hunt cards you also have, so you count as a correct answer.</div>
+                </div>
+              </div>
+              <ChevronRight size={18} color="#16a34a" />
+            </Link>
+          </div>
+        )}
+
         {/* Staff who are also vendors (Chef, Seth) get a Manage Vendors
             shortcut at the top of their own vendor dashboard so they can
             jump back into admin without bouncing through another page. */}
