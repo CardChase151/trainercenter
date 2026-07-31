@@ -607,7 +607,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       <>
         {styleTag}
         <DexterIntro
-          videoSrc="/dexter-boot.mp4"
+          imageSrc="/pokedex.png"
           isMobile={isMobile}
           onDone={() => setPhase('play')}
         />
