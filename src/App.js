@@ -4018,13 +4018,16 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
       );
     }
     if (homeView === 'challenge') {
+      // Fullscreen, immersive — cover the site chrome entirely.
       return (
-        <DexterChallenge
-          eventId={event.id}
-          session={{ user: authUser }}
-          isMobile={isMobile}
-          onExit={() => setHomeView('home')}
-        />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, overflowY: 'auto', background: '#0b0b0d' }}>
+          <DexterChallenge
+            eventId={event.id}
+            session={{ user: authUser }}
+            isMobile={isMobile}
+            onExit={() => setHomeView('home')}
+          />
+        </div>
       );
     }
     return (
@@ -8409,7 +8412,7 @@ function JustCheckedInOverlay({ event, inviter, onContinue }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
         }}
       >
-        I'm inside — award my 3 points
+        Enter the event
         <ArrowRight size={18} />
       </button>
 
