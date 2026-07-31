@@ -340,15 +340,19 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       try {
         const [sRes, vRes] = await Promise.all([
           supabase.from('challenge_settings').select('*').eq('event_id', evId).maybeSingle(),
-          supabase.from('vendors').select('id, name, business_name, ig_handle, avatar_url, status')
+          // Only vendors approved for THIS event (the roster actually on the floor).
+          supabase.from('vendor_applications')
+            .select('vendor_id, vendors(id, name, business_name, ig_handle, avatar_url)')
+            .eq('event_id', evId)
             .eq('status', 'approved'),
         ]);
         if (cancelled) return;
         if (sRes.error) throw sRes.error;
         if (vRes.error) throw vRes.error;
-        const vlist = (vRes.data || []).slice().sort((a, b) =>
-          vDisplayName(a).localeCompare(vDisplayName(b))
-        );
+        const vlist = (vRes.data || [])
+          .map(a => a.vendors)
+          .filter(Boolean)
+          .sort((a, b) => vDisplayName(a).localeCompare(vDisplayName(b)));
         setSettings(sRes.data || null);
         setVendors(vlist);
         setPrep({ loading: false, error: null });
