@@ -196,6 +196,65 @@ function VendorPicker({ card, vendors, currentVendorId, onPick, onClear, onClose
   );
 }
 
+// ─── Easy-mode picker: 3 choices, wrong ones crossed off ───────────────────
+function EasyPicker({ card, easy, currentVendorId, isMobile, onPick, onClose }) {
+  const options = (easy && easy.options) || [];
+  const crossed = (easy && easy.crossed_off) || new Set();
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: isMobile ? 'calc(8px + env(safe-area-inset-top)) 0 0' : '24px',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#fff', width: '100%', maxWidth: '460px', borderRadius: isMobile ? '0 0 20px 20px' : '18px',
+        overflow: 'hidden', boxShadow: '0 10px 40px rgba(0,0,0,0.3)', animation: 'fadeSlide 0.25s ease-out',
+      }}>
+        <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.14em', color: '#15803d', fontWeight: 800 }}>Easy mode &middot; pick one of three</div>
+            <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{card?.card_name}</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: '#f3f4f6', border: 'none', borderRadius: '10px', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={18} color="#555" /></button>
+        </div>
+        <div style={{ padding: '12px 14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {options.map(v => {
+            const isCrossed = crossed.has(v.vendor_id);
+            const selected = v.vendor_id === currentVendorId;
+            return (
+              <button
+                key={v.vendor_id}
+                onClick={() => { if (!isCrossed) onPick(v.vendor_id); }}
+                disabled={isCrossed}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px', width: '100%', textAlign: 'left',
+                  background: isCrossed ? '#f9fafb' : (selected ? '#ecfdf5' : '#fff'),
+                  border: `1.5px solid ${selected ? '#16a34a' : '#e5e7eb'}`, borderRadius: '14px',
+                  padding: '12px 14px', cursor: isCrossed ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  opacity: isCrossed ? 0.55 : 1,
+                }}
+              >
+                <MiniAvatar vendor={v} size={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, color: '#1a1a1a', fontSize: '15px', textDecoration: isCrossed ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{vDisplayName(v)}</div>
+                  {isCrossed ? (
+                    <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 700 }}>Not this one</div>
+                  ) : vHandle(v) ? (
+                    <div style={{ fontSize: '11px', color: '#999' }}>{vHandle(v)}</div>
+                  ) : null}
+                </div>
+                {selected && !isCrossed && (
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={15} color="#fff" strokeWidth={3} /></div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Staff PIN pad ─────────────────────────────────────────────────────────
 function PinPad({ title, subtitle, onEnter, onCancel, busy, error, confirmLabel = 'Enter' }) {
   const [pin, setPin] = useState('');
@@ -319,6 +378,10 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null); // {attempt_no, correct_count, total, perfect}
+  const [easyMode, setEasyMode] = useState(false);
+  const [easyOpts, setEasyOpts] = useState({});     // card_id -> {options:[], crossed_off:[], solved}
+  const [cardResults, setCardResults] = useState({}); // card_id -> bool (easy-mode highlight)
+  const [easyBusy, setEasyBusy] = useState(false);
 
   const [countdown, setCountdown] = useState(3);
   const [showRules, setShowRules] = useState(false);
@@ -385,7 +448,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
         supabase.from('challenge_run_picks').select('card_id, picked_vendor_id').eq('run_id', rid),
         supabase.from('challenge_attempts').select('attempt_no, correct_count, total')
           .eq('run_id', rid).order('attempt_no', { ascending: false }).limit(1),
-        supabase.from('challenge_runs').select('status, prize_kind, prize_claimed_at').eq('id', rid).maybeSingle(),
+        supabase.from('challenge_runs').select('status, prize_kind, prize_claimed_at, easy_mode').eq('id', rid).maybeSingle(),
       ]);
       const pmap = {};
       (pickRes.data || []).forEach(r => { if (r.picked_vendor_id) pmap[r.card_id] = r.picked_vendor_id; });
@@ -395,6 +458,10 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
         setResult({ attempt_no: lastAtt.attempt_no, correct_count: lastAtt.correct_count, total: lastAtt.total, perfect: lastAtt.correct_count === lastAtt.total });
       }
       const runRow = runRes.data;
+      if (runRow && runRow.easy_mode) {
+        setEasyMode(true);
+        loadEasy(rid);
+      }
       if (runRow && (runRow.status === 'perfect' || runRow.status === 'claimed')) {
         // Completed already → open the ticket, NOT the cards (no peeking answers).
         setAwardedKind(runRow.prize_kind || null);
@@ -447,11 +514,62 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error('No result came back. Please try again.');
       setResult(row);
+      // Easy mode: server returns per-card correctness -> highlight + refresh cross-offs
+      if (easyMode && Array.isArray(row.cards)) {
+        const map = {};
+        row.cards.forEach(c => { map[c.card_id] = !!c.correct; });
+        setCardResults(map);
+        loadEasy(runId);
+      }
     } catch (e) {
       setSubmitError(e?.message || 'Could not submit. Please try again.');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // ── Easy mode helpers ──
+  function easyMapFromRows(rows) {
+    const map = {};
+    (Array.isArray(rows) ? rows : []).forEach(o => {
+      const crossed = new Set((o.crossed_off || []).filter(Boolean));
+      map[o.card_id] = { options: o.options || [], crossed_off: crossed, solved: !!o.solved };
+    });
+    return map;
+  }
+  async function loadEasy(rid) {
+    try {
+      const { data } = await supabase.rpc('get_easy_options', { p_run_id: rid });
+      setEasyOpts(easyMapFromRows(data));
+    } catch (e) { /* non-fatal */ }
+  }
+  async function enableEasy() {
+    if (easyBusy || !runId || easyMode) return;
+    setEasyBusy(true);
+    try {
+      const { data, error } = await supabase.rpc('enable_easy_mode', { p_run_id: runId });
+      if (error) throw error;
+      setEasyOpts(easyMapFromRows(data));
+      setEasyMode(true);
+    } catch (e) {
+      setSubmitError(e?.message || 'Could not turn on easy mode.');
+    } finally {
+      setEasyBusy(false);
+    }
+  }
+  // Shared pick/clear (persists to challenge_run_picks) — used by both pickers
+  function pickVendor(cardId, vendorId) {
+    setPicks(p => ({ ...p, [cardId]: vendorId }));
+    setPickerCardId(null);
+    if (runId) supabase.from('challenge_run_picks')
+      .upsert({ run_id: runId, card_id: cardId, picked_vendor_id: vendorId, updated_at: new Date().toISOString() })
+      .then(() => {}, () => {});
+  }
+  function clearVendor(cardId) {
+    setPicks(p => { const n = { ...p }; delete n[cardId]; return n; });
+    setPickerCardId(null);
+    if (runId) supabase.from('challenge_run_picks').delete()
+      .eq('run_id', runId).eq('card_id', cardId).then(() => {}, () => {});
   }
 
   // ── Claim / PIN actions ──
@@ -751,13 +869,30 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               color: '#666', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '4px 0', fontFamily: 'inherit',
             }}
           ><ArrowLeft size={16} />Back</button>
-          <button
-            onClick={() => setShowRules(true)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fff0f0', border: '1px solid #ffd6de',
-              color: RED, fontWeight: 800, fontSize: '13px', cursor: 'pointer', padding: '7px 14px', borderRadius: '999px', fontFamily: 'inherit',
-            }}
-          ><HelpCircle size={15} />Rules</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {easyMode ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#ecfdf5', border: '1px solid #bbf7d0',
+                color: '#15803d', fontWeight: 800, fontSize: '12px', padding: '6px 12px', borderRadius: '999px',
+              }}><Sparkles size={13} />Easy mode on</span>
+            ) : (
+              <button
+                onClick={enableEasy}
+                disabled={easyBusy}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#fff', border: '1px solid #d1d5db',
+                  color: '#374151', fontWeight: 800, fontSize: '13px', cursor: easyBusy ? 'wait' : 'pointer', padding: '7px 12px', borderRadius: '999px', fontFamily: 'inherit',
+                }}
+              >{easyBusy ? <Loader2 size={14} className="dx-spin" /> : <Sparkles size={14} />}Easy mode</button>
+            )}
+            <button
+              onClick={() => setShowRules(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fff0f0', border: '1px solid #ffd6de',
+                color: RED, fontWeight: 800, fontSize: '13px', cursor: 'pointer', padding: '7px 14px', borderRadius: '999px', fontFamily: 'inherit',
+              }}
+            ><HelpCircle size={15} />Rules</button>
+          </div>
         </div>
         <div style={{ maxWidth: '820px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ minWidth: 0 }}>
@@ -805,12 +940,17 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               {cards.map((card, idx) => {
                 const chosenId = picks[card.card_id];
                 const chosen = chosenId ? vendorById[chosenId] : null;
+                // Easy-mode highlight after a submit: green correct, red wrong
+                const hasRes = easyMode && Object.prototype.hasOwnProperty.call(cardResults, card.card_id);
+                const isCorr = hasRes && cardResults[card.card_id];
+                const borderColor = hasRes ? (isCorr ? '#16a34a' : '#dc2626') : (chosen ? RED : '#eee');
+                const borderW = hasRes || chosen ? '2px' : '1px';
                 return (
                   <div
                     key={card.card_id}
                     style={{
                       background: '#fff', borderRadius: '16px', overflow: 'hidden',
-                      border: chosen ? `1.5px solid ${RED}` : '1px solid #eee',
+                      border: `${borderW} solid ${borderColor}`,
                       boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column',
                     }}
                   >
@@ -964,37 +1104,25 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       )}
       )}
 
-      {/* Vendor picker modal */}
-      {activePickerCard && (
+      {/* Picker modal — full search (normal) or 3 choices (easy) */}
+      {activePickerCard && !easyMode && (
         <VendorPicker
           card={activePickerCard}
           vendors={vendors}
           currentVendorId={picks[activePickerCard.card_id] || null}
           isMobile={isMobile}
-          onPick={(vendorId) => {
-            const cardId = activePickerCard.card_id;
-            setPicks(p => ({ ...p, [cardId]: vendorId }));
-            setPickerCardId(null);
-            if (runId) {
-              supabase.from('challenge_run_picks')
-                .upsert({ run_id: runId, card_id: cardId, picked_vendor_id: vendorId, updated_at: new Date().toISOString() })
-                .then(() => {}, () => {});
-            }
-          }}
-          onClear={() => {
-            const cardId = activePickerCard.card_id;
-            setPicks(p => {
-              const next = { ...p };
-              delete next[cardId];
-              return next;
-            });
-            setPickerCardId(null);
-            if (runId) {
-              supabase.from('challenge_run_picks').delete()
-                .eq('run_id', runId).eq('card_id', cardId)
-                .then(() => {}, () => {});
-            }
-          }}
+          onPick={(vendorId) => pickVendor(activePickerCard.card_id, vendorId)}
+          onClear={() => clearVendor(activePickerCard.card_id)}
+          onClose={() => setPickerCardId(null)}
+        />
+      )}
+      {activePickerCard && easyMode && (
+        <EasyPicker
+          card={activePickerCard}
+          easy={easyOpts[activePickerCard.card_id]}
+          currentVendorId={picks[activePickerCard.card_id] || null}
+          isMobile={isMobile}
+          onPick={(vendorId) => pickVendor(activePickerCard.card_id, vendorId)}
           onClose={() => setPickerCardId(null)}
         />
       )}
