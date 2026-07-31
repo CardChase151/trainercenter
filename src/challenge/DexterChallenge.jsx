@@ -382,22 +382,10 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
     }
   }, [evId]);
 
-  // ── Countdown driver: kick off run + tick 3-2-1, then reveal play grid ──
+  // ── Kick off the run as soon as the play grid opens (no countdown) ──
   useEffect(() => {
-    if (phase !== 'countdown') return;
-    setCountdown(3);
+    if (phase !== 'play') return;
     startRun();
-    let n = 3;
-    const iv = setInterval(() => {
-      n -= 1;
-      if (n <= 0) {
-        clearInterval(iv);
-        setPhase('play');
-      } else {
-        setCountdown(n);
-      }
-    }, 1000);
-    return () => clearInterval(iv);
   }, [phase, startRun]);
 
   const totalCards = cards.length;
@@ -602,7 +590,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
         <DexterIntro
           videoSrc="/dexter-boot.mp4"
           isMobile={isMobile}
-          onDone={() => setPhase('countdown')}
+          onDone={() => setPhase('play')}
         />
       </>
     );

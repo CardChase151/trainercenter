@@ -123,19 +123,28 @@ export default function DexterIntro({ videoSrc = '/dexter-boot.mp4', onDone, isM
     right: 0,
     bottom: 0,
     width: '100vw',
-    height: '100vh',
+    height: '100dvh',
     backgroundColor: '#000000',
     overflow: 'hidden',
     zIndex: 9999,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    boxSizing: 'border-box',
+    paddingTop: 'calc(72px + env(safe-area-inset-top))',
+    paddingBottom: 'calc(100px + env(safe-area-inset-bottom))',
+    paddingLeft: '20px',
+    paddingRight: '20px',
   };
 
+  // Contained + capped so the whole Pokedex stays clear of the header and
+  // the Safari bottom URL bar (no cropping by browser chrome).
   const videoStyle = {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
+    width: 'auto',
+    height: 'auto',
+    maxWidth: 'min(74vw, 320px)',
+    maxHeight: 'min(52vh, 420px)',
+    objectFit: 'contain',
     display: phase === 'flash' ? 'none' : 'block',
   };
 
