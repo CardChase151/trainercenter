@@ -4,6 +4,7 @@ import DexterIntro from './DexterIntro';
 import {
   X, Search, Check, CheckCircle2, Loader2, ArrowRight, Trophy,
   Ticket, ShieldCheck, RotateCcw, AlertCircle, Delete, Sparkles, Star,
+  ArrowLeft, HelpCircle,
 } from 'lucide-react';
 
 // ─── Dexter's Challenge — full guest scavenger-hunt experience ─────────────
@@ -321,6 +322,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   const [result, setResult] = useState(null); // {attempt_no, correct_count, total, perfect}
 
   const [countdown, setCountdown] = useState(3);
+  const [showRules, setShowRules] = useState(false);
 
   // Claim / ticket state
   const [pinMode, setPinMode] = useState(null); // 'award' | 'retry' | null
@@ -724,8 +726,24 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       {/* Sticky header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 50, background: '#fff', borderBottom: '1px solid #eee',
-        padding: isMobile ? '14px 16px' : '16px 22px',
+        padding: isMobile ? '10px 16px 12px' : '12px 22px',
       }}>
+        <div style={{ maxWidth: '820px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <button
+            onClick={() => onExit && onExit()}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none',
+              color: '#666', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '4px 0', fontFamily: 'inherit',
+            }}
+          ><ArrowLeft size={16} />Back</button>
+          <button
+            onClick={() => setShowRules(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fff0f0', border: '1px solid #ffd6de',
+              color: RED, fontWeight: 800, fontSize: '13px', cursor: 'pointer', padding: '7px 14px', borderRadius: '999px', fontFamily: 'inherit',
+            }}
+          ><HelpCircle size={15} />Rules</button>
+        </div>
         <div style={{ maxWidth: '820px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11px', fontWeight: 800, color: RED, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
@@ -947,6 +965,75 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
           }}
           onClose={() => setPickerCardId(null)}
         />
+      )}
+
+      {showRules && (
+        <div
+          onClick={() => setShowRules(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(3px)', display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+            justifyContent: 'center', padding: isMobile ? '14px' : '24px', overflowY: 'auto',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', width: '100%', maxWidth: '460px', borderRadius: '22px', overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,0.4)', animation: 'fadeSlide 0.3s ease-out' }}
+          >
+            <div style={{ background: `linear-gradient(135deg, ${RED} 0%, #FF1A8C 100%)`, padding: isMobile ? '20px 22px' : '24px 26px', color: '#fff', position: 'relative' }}>
+              <button
+                onClick={() => setShowRules(false)}
+                aria-label="Close"
+                style={{ position: 'absolute', top: '14px', right: '14px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '10px', width: '32px', height: '32px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              ><X size={18} /></button>
+              <div style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.9 }}>Dexter's Challenge</div>
+              <div style={{ fontSize: '22px', fontWeight: 900, marginTop: '2px' }}>Rules</div>
+            </div>
+            <div style={{ padding: isMobile ? '20px' : '24px 26px' }}>
+              <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#999', fontWeight: 800, marginBottom: '8px' }}>How to play</div>
+              <ol style={{ margin: '0 0 18px', paddingLeft: '20px', color: '#444', fontSize: '14px', lineHeight: 1.6 }}>
+                <li>You get a shuffled list of cards to find.</li>
+                <li>For each one, find the vendor who has it and pick them.</li>
+                <li>Submit to see how many you got right — never which ones.</li>
+                <li>Keep checking and re-submit as many times as you like.</li>
+              </ol>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '14px', padding: '14px 16px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#1a1a1a', marginBottom: '6px' }}>Where to look</div>
+                <div style={{ fontSize: '13px', color: '#555', lineHeight: 1.55 }}>
+                  A card could be in a binder, in a slab, in a frame, or loose outside the box. Check everywhere and ask the vendors.
+                </div>
+              </div>
+
+              <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '14px 16px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', fontWeight: 800, color: RED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                  <Trophy size={14} />Prize tiers
+                </div>
+                {[
+                  ['Tier 1', 'All correct on your 1st try'],
+                  ['Tier 2', 'All correct on your 2nd–3rd try'],
+                  ['Tier 3', 'All correct on your 4th–7th try'],
+                ].map(([t, d]) => (
+                  <div key={t} style={{ display: 'flex', gap: '8px', fontSize: '13px', color: '#444', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 800, color: RED, flexShrink: 0, minWidth: '46px' }}>{t}</span>
+                    <span>{d}</span>
+                  </div>
+                ))}
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '6px', paddingTop: '8px', borderTop: '1px dashed #ffd6de' }}>
+                  Finish the list and you win a prize no matter what. Accuracy just decides the raffle.
+                </div>
+              </div>
+
+              <div style={{ fontSize: '12px', color: '#999', fontStyle: 'italic', textAlign: 'center', marginBottom: '16px' }}>
+                Questions? Ask a staff member.
+              </div>
+              <button
+                onClick={() => setShowRules(false)}
+                style={{ width: '100%', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '14px', padding: '14px', fontSize: '15px', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}
+              >Got it</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
