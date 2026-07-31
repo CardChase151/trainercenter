@@ -235,7 +235,7 @@ function PinPad({ title, subtitle, onEnter, onCancel, busy, error, confirmLabel 
         <div style={{
           display: 'flex', justifyContent: 'center', gap: '10px', margin: '4px 0 16px',
         }}>
-          {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
+          {Array.from({ length: Math.max(3, pin.length) }).map((_, i) => (
             <div key={i} style={{
               width: '12px', height: '12px', borderRadius: '50%',
               background: i < pin.length ? RED : '#e5e7eb',
@@ -364,7 +364,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
     return () => { cancelled = true; };
   }, [evId]);
 
-  // ── Start the run (idempotent per user/event) ──
+  // ── Start (or resume) the run — idempotent per user/event, restores picks ──
   const startRun = useCallback(async () => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -379,6 +379,22 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       const sorted = rows.slice().sort((a, b) => (a.pos ?? 0) - (b.pos ?? 0));
       setRunId(rid);
       setCards(sorted);
+
+      // Resume: pull saved picks + last score so progress survives close/reopen
+      const [pickRes, attRes] = await Promise.all([
+        supabase.from('challenge_run_picks').select('card_id, picked_vendor_id').eq('run_id', rid),
+        supabase.from('challenge_attempts').select('attempt_no, correct_count, total')
+          .eq('run_id', rid).order('attempt_no', { ascending: false }).limit(1),
+      ]);
+      const pmap = {};
+      (pickRes.data || []).forEach(r => { if (r.picked_vendor_id) pmap[r.card_id] = r.picked_vendor_id; });
+      setPicks(pmap);
+      const lastAtt = attRes.data && attRes.data[0];
+      if (lastAtt) {
+        setResult({ attempt_no: lastAtt.attempt_no, correct_count: lastAtt.correct_count, total: lastAtt.total, perfect: lastAtt.correct_count === lastAtt.total });
+      }
+      // Already engaged? Skip the intro and drop straight back into the grid.
+      if (Object.keys(pmap).length > 0 || lastAtt) setPhase('play');
     } catch (e) {
       startedRef.current = false; // allow retry
       setRunError(e?.message || 'Could not start your challenge.');
@@ -386,6 +402,9 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       setRunStarting(false);
     }
   }, [evId]);
+
+  // On mount, load/resume the run so re-opening remembers where you were.
+  useEffect(() => { startRun(); }, [startRun]);
 
   // ── Kick off the run as soon as the play grid opens (no countdown) ──
   useEffect(() => {
@@ -937,16 +956,28 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
           currentVendorId={picks[activePickerCard.card_id] || null}
           isMobile={isMobile}
           onPick={(vendorId) => {
-            setPicks(p => ({ ...p, [activePickerCard.card_id]: vendorId }));
+            const cardId = activePickerCard.card_id;
+            setPicks(p => ({ ...p, [cardId]: vendorId }));
             setPickerCardId(null);
+            if (runId) {
+              supabase.from('challenge_run_picks')
+                .upsert({ run_id: runId, card_id: cardId, picked_vendor_id: vendorId, updated_at: new Date().toISOString() })
+                .then(() => {}, () => {});
+            }
           }}
           onClear={() => {
+            const cardId = activePickerCard.card_id;
             setPicks(p => {
               const next = { ...p };
-              delete next[activePickerCard.card_id];
+              delete next[cardId];
               return next;
             });
             setPickerCardId(null);
+            if (runId) {
+              supabase.from('challenge_run_picks').delete()
+                .eq('run_id', runId).eq('card_id', cardId)
+                .then(() => {}, () => {});
+            }
           }}
           onClose={() => setPickerCardId(null)}
         />

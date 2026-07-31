@@ -3927,6 +3927,49 @@ function EventDayHero({ event, isMobile, isPreview }) {
 //     step 3, persisted, vote count + 10pm lock)
 //   - Anonymous OR logged in but no check-in row → vendor list + prompt to
 //     scan the door QR at the event
+// Home-screen entry for Dexter's Challenge. Flips to a "completed" ticket once
+// the player has finished (status perfect/claimed), showing their raffle tier.
+function DexterHomeButton({ run, onOpen }) {
+  const done = run && (run.status === 'perfect' || run.status === 'claimed');
+  const tierLabel = { tier1: 'Tier 1 · $100', tier2: 'Tier 2 · $50', tier3: 'Tier 3 · $25' }[run?.prize_kind] || null;
+  if (done) {
+    return (
+      <button onClick={onOpen} style={{
+        width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+        background: 'linear-gradient(135deg, #16a34a, #12813c)', color: '#fff', border: 'none',
+        borderRadius: '18px', padding: '22px', boxShadow: '0 10px 24px rgba(22,163,74,0.28)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <CheckCircle2 size={26} />
+          <div>
+            <div style={{ fontSize: '19px', fontWeight: 800 }}>Challenge complete!</div>
+            <div style={{ fontSize: '13px', opacity: 0.95, marginTop: '2px' }}>
+              {tierLabel ? `You earned a ${tierLabel} raffle ticket.` : 'You finished the whole list — nice work!'}
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  }
+  return (
+    <button onClick={onOpen} style={{
+      width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+      background: 'linear-gradient(135deg, #e11d2a, #a80f1a)', color: '#fff', border: 'none',
+      borderRadius: '18px', padding: '22px', boxShadow: '0 10px 24px rgba(200,16,46,0.28)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Award size={26} />
+        <div>
+          <div style={{ fontSize: '19px', fontWeight: 800 }}>Dexter's Challenge</div>
+          <div style={{ fontSize: '13px', opacity: 0.92, marginTop: '2px' }}>
+            A scavenger hunt across the vendors — win a prize.
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function EventDayBody({ event, authUser, isMobile, isPreview }) {
   const [vendors, setVendors] = useState([]);
   const [checkin, setCheckin] = useState(null);
@@ -3934,6 +3977,18 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
   const [loading, setLoading] = useState(true);
   // Post-checkin home: 'home' (two buttons) | 'vote' (favorite vendor) | 'challenge' (Dexter)
   const [homeView, setHomeView] = useState('home');
+  const [challengeRun, setChallengeRun] = useState(null);
+
+  // Refresh the challenge run status whenever we land back on the home view,
+  // so the Dexter button reflects a just-completed run.
+  useEffect(() => {
+    if (!authUser || homeView !== 'home') return;
+    let c = false;
+    supabase.from('challenge_runs').select('status, prize_kind')
+      .eq('event_id', event.id).eq('profile_id', authUser.id).maybeSingle()
+      .then(({ data }) => { if (!c) setChallengeRun(data || null); });
+    return () => { c = true; };
+  }, [authUser, event.id, homeView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4038,21 +4093,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
         <p style={{ fontSize: '14px', color: '#666', textAlign: 'center', margin: '0 0 28px' }}>
           Pick one to get started.
         </p>
-        <button onClick={() => setHomeView('challenge')} style={{
-          width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
-          background: 'linear-gradient(135deg, #e11d2a, #a80f1a)', color: '#fff', border: 'none',
-          borderRadius: '18px', padding: '22px 22px', boxShadow: '0 10px 24px rgba(200,16,46,0.28)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Award size={26} />
-            <div>
-              <div style={{ fontSize: '19px', fontWeight: 800 }}>Dexter's Challenge</div>
-              <div style={{ fontSize: '13px', opacity: 0.92, marginTop: '2px' }}>
-                A scavenger hunt across the vendors — win a prize.
-              </div>
-            </div>
-          </div>
-        </button>
+        <DexterHomeButton run={challengeRun} onOpen={() => setHomeView('challenge')} />
         <button onClick={() => setHomeView('vote')} style={{
           width: '100%', textAlign: 'left', cursor: 'pointer',
           background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5',
@@ -7984,6 +8025,17 @@ function GuestCheckinPage({ isMobile }) {
   const [justCheckedIn, setJustCheckedIn] = useState(false); // shows full-screen confirmation overlay
   const [checkedIn, setCheckedIn] = useState(false);         // already checked in -> two-button home
   const [postView, setPostView] = useState('home');          // 'home' | 'vote' | 'challenge'
+  const [challengeRun, setChallengeRun] = useState(null);
+
+  // Reflect a just-completed run on the home button when we return to it.
+  useEffect(() => {
+    if (!session || !event || postView !== 'home') return;
+    let c = false;
+    supabase.from('challenge_runs').select('status, prize_kind')
+      .eq('event_id', event.id).eq('profile_id', session.user.id).maybeSingle()
+      .then(({ data }) => { if (!c) setChallengeRun(data || null); });
+    return () => { c = true; };
+  }, [session, event, postView]);
 
   // Load event + vendors + existing session/votes on mount
   useEffect(() => {
@@ -8310,19 +8362,7 @@ function GuestCheckinPage({ isMobile }) {
           <p style={{ fontSize: '14px', color: '#666', textAlign: 'center', margin: '0 0 28px' }}>
             Pick one to get started.
           </p>
-          <button onClick={() => setPostView('challenge')} style={{
-            width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
-            background: 'linear-gradient(135deg, #e11d2a, #a80f1a)', color: '#fff', border: 'none',
-            borderRadius: '18px', padding: '22px', boxShadow: '0 10px 24px rgba(200,16,46,0.28)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Award size={26} />
-              <div>
-                <div style={{ fontSize: '19px', fontWeight: 800 }}>Dexter's Challenge</div>
-                <div style={{ fontSize: '13px', opacity: 0.92, marginTop: '2px' }}>A scavenger hunt across the vendors — win a prize.</div>
-              </div>
-            </div>
-          </button>
+          <DexterHomeButton run={challengeRun} onOpen={() => setPostView('challenge')} />
           <button onClick={() => setPostView('vote')} style={{
             width: '100%', textAlign: 'left', cursor: 'pointer',
             background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5', borderRadius: '18px', padding: '22px',
