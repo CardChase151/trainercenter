@@ -531,30 +531,32 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                   Find the vendor who has each card!
                 </div>
                 <ol style={{ margin: '0 0 18px', paddingLeft: '22px', color: '#444', fontSize: '15px', lineHeight: 1.7 }}>
-                  <li>Get your list of cards.</li>
+                  <li>The next screen has your list of cards.</li>
                   <li>Find the vendor who has each one.</li>
                   <li>Tap the card and pick that vendor.</li>
                   <li>Tap Submit when you have them all.</li>
                 </ol>
 
                 <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '16px', marginBottom: '18px' }}>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '10px' }}>
                     Finish the list and you win a prize!
                   </div>
-                  <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
-                    Get every card right and you're also in a raffle to win more:
+                  <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '10px' }}>
+                    You also enter a raffle if you got all 10 right:
                   </div>
                   {[
-                    ['Tier 1', 'all right on try 1'],
-                    ['Tier 2', 'all right on tries 2-3'],
-                    ['Tier 3', 'all right on tries 4-5'],
-                  ].map(([t, d]) => (
-                    <div key={t} style={{ fontSize: '14px', color: '#444', marginBottom: '5px' }}>
-                      <span style={{ fontWeight: 800, color: RED }}>{t}</span> — {d}
+                    ['$100', 'on your 1st try', 'Tier 1'],
+                    ['$50', 'on tries 2 or 3', 'Tier 2'],
+                    ['$25', 'on tries 4-7', 'Tier 3'],
+                  ].map(([amt, d, t]) => (
+                    <div key={t} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '14px', color: '#444', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: 900, color: RED, minWidth: '46px' }}>{amt}</span>
+                      <span style={{ flex: 1 }}>{d}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#999' }}>{t}</span>
                     </div>
                   ))}
                   <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                    Each tier is a raffle. All prizes are credit toward Aug 21.
+                    Each tier is a raffle. Credit toward Aug 21.
                   </div>
                 </div>
 
@@ -1004,21 +1006,23 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               </div>
 
               <div style={{ background: '#fff8f9', border: '1px solid #ffe0e6', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
-                <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '6px' }}>Finish the list and you win a prize!</div>
-                <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '12px' }}>
-                  Get every card right and you're also in a raffle to win more:
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803d', marginBottom: '10px' }}>Finish the list and you win a prize!</div>
+                <div style={{ fontSize: '14px', color: '#555', lineHeight: 1.5, marginBottom: '10px' }}>
+                  You also enter a raffle if you got all 10 right:
                 </div>
                 {[
-                  ['Tier 1', 'all right on try 1'],
-                  ['Tier 2', 'all right on tries 2-3'],
-                  ['Tier 3', 'all right on tries 4-5'],
-                ].map(([t, d]) => (
-                  <div key={t} style={{ fontSize: '14px', color: '#444', marginBottom: '5px' }}>
-                    <span style={{ fontWeight: 800, color: RED }}>{t}</span> — {d}
+                  ['$100', 'on your 1st try', 'Tier 1'],
+                  ['$50', 'on tries 2 or 3', 'Tier 2'],
+                  ['$25', 'on tries 4-7', 'Tier 3'],
+                ].map(([amt, d, t]) => (
+                  <div key={t} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', fontSize: '14px', color: '#444', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 900, color: RED, minWidth: '46px' }}>{amt}</span>
+                    <span style={{ flex: 1 }}>{d}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#999' }}>{t}</span>
                   </div>
                 ))}
                 <div style={{ fontSize: '13px', color: '#888', marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #ffd6de', lineHeight: 1.5 }}>
-                  Each tier is a raffle. All prizes are credit toward Aug 21.
+                  Each tier is a raffle. Credit toward Aug 21.
                 </div>
               </div>
 
