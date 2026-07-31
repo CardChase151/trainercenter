@@ -7,6 +7,9 @@ import { usePageViewTracker } from './lib/usePageViewTracker';
 import { SIGNUP_STEPS as DRIP_SIGNUP_STEPS, LINEUP_STEPS as DRIP_LINEUP_STEPS, SIGNUP_AUDIENCE as DRIP_SIGNUP_AUDIENCE, LINEUP_AUDIENCE as DRIP_LINEUP_AUDIENCE, LIFECYCLE_GROUPS as DRIP_LIFECYCLE_GROUPS } from './lib/dripSchedule';
 import { Lock, Unlock, Menu, X, Phone, MapPin, Clock, Award, ShoppingBag, GraduationCap, Mail, Users, Calendar as CalendarIcon, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, LogOut, Loader2, Image as ImageIcon, Film, Trash2, Upload as UploadIcon, Edit2, Plus, Facebook, ChevronDown, ChevronRight, List, Grid3x3, LogIn, FileEdit, Eye, Settings, HelpCircle, Briefcase, Bold as BoldIcon, Italic as ItalicIcon, Strikethrough, ListOrdered, Link2, Bell, BarChart3, Search, ExternalLink, FlaskConical, Star, Check, Send, StickyNote, XCircle, RotateCcw, Landmark, DollarSign } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import DexterChallenge from './challenge/DexterChallenge';
+import VendorChallengeChecklist from './challenge/VendorChallengeChecklist';
+import StaffChallengeAdmin from './challenge/StaffChallengeAdmin';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import LinkExtension from '@tiptap/extension-link';
@@ -598,6 +601,7 @@ function AuthModal({ defaultMode = 'login', intent: initialIntent = null, allowS
     { key: 'calendar', label: 'Calendar', desc: 'Edit events and Vendor Days', icon: <CalendarIcon size={20} />, to: '/calendar', accent: '#C8102E' },
     { key: 'vendors',  label: 'Vendors',  desc: 'Approve, manage, review applications', icon: <Briefcase size={20} />, to: '/staff/vendors', accent: '#C8102E' },
     { key: 'events',   label: 'Events',   desc: 'Manage each Vendor Day roster', icon: <CalendarIcon size={20} />, to: '/staff/events', accent: '#C8102E' },
+    { key: 'challenge', label: "Dexter's Challenge", desc: 'Scavenger hunt: pool, settings, raffle', icon: <Award size={20} />, to: '/staff/challenge', accent: '#C8102E' },
     { key: 'members',  label: 'Members',  desc: 'Customer list and vote history', icon: <Users size={20} />, to: '/staff/members', accent: '#C8102E' },
     { key: 'comms',    label: 'Communication', desc: 'Compose a vendor or customer blast', icon: <Mail size={20} />, to: '/staff/comms', accent: '#C8102E' },
     { key: 'instagram', label: 'Instagram Contacts', desc: 'Tag followers as member, vendor, or influencer', icon: <IgIcon size={20} />, to: '/staff/instagram', accent: '#C8102E' },
@@ -3928,6 +3932,8 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
   const [checkin, setCheckin] = useState(null);
   const [votes, setVotes] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  // Post-checkin home: 'home' (two buttons) | 'vote' (favorite vendor) | 'challenge' (Dexter)
+  const [homeView, setHomeView] = useState('home');
 
   useEffect(() => {
     let cancelled = false;
@@ -3996,9 +4002,71 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
     return <p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading…</p>;
   }
 
-  // Logged-in member with a check-in row → render the voting view inline
+  // Logged-in member with a check-in row → two-button home (Dexter / favorite vendor)
   if (authUser && checkin) {
-    return <CheckinStep3 vendors={vendors} votes={votes} onToggleVote={toggleVote} event={event} />;
+    if (homeView === 'vote') {
+      return (
+        <div>
+          <div style={{ maxWidth: '720px', margin: '0 auto', padding: isMobile ? '12px 16px 0' : '20px 24px 0' }}>
+            <button onClick={() => setHomeView('home')} style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none',
+              color: '#C8102E', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '4px 0',
+            }}><ArrowLeft size={16} /> Back</button>
+          </div>
+          <CheckinStep3 vendors={vendors} votes={votes} onToggleVote={toggleVote} event={event} />
+        </div>
+      );
+    }
+    if (homeView === 'challenge') {
+      return (
+        <DexterChallenge
+          eventId={event.id}
+          session={{ user: authUser }}
+          isMobile={isMobile}
+          onExit={() => setHomeView('home')}
+        />
+      );
+    }
+    return (
+      <div style={{ maxWidth: '520px', margin: '0 auto', padding: isMobile ? '28px 18px 60px' : '48px 24px 80px' }}>
+        <h1 style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px', textAlign: 'center' }}>
+          You're checked in
+        </h1>
+        <p style={{ fontSize: '14px', color: '#666', textAlign: 'center', margin: '0 0 28px' }}>
+          Pick one to get started.
+        </p>
+        <button onClick={() => setHomeView('challenge')} style={{
+          width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+          background: 'linear-gradient(135deg, #e11d2a, #a80f1a)', color: '#fff', border: 'none',
+          borderRadius: '18px', padding: '22px 22px', boxShadow: '0 10px 24px rgba(200,16,46,0.28)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Award size={26} />
+            <div>
+              <div style={{ fontSize: '19px', fontWeight: 800 }}>Dexter's Challenge</div>
+              <div style={{ fontSize: '13px', opacity: 0.92, marginTop: '2px' }}>
+                A scavenger hunt across the vendors — win a prize.
+              </div>
+            </div>
+          </div>
+        </button>
+        <button onClick={() => setHomeView('vote')} style={{
+          width: '100%', textAlign: 'left', cursor: 'pointer',
+          background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5',
+          borderRadius: '18px', padding: '22px 22px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Star size={26} color="#C8102E" />
+            <div>
+              <div style={{ fontSize: '19px', fontWeight: 800 }}>Select Your Favorite Vendor</div>
+              <div style={{ fontSize: '13px', color: '#666', marginTop: '2px' }}>
+                Cast your 3 votes for tonight's best vendors.
+              </div>
+            </div>
+          </div>
+        </button>
+      </div>
+    );
   }
 
   // Anonymous or not-yet-checked-in: show the vendor lineup + "come down"
@@ -10601,6 +10669,22 @@ function SurveyScaleQuestion({ num, label, helper, value, onChange, lowLabel, hi
         </>
       )}
     </div>
+  );
+}
+
+// Vendor-facing "Pokedex July 31" checklist page (mark which pool cards they also hold).
+function VendorChallengePage({ isMobile }) {
+  const { vendor, isLoading } = useAuth();
+  if (isLoading) {
+    return <PageWrapper isMobile={isMobile}><p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Loading…</p></PageWrapper>;
+  }
+  if (!vendor) {
+    return <PageWrapper isMobile={isMobile}><p style={{ padding: '40px', textAlign: 'center', color: '#888' }}>Vendor sign-in required. Head to your dashboard to log in.</p></PageWrapper>;
+  }
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <VendorChallengeChecklist vendorId={vendor.id} isMobile={isMobile} />
+    </PageWrapper>
   );
 }
 
@@ -27549,6 +27633,8 @@ function App() {
         <Route path="/vendors/upload" element={<VendorUploadPickerPage isMobile={isMobile} />} />
         <Route path="/vendors/upload/:eventId" element={<VendorUploadPage isMobile={isMobile} />} />
         <Route path="/vendors/review" element={<VendorReviewPage isMobile={isMobile} />} />
+        <Route path="/vendors/challenge" element={<VendorChallengePage isMobile={isMobile} />} />
+        <Route path="/staff/challenge" element={<StaffChallengeAdmin isMobile={isMobile} />} />
         {/* Guest-facing alias for the same review/voting flow. DB still uses members. */}
         <Route path="/guest/dashboard" element={<VendorReviewPage isMobile={isMobile} />} />
         <Route path="/guest/review" element={<VendorReviewPage isMobile={isMobile} />} />

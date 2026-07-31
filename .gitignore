@@ -60,3 +60,5 @@ vendor-emails/move-campaign/
 
 # Local MCP tooling config
 .mcp.json
+dexter-challenge/
+src/challenge/AGENT-BRIEF.md
