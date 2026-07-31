@@ -636,7 +636,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   if (phase === 'ticket') {
     const tierText = { tier1: 'Tier 1 · $100', tier2: 'Tier 2 · $50', tier3: 'Tier 3 · $25' }[awardedKind] || null;
     return (
-      <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${RED} 0%, #8a0a20 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '16px' : '24px' }}>
+      <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${RED} 0%, #8a0a20 100%)`, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? 'calc(20px + env(safe-area-inset-top)) 16px 40px' : '48px 24px' }}>
         {styleTag}
         <div style={{
           background: '#fff', width: '100%', maxWidth: '440px', borderRadius: '24px',
@@ -878,31 +878,6 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               })}
             </div>
 
-            {/* Result banner (aggregate only — never per-card) */}
-            {result && (
-              <div style={{
-                marginTop: '20px', background: '#fff', borderRadius: '16px', padding: '20px',
-                border: result.perfect ? '1.5px solid #16a34a' : '1px solid #eee',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.06)', textAlign: 'center', animation: 'fadeSlide 0.3s ease-out',
-              }}>
-                {result.perfect ? (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#16a34a', marginBottom: '6px' }}>
-                    <CheckCircle2 size={22} /><span style={{ fontSize: '18px', fontWeight: 900 }}>Perfect list!</span>
-                  </div>
-                ) : (
-                  <Trophy size={22} color={RED} style={{ marginBottom: '4px' }} />
-                )}
-                <div style={{ fontSize: '22px', fontWeight: 900, color: '#1a1a1a' }}>
-                  You got {result.correct_count} of {result.total} correct
-                </div>
-                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                  {result.perfect
-                    ? 'You matched the whole list. Claim your prize below.'
-                    : `Attempt ${result.attempt_no || ''}. Re-check the cards and try again, or claim what you've got.`}
-                </div>
-              </div>
-            )}
-
             {submitError && (
               <div style={{ marginTop: '14px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <AlertCircle size={16} />{submitError}
@@ -912,51 +887,81 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
         )}
       </div>
 
-      {/* Sticky action bar */}
-      {!runError && !startingOrEmpty && cards.length > 0 && (
+      {/* Sticky action bar — submit only; the result opens a centered popup */}
+      {!runError && !startingOrEmpty && cards.length > 0 && !result && (
         <div style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
           background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(10px)', borderTop: '1px solid #e5e7eb',
           padding: isMobile ? '12px 14px' : '14px 20px',
         }}>
           <div style={{ maxWidth: '820px', margin: '0 auto' }}>
-            {!result ? (
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || pickedCount === 0}
-                style={{
-                  width: '100%', background: (submitting || pickedCount === 0) ? '#f3f4f6' : RED,
-                  color: (submitting || pickedCount === 0) ? '#9ca3af' : '#fff', border: 'none', borderRadius: '14px',
-                  padding: '16px', fontSize: '16px', fontWeight: 800,
-                  cursor: (submitting || pickedCount === 0) ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', fontFamily: 'inherit',
-                }}
-              >
-                {submitting ? <Loader2 size={18} className="dx-spin" /> : <Check size={18} strokeWidth={3} />}
-                {submitting ? 'Checking...' : pickedCount < totalCards ? `Submit ${pickedCount}/${totalCards}` : 'Submit my answers'}
-              </button>
-            ) : (
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => { setResult(null); setSubmitError(null); }}
-                  style={{
-                    flex: 1, background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e7eb',
-                    borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit',
-                  }}
-                ><RotateCcw size={16} />Try again</button>
-                <button
-                  onClick={() => setPhase('ticket')}
-                  style={{
-                    flex: 1, background: RED, color: '#fff', border: 'none',
-                    borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit',
-                  }}
-                ><Ticket size={16} />Claim my prize</button>
-              </div>
-            )}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || pickedCount === 0}
+              style={{
+                width: '100%', background: (submitting || pickedCount === 0) ? '#f3f4f6' : RED,
+                color: (submitting || pickedCount === 0) ? '#9ca3af' : '#fff', border: 'none', borderRadius: '14px',
+                padding: '16px', fontSize: '16px', fontWeight: 800,
+                cursor: (submitting || pickedCount === 0) ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px', fontFamily: 'inherit',
+              }}
+            >
+              {submitting ? <Loader2 size={18} className="dx-spin" /> : <Check size={18} strokeWidth={3} />}
+              {submitting ? 'Checking...' : pickedCount < totalCards ? `Submit ${pickedCount}/${totalCards}` : 'Submit my answers'}
+            </button>
           </div>
         </div>
+      )}
+
+      {/* Result popup — front and center */}
+      {result && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+        }}>
+          <div style={{
+            background: '#fff', width: '100%', maxWidth: '380px', borderRadius: '24px',
+            padding: isMobile ? '28px 22px' : '32px 26px', textAlign: 'center',
+            boxShadow: '0 24px 70px rgba(0,0,0,0.45)', animation: 'dxPop 0.35s ease-out',
+          }}>
+            {result.perfect ? (
+              <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <CheckCircle2 size={40} color="#16a34a" />
+              </div>
+            ) : (
+              <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <Trophy size={38} color={RED} />
+              </div>
+            )}
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#1a1a1a', marginBottom: '6px' }}>
+              You got {result.correct_count} of {result.total}
+            </div>
+            <div style={{ fontSize: '14px', color: '#666', lineHeight: 1.5, marginBottom: '22px' }}>
+              {result.perfect
+                ? 'Perfect list! Claim your prize.'
+                : `Re-check the cards and try again, or claim what you've got.`}
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => { setResult(null); setSubmitError(null); }}
+                style={{
+                  flex: 1, background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e7eb',
+                  borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit',
+                }}
+              ><RotateCcw size={16} />Try again</button>
+              <button
+                onClick={() => setPhase('ticket')}
+                style={{
+                  flex: 1, background: RED, color: '#fff', border: 'none',
+                  borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit',
+                }}
+              ><Ticket size={16} />Claim prize</button>
+            </div>
+          </div>
+        </div>
+      )}
       )}
 
       {/* Vendor picker modal */}
