@@ -7982,6 +7982,8 @@ function GuestCheckinPage({ isMobile }) {
   const [session, setSession] = useState(null);
   const [votes, setVotes] = useState(new Set()); // set of vendor_id
   const [justCheckedIn, setJustCheckedIn] = useState(false); // shows full-screen confirmation overlay
+  const [checkedIn, setCheckedIn] = useState(false);         // already checked in -> two-button home
+  const [postView, setPostView] = useState('home');          // 'home' | 'vote' | 'challenge'
 
   // Load event + vendors + existing session/votes on mount
   useEffect(() => {
@@ -8065,7 +8067,7 @@ function GuestCheckinPage({ isMobile }) {
           .eq('profile_id', s.user.id)
           .maybeSingle();
         if (ci) {
-          setStep(3);
+          setCheckedIn(true); // already checked in -> land on the two-button home
         }
         const { data: vv } = await supabase
           .from('vendor_votes')
@@ -8243,7 +8245,8 @@ function GuestCheckinPage({ isMobile }) {
       <JustCheckedInOverlay
         event={event}
         inviter={pickedInviter}
-        onContinue={() => navigate('/')}
+        onContinue={() => { setJustCheckedIn(false); setCheckedIn(true); setPostView('home'); }}
+        onBack={() => { setJustCheckedIn(false); setCheckedIn(true); setPostView('home'); }}
       />
     );
   }
@@ -8266,6 +8269,72 @@ function GuestCheckinPage({ isMobile }) {
         <div style={{ padding: '40px', textAlign: 'center' }}>
           <h2 style={{ margin: '0 0 12px' }}>No event happening right now.</h2>
           <p style={{ color: '#666', margin: 0 }}>This QR is for live events. Come back during a Trade Night.</p>
+        </div>
+      </CheckinShell>
+    );
+  }
+
+  // Already checked in → the two-button home (Dexter's Challenge / Favorite Vendor)
+  if (checkedIn) {
+    if (postView === 'challenge') {
+      return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, overflowY: 'auto', background: '#0b0b0d' }}>
+          <DexterChallenge
+            eventId={event.id}
+            session={session}
+            isMobile={isMobile}
+            onExit={() => setPostView('home')}
+          />
+        </div>
+      );
+    }
+    if (postView === 'vote') {
+      return (
+        <CheckinShell isPreview={isPreview}>
+          <div style={{ maxWidth: '420px', margin: '0 auto', padding: '12px 16px 0' }}>
+            <button onClick={() => setPostView('home')} style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none',
+              color: '#C8102E', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: '4px 0',
+            }}><ArrowLeft size={16} /> Back</button>
+          </div>
+          <CheckinStep3 vendors={vendors} votes={votes} onToggleVote={toggleVote} event={event} />
+        </CheckinShell>
+      );
+    }
+    return (
+      <CheckinShell isPreview={isPreview}>
+        <div style={{ maxWidth: '520px', margin: '0 auto', padding: isMobile ? '28px 18px 60px' : '44px 24px 80px' }}>
+          <h1 style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px', textAlign: 'center' }}>
+            You're checked in
+          </h1>
+          <p style={{ fontSize: '14px', color: '#666', textAlign: 'center', margin: '0 0 28px' }}>
+            Pick one to get started.
+          </p>
+          <button onClick={() => setPostView('challenge')} style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+            background: 'linear-gradient(135deg, #e11d2a, #a80f1a)', color: '#fff', border: 'none',
+            borderRadius: '18px', padding: '22px', boxShadow: '0 10px 24px rgba(200,16,46,0.28)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Award size={26} />
+              <div>
+                <div style={{ fontSize: '19px', fontWeight: 800 }}>Dexter's Challenge</div>
+                <div style={{ fontSize: '13px', opacity: 0.92, marginTop: '2px' }}>A scavenger hunt across the vendors — win a prize.</div>
+              </div>
+            </div>
+          </button>
+          <button onClick={() => setPostView('vote')} style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer',
+            background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5', borderRadius: '18px', padding: '22px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Star size={26} color="#C8102E" />
+              <div>
+                <div style={{ fontSize: '19px', fontWeight: 800 }}>Select Your Favorite Vendor</div>
+                <div style={{ fontSize: '13px', color: '#666', marginTop: '2px' }}>Cast your 3 votes for tonight's best vendors.</div>
+              </div>
+            </div>
+          </button>
         </div>
       </CheckinShell>
     );
@@ -8329,7 +8398,7 @@ function CheckinShell({ children, isPreview }) {
 // Full-screen "You're checked in" confirmation. Shown right after a fresh
 // check-in completes — designed so door staff can verify it's a real, current
 // check-in (live timestamp, fresh layout, big "show this at the door" copy).
-function JustCheckedInOverlay({ event, inviter, onContinue }) {
+function JustCheckedInOverlay({ event, inviter, onContinue, onBack }) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const inviterName = inviter?.id ? vendorDisplayName(inviter) : null;
@@ -8346,6 +8415,18 @@ function JustCheckedInOverlay({ event, inviter, onContinue }) {
       padding: '32px 24px',
       overflowY: 'auto',
     }}>
+      {onBack && (
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          style={{
+            position: 'absolute', top: '18px', right: '18px',
+            background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: '10px', color: '#fff', width: '36px', height: '36px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}
+        ><X size={18} /></button>
+      )}
       {/* Top: pulsing live indicator + timestamp so this can't be confused with a stale screenshot */}
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: '8px',
