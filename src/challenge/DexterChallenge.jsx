@@ -573,29 +573,18 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                   Questions? Ask a staff member.
                 </div>
 
-                {/* Two motivational accept choices — both simply start the game */}
+                {/* One start — everyone who finishes wins a prize, accuracy ranks the raffle */}
                 <button
                   onClick={() => setPhase('video')}
                   style={{
                     width: '100%', background: `linear-gradient(135deg, ${RED} 0%, #FF1A8C 100%)`,
                     color: '#fff', border: 'none', borderRadius: '14px', padding: '16px',
-                    fontSize: '16px', fontWeight: 800, cursor: 'pointer', marginBottom: '10px',
+                    fontSize: '16px', fontWeight: 800, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
                     boxShadow: '0 12px 28px rgba(200,16,46,0.28)', fontFamily: 'inherit',
                   }}
                 >
-                  <Trophy size={18} />Go for the top prize
-                </button>
-                <button
-                  onClick={() => setPhase('video')}
-                  style={{
-                    width: '100%', background: '#fff', color: '#1a1a1a',
-                    border: '1.5px solid #e5e7eb', borderRadius: '14px', padding: '15px',
-                    fontSize: '15px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '9px',
-                  }}
-                >
-                  <Check size={17} />Just complete the list for a prize
+                  <Trophy size={18} />Start the hunt
                 </button>
               </>
             )}
