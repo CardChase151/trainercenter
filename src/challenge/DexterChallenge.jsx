@@ -380,11 +380,12 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       setRunId(rid);
       setCards(sorted);
 
-      // Resume: pull saved picks + last score so progress survives close/reopen
-      const [pickRes, attRes] = await Promise.all([
+      // Resume: pull saved picks + last score + run status so progress survives close/reopen
+      const [pickRes, attRes, runRes] = await Promise.all([
         supabase.from('challenge_run_picks').select('card_id, picked_vendor_id').eq('run_id', rid),
         supabase.from('challenge_attempts').select('attempt_no, correct_count, total')
           .eq('run_id', rid).order('attempt_no', { ascending: false }).limit(1),
+        supabase.from('challenge_runs').select('status, prize_kind, prize_claimed_at').eq('id', rid).maybeSingle(),
       ]);
       const pmap = {};
       (pickRes.data || []).forEach(r => { if (r.picked_vendor_id) pmap[r.card_id] = r.picked_vendor_id; });
@@ -393,8 +394,16 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
       if (lastAtt) {
         setResult({ attempt_no: lastAtt.attempt_no, correct_count: lastAtt.correct_count, total: lastAtt.total, perfect: lastAtt.correct_count === lastAtt.total });
       }
-      // Already engaged? Skip the intro and drop straight back into the grid.
-      if (Object.keys(pmap).length > 0 || lastAtt) setPhase('play');
+      const runRow = runRes.data;
+      if (runRow && (runRow.status === 'perfect' || runRow.status === 'claimed')) {
+        // Completed already → open the ticket, NOT the cards (no peeking answers).
+        setAwardedKind(runRow.prize_kind || null);
+        if (runRow.status === 'claimed' || runRow.prize_claimed_at) setAwarded(true);
+        setPhase('ticket');
+      } else if (Object.keys(pmap).length > 0 || lastAtt) {
+        // Engaged but not finished → drop straight back into the grid.
+        setPhase('play');
+      }
     } catch (e) {
       startedRef.current = false; // allow retry
       setRunError(e?.message || 'Could not start your challenge.');
@@ -625,6 +634,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
 
   // ── TICKET / CLAIM SCREEN ──
   if (phase === 'ticket') {
+    const tierText = { tier1: 'Tier 1 · $100', tier2: 'Tier 2 · $50', tier3: 'Tier 3 · $25' }[awardedKind] || null;
     return (
       <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${RED} 0%, #8a0a20 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '16px' : '24px' }}>
         {styleTag}
@@ -638,12 +648,17 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                 <div style={{ width: '76px', height: '76px', borderRadius: '50%', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
                   <CheckCircle2 size={44} color="#16a34a" />
                 </div>
-                <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#1a1a1a', margin: '0 0 8px' }}>Prize awarded</h1>
-                <p style={{ fontSize: '15px', color: '#666', margin: '0 0 6px', lineHeight: 1.5 }}>
-                  You're all set. {awardedKind ? `Prize: ${String(awardedKind).replace(/_/g, ' ')}.` : ''}
+                <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#1a1a1a', margin: '0 0 8px' }}>Great job!</h1>
+                <p style={{ fontSize: '15px', color: '#666', margin: '0 0 12px', lineHeight: 1.5 }}>
+                  You finished the whole list.
                 </p>
-                <p style={{ fontSize: '13px', color: '#999', margin: '0 0 22px' }}>
-                  Thanks for playing Dexter's Challenge.
+                {tierText && (
+                  <div style={{ display: 'inline-block', background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#15803d', fontWeight: 800, fontSize: '14px', padding: '6px 14px', borderRadius: '999px', marginBottom: '14px' }}>
+                    {tierText} raffle ticket
+                  </div>
+                )}
+                <p style={{ fontSize: '15px', color: '#16a34a', fontWeight: 800, margin: '0 0 22px' }}>
+                  Prize claimed
                 </p>
                 {onExit && (
                   <button
@@ -658,27 +673,23 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               </>
             ) : (
               <>
-                <div style={{ width: '76px', height: '76px', borderRadius: '20px', background: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+                <div style={{ width: '76px', height: '76px', borderRadius: '20px', background: '#fff0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                   <Ticket size={40} color={RED} />
                 </div>
-                <h1 style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 900, color: '#1a1a1a', margin: '0 0 10px', lineHeight: 1.15 }}>
-                  Show this screen to a staff member.
+                <h1 style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 900, color: '#1a1a1a', margin: '0 0 8px', lineHeight: 1.15 }}>
+                  Great job — you finished!
                 </h1>
-                <p style={{ fontSize: '15px', color: '#666', margin: '0 0 4px', fontWeight: 700 }}>
-                  Don't close it.
+                {tierText && (
+                  <div style={{ display: 'inline-block', background: '#ecfdf5', border: '1px solid #bbf7d0', color: '#15803d', fontWeight: 800, fontSize: '14px', padding: '6px 14px', borderRadius: '999px', marginBottom: '12px' }}>
+                    {tierText} raffle ticket
+                  </div>
+                )}
+                <p style={{ fontSize: '14px', color: '#666', margin: '0 0 4px', fontWeight: 700, lineHeight: 1.4 }}>
+                  Show this screen to a staff member to claim your prize.
                 </p>
-                <p style={{ fontSize: '13px', color: '#999', margin: '0 0 20px', lineHeight: 1.5 }}>
-                  {result?.perfect
-                    ? 'You matched the whole list. A staff member will award your prize.'
-                    : result
-                      ? `You got ${result.correct_count} of ${result.total}. A staff member will take it from here.`
-                      : 'A staff member will take it from here.'}
+                <p style={{ fontSize: '12px', color: '#d97706', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 18px' }}>
+                  Not claimed yet
                 </p>
-
-                <div style={{ background: '#fafafa', border: '1px dashed #ddd', borderRadius: '14px', padding: '14px', marginBottom: '20px' }}>
-                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#aaa', fontWeight: 800, marginBottom: '4px' }}>Run</div>
-                  <div style={{ fontSize: '12px', color: '#888', fontFamily: 'monospace', wordBreak: 'break-all' }}>{runId}</div>
-                </div>
 
                 <button
                   onClick={() => { setPinError(null); setPinMode('award'); }}
@@ -687,7 +698,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                     padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer', marginBottom: '10px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontFamily: 'inherit',
                   }}
-                ><ShieldCheck size={18} />Staff: award prize</button>
+                ><ShieldCheck size={18} />Staff: claim prize</button>
 
                 <button
                   onClick={() => { setPinError(null); setPinMode('retry'); }}

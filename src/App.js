@@ -3931,6 +3931,7 @@ function EventDayHero({ event, isMobile, isPreview }) {
 // the player has finished (status perfect/claimed), showing their raffle tier.
 function DexterHomeButton({ run, onOpen }) {
   const done = run && (run.status === 'perfect' || run.status === 'claimed');
+  const claimed = run && (run.status === 'claimed' || run.prize_claimed_at);
   const tierLabel = { tier1: 'Tier 1 · $100', tier2: 'Tier 2 · $50', tier3: 'Tier 3 · $25' }[run?.prize_kind] || null;
   if (done) {
     return (
@@ -3944,7 +3945,7 @@ function DexterHomeButton({ run, onOpen }) {
           <div>
             <div style={{ fontSize: '19px', fontWeight: 800 }}>Challenge complete!</div>
             <div style={{ fontSize: '13px', opacity: 0.95, marginTop: '2px' }}>
-              {tierLabel ? `You earned a ${tierLabel} raffle ticket.` : 'You finished the whole list — nice work!'}
+              {tierLabel ? `${tierLabel} raffle ticket` : 'You finished the whole list'} · {claimed ? 'Prize claimed' : 'Tap to claim'}
             </div>
           </div>
         </div>
@@ -3984,7 +3985,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
   useEffect(() => {
     if (!authUser || homeView !== 'home') return;
     let c = false;
-    supabase.from('challenge_runs').select('status, prize_kind')
+    supabase.from('challenge_runs').select('status, prize_kind, prize_claimed_at')
       .eq('event_id', event.id).eq('profile_id', authUser.id).maybeSingle()
       .then(({ data }) => { if (!c) setChallengeRun(data || null); });
     return () => { c = true; };
@@ -8031,7 +8032,7 @@ function GuestCheckinPage({ isMobile }) {
   useEffect(() => {
     if (!session || !event || postView !== 'home') return;
     let c = false;
-    supabase.from('challenge_runs').select('status, prize_kind')
+    supabase.from('challenge_runs').select('status, prize_kind, prize_claimed_at')
       .eq('event_id', event.id).eq('profile_id', session.user.id).maybeSingle()
       .then(({ data }) => { if (!c) setChallengeRun(data || null); });
     return () => { c = true; };
