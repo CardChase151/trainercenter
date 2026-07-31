@@ -478,7 +478,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   // ── INTRO POP-UP ──
   if (phase === 'intro') {
     return (
-      <div style={{ minHeight: '100vh', background: '#0b0b0d', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '16px' : '24px' }}>
+      <div style={{ minHeight: '100dvh', background: '#0b0b0d', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: isMobile ? '14px 14px 40px' : '24px' }}>
         {styleTag}
         <div style={{
           background: '#fff', width: '100%', maxWidth: '480px', borderRadius: '22px',
