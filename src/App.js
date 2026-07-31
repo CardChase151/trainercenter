@@ -4073,7 +4073,7 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
         </div>
       );
     }
-    if (homeView === 'challenge') {
+    if (homeView === 'challenge' || homeView === 'practice') {
       // Fullscreen, immersive — cover the site chrome entirely.
       return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 3000, overflowY: 'auto', background: '#0b0b0d' }}>
@@ -4081,11 +4081,13 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
             eventId={event.id}
             session={{ user: authUser }}
             isMobile={isMobile}
+            practice={homeView === 'practice'}
             onExit={() => setHomeView('home')}
           />
         </div>
       );
     }
+    const challengeDone = challengeRun && (challengeRun.status === 'perfect' || challengeRun.status === 'claimed');
     return (
       <div style={{ maxWidth: '520px', margin: '0 auto', padding: isMobile ? '28px 18px 60px' : '48px 24px 80px' }}>
         <h1 style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 6px', textAlign: 'center' }}>
@@ -4095,6 +4097,20 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
           Pick one to get started.
         </p>
         <DexterHomeButton run={challengeRun} onOpen={() => setHomeView('challenge')} />
+        {challengeDone && (
+          <button onClick={() => setHomeView('practice')} style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+            background: '#fff', color: '#4338ca', border: '1.5px solid #c7d2fe', borderRadius: '18px', padding: '18px 22px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <RotateCcw size={22} />
+              <div>
+                <div style={{ fontSize: '17px', fontWeight: 800 }}>Play again</div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>Just for fun, nothing tracked.</div>
+              </div>
+            </div>
+          </button>
+        )}
         <button onClick={() => setHomeView('vote')} style={{
           width: '100%', textAlign: 'left', cursor: 'pointer',
           background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5',
@@ -8329,13 +8345,14 @@ function GuestCheckinPage({ isMobile }) {
 
   // Already checked in → the two-button home (Dexter's Challenge / Favorite Vendor)
   if (checkedIn) {
-    if (postView === 'challenge') {
+    if (postView === 'challenge' || postView === 'practice') {
       return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 3000, overflowY: 'auto', background: '#0b0b0d' }}>
           <DexterChallenge
             eventId={event.id}
             session={session}
             isMobile={isMobile}
+            practice={postView === 'practice'}
             onExit={() => setPostView('home')}
           />
         </div>
@@ -8364,6 +8381,20 @@ function GuestCheckinPage({ isMobile }) {
             Pick one to get started.
           </p>
           <DexterHomeButton run={challengeRun} onOpen={() => setPostView('challenge')} />
+          {challengeRun && (challengeRun.status === 'perfect' || challengeRun.status === 'claimed') && (
+            <button onClick={() => setPostView('practice')} style={{
+              width: '100%', textAlign: 'left', cursor: 'pointer', marginBottom: '16px',
+              background: '#fff', color: '#4338ca', border: '1.5px solid #c7d2fe', borderRadius: '18px', padding: '18px 22px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <RotateCcw size={22} />
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: 800 }}>Play again</div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>Just for fun, nothing tracked.</div>
+                </div>
+              </div>
+            </button>
+          )}
           <button onClick={() => setPostView('vote')} style={{
             width: '100%', textAlign: 'left', cursor: 'pointer',
             background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e5e5', borderRadius: '18px', padding: '22px',

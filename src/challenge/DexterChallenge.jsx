@@ -356,12 +356,12 @@ function PinPad({ title, subtitle, onEnter, onCancel, busy, error, confirmLabel 
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export default function DexterChallenge({ eventId, session, isMobile, onExit }) {
+export default function DexterChallenge({ eventId, session, isMobile, onExit, practice = false }) {
   const evId = eventId || DEFAULT_EVENT_ID;
   const profileId = session?.user?.id || null;
 
   // phase: 'intro' | 'video' | 'countdown' | 'play' | 'ticket'
-  const [phase, setPhase] = useState('intro');
+  const [phase, setPhase] = useState(practice ? 'play' : 'intro');
 
   const [settings, setSettings] = useState(null);
   const [vendors, setVendors] = useState([]);
@@ -428,9 +428,32 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   }, [evId]);
 
   // ── Start (or resume) the run — idempotent per user/event, restores picks ──
+  // Practice / for-fun: client-side shuffle of the pool, nothing recorded.
+  const drawPractice = useCallback(async () => {
+    setRunStarting(true); setRunError(null); setResult(null); setPicks({}); setCardResults({});
+    try {
+      const [poolRes, stRes] = await Promise.all([
+        supabase.from('challenge_cards').select('id, card_name, set_name, number, rarity, image_url').eq('event_id', evId),
+        supabase.from('challenge_settings').select('list_size').eq('event_id', evId).maybeSingle(),
+      ]);
+      if (poolRes.error) throw poolRes.error;
+      const size = (stRes.data && stRes.data.list_size) || 8;
+      const shuffled = (poolRes.data || [])
+        .map(c => ({ card_id: c.id, card_name: c.card_name, set_name: c.set_name, number: c.number, rarity: c.rarity, image_url: c.image_url }))
+        .sort(() => Math.random() - 0.5).slice(0, size);
+      setRunId('practice');
+      setCards(shuffled);
+    } catch (e) {
+      setRunError(e?.message || 'Could not load practice cards.');
+    } finally {
+      setRunStarting(false);
+    }
+  }, [evId]);
+
   const startRun = useCallback(async () => {
     if (startedRef.current) return;
     startedRef.current = true;
+    if (practice) { drawPractice(); return; }
     setRunStarting(true);
     setRunError(null);
     try {
@@ -477,7 +500,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
     } finally {
       setRunStarting(false);
     }
-  }, [evId]);
+  }, [evId, practice, drawPractice]);
 
   // On mount, load/resume the run so re-opening remembers where you were.
   useEffect(() => { startRun(); }, [startRun]);
@@ -506,6 +529,14 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
     setSubmitting(true);
     setSubmitError(null);
     try {
+      if (practice) {
+        const { data, error } = await supabase.rpc('practice_score', { p_picks: picks, p_total: cards.length });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        setResult({ correct_count: row.correct_count, total: row.total, perfect: row.correct_count === row.total, practice: true });
+        setSubmitting(false);
+        return;
+      }
       const { data, error } = await supabase.rpc('submit_challenge_attempt', {
         p_run_id: runId,
         p_picks: picks,
@@ -567,14 +598,14 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
   function pickVendor(cardId, vendorId) {
     setPicks(p => ({ ...p, [cardId]: vendorId }));
     setPickerCardId(null);
-    if (runId) supabase.from('challenge_run_picks')
+    if (runId && !practice) supabase.from('challenge_run_picks')
       .upsert({ run_id: runId, card_id: cardId, picked_vendor_id: vendorId, updated_at: new Date().toISOString() })
       .then(() => {}, () => {});
   }
   function clearVendor(cardId) {
     setPicks(p => { const n = { ...p }; delete n[cardId]; return n; });
     setPickerCardId(null);
-    if (runId) supabase.from('challenge_run_picks').delete()
+    if (runId && !practice) supabase.from('challenge_run_picks').delete()
       .eq('run_id', runId).eq('card_id', cardId).then(() => {}, () => {});
   }
 
@@ -876,7 +907,12 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
             }}
           ><ArrowLeft size={16} />Back</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {easyMode ? (
+            {practice ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#eef2ff', border: '1px solid #c7d2fe',
+                color: '#4338ca', fontWeight: 800, fontSize: '12px', padding: '6px 12px', borderRadius: '999px',
+              }}><Sparkles size={13} />Just for fun</span>
+            ) : easyMode ? (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#ecfdf5', border: '1px solid #bbf7d0',
                 color: '#15803d', fontWeight: 800, fontSize: '12px', padding: '6px 12px', borderRadius: '999px',
@@ -1083,10 +1119,31 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
               You got {result.correct_count} of {result.total}
             </div>
             <div style={{ fontSize: '14px', color: '#666', lineHeight: 1.5, marginBottom: '22px' }}>
-              {result.perfect
-                ? 'Perfect list! Claim your prize.'
-                : `Re-check the cards and try again, or claim what you've got.`}
+              {practice
+                ? 'Just for fun — nothing tracked. Play again or head back.'
+                : result.perfect
+                  ? 'Perfect list! Claim your prize.'
+                  : `Re-check the cards and try again, or claim what you've got.`}
             </div>
+            {practice ? (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => { drawPractice(); }}
+                  style={{
+                    flex: 1, background: RED, color: '#fff', border: 'none',
+                    borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px', fontFamily: 'inherit',
+                  }}
+                ><RotateCcw size={16} />Play again</button>
+                <button
+                  onClick={() => onExit && onExit()}
+                  style={{
+                    flex: 1, background: '#fff', color: '#1a1a1a', border: '1.5px solid #e5e7eb',
+                    borderRadius: '14px', padding: '15px', fontSize: '15px', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >Done</button>
+              </div>
+            ) : (
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => { setResult(null); setSubmitError(null); }}
@@ -1105,6 +1162,7 @@ export default function DexterChallenge({ eventId, session, isMobile, onExit }) 
                 }}
               ><Ticket size={16} />Claim prize</button>
             </div>
+            )}
           </div>
         </div>
       )}
