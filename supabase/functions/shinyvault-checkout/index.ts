@@ -15,8 +15,11 @@
 // someone notices.
 //
 // Actions:
-//   get_shipping_rate       { items: [{product_id, quantity}], to_address: {name, street1, street2?, city, state, zip, country} } -> { available, rate_cents?, carrier?, service?, shippo_rate_id?, reason? }
-//   create_checkout_session { items, fulfillment_method, guest_email?, guest_name?, shipping_address?, shipping_rate_cents?, shipping_carrier?, shipping_service?, shippo_rate_id? } -> { url }
+//   get_shipping_rate       { items: [{product_id, quantity}], to_address: {name, street1, street2?, city, state, zip, country} }
+//                             -> { available, options?: [{shippo_rate_id, carrier, service, estimated_days, postage_cents, insurance_cents, total_cents, cheapest, fastest}],
+//                                  insurance_cents?, declared_value_cents?, signature_required?, reason? }
+//   create_checkout_session { items, fulfillment_method, guest_email?, guest_name?, shipping_address?, shippo_rate_id? } -> { url }
+//                             Shipping cost/carrier/service are re-derived from shippo_rate_id server-side, NOT accepted from the client.
 //   confirm_session          { session_id }                                 -> { ok, order_token? } — eager confirm on the success-page return trip; the
 //                                                                              shinyvault-stripe-webhook function is the durable source of truth.
 import Stripe from 'https://esm.sh/stripe@14.14.0?target=deno'
@@ -36,23 +39,36 @@ const SHIPPO_FROM = {
   email: Deno.env.get('SHIPPO_FROM_EMAIL') || '',
 }
 
-// Shipment extras, both intentionally OFF for launch.
-//
-// SIGNATURE_THRESHOLD_CENTS: order subtotal at or above which we request
-// signature confirmation (~$3.95/parcel on USPS, rolled into the rate the
-// customer pays, so it costs the shop nothing). Set to a positive number —
-// $250 was the figure discussed — to switch it on. Off for now because the
-// first live orders are self-shipped tests and nobody wants to be home to
-// sign for them. Note that above ~$250 declared value most insurers *require*
-// signature for coverage, so these two settings are related.
-const SIGNATURE_THRESHOLD_CENTS = Number(Deno.env.get('SHINYVAULT_SIGNATURE_THRESHOLD_CENTS') || 0)
+// ─── Shipment extras ────────────────────────────────────────
+// Both are priced into the shipping figure the customer pays, so neither costs
+// the shop anything. Both are decided at QUOTE time, not purchase time — they
+// change the carrier rate and the shipment record, and the webhook later buys a
+// rate id that already has them baked in.
 
-// INSURE_SHIPMENTS: Shippo insurance via XCover, 1.25% of declared value
-// domestic. Billed to the Shippo account separately rather than folded into
-// the carrier rate — so unlike signature, turning this on costs the shop
-// money directly unless the total is adjusted to match. Deliberately left off
-// until that call is made.
-const INSURE_SHIPMENTS = (Deno.env.get('SHINYVAULT_INSURE_SHIPMENTS') || '') === 'true'
+// Signature confirmation above this declared value (~$3.95/parcel on USPS,
+// included in the carrier rate Shippo returns). $250 by default: that is also
+// roughly where insurers start *requiring* a signature for coverage, so the two
+// thresholds are deliberately related.
+const SIGNATURE_THRESHOLD_CENTS = Number(Deno.env.get('SHINYVAULT_SIGNATURE_THRESHOLD_CENTS') || 25000)
+
+// Insurance above this declared value. $100 by default, and that number is not
+// arbitrary: USPS Ground Advantage includes $100 of coverage in the label price,
+// and UPS Ground includes $100 of declared-value liability. Insuring below that
+// buys coverage the carrier already provides for free.
+const INSURANCE_MIN_CENTS = Number(Deno.env.get('SHINYVAULT_INSURANCE_MIN_CENTS') || 10000)
+
+// Shippo insurance (XCover) is 1.25% of declared value domestic. Unlike
+// signature, Shippo bills this to the account SEPARATELY from the carrier rate —
+// it never appears in rate.amount — so it has to be added to the customer's
+// shipping line explicitly or the shop silently eats it.
+const INSURANCE_RATE = Number(Deno.env.get('SHINYVAULT_INSURANCE_RATE') || 0.0125)
+
+// Kill switch: set to 'false' to stop insuring regardless of threshold.
+const INSURANCE_ENABLED = (Deno.env.get('SHINYVAULT_INSURANCE_ENABLED') || 'true') !== 'false'
+
+// How many service options to offer at checkout. Cheapest is always included;
+// the rest are the cheapest option at each distinct faster delivery estimate.
+const MAX_RATE_OPTIONS = 4
 
 const SITE_URL = Deno.env.get('SHINYVAULT_SITE_URL') || 'https://shineyvault.netlify.app'
 const supabase = createClient(
@@ -122,17 +138,25 @@ Deno.serve(async (req) => {
       // Extras are priced into the rate we quote, so they have to be decided
       // here at quote time rather than at purchase time — otherwise the
       // customer gets charged one amount and we buy a more expensive label.
+      const wantsSignature = SIGNATURE_THRESHOLD_CENTS > 0 && declaredValueCents >= SIGNATURE_THRESHOLD_CENTS
+      const wantsInsurance = INSURANCE_ENABLED && declaredValueCents > INSURANCE_MIN_CENTS
+
       const extra: Record<string, unknown> = {}
-      if (SIGNATURE_THRESHOLD_CENTS > 0 && declaredValueCents >= SIGNATURE_THRESHOLD_CENTS) {
-        extra.signature_confirmation = 'STANDARD'
-      }
-      if (INSURE_SHIPMENTS && declaredValueCents > 0) {
+      if (wantsSignature) extra.signature_confirmation = 'STANDARD'
+      if (wantsInsurance) {
         extra.insurance = {
           amount: (declaredValueCents / 100).toFixed(2),
           currency: 'USD',
           content: 'Trading cards and collectibles',
         }
       }
+
+      // Rounded up so the shop is never a cent short on what it re-bills.
+      // Identical across every service option, since it depends on declared
+      // value rather than on the carrier.
+      const insuranceCents = wantsInsurance
+        ? Math.ceil(declaredValueCents * INSURANCE_RATE)
+        : 0
 
       try {
         const spRes = await fetch('https://api.goshippo.com/shipments/', {
@@ -174,20 +198,69 @@ Deno.serve(async (req) => {
         // their address and giving up.
         const rates = (shipment.rates || []).slice()
           .sort((a: any, b: any) => parseFloat(a.amount) - parseFloat(b.amount))
-        const cheapest = rates[0]
-        if (!cheapest) {
+        if (!rates.length) {
           const msg = (shipment.messages || []).map((m: any) => m.text).filter(Boolean).join(' ')
           return json({ available: false, reason: msg || 'No carrier rates returned for that address' })
         }
 
+        // Shippo returns a long, noisy list (every service level from every
+        // enabled carrier). Offering all of it is worse than offering one — so
+        // keep the cheapest option at each distinct delivery estimate, which
+        // gives the customer a real speed/price tradeoff rather than six
+        // near-identical ground services.
+        //
+        // Rates with no estimated_days sort last: an unknown ETA can't be
+        // presented as a speed upgrade.
+        const NO_ETA = 99
+        const byEta = new Map<number, any>()
+        for (const r of rates) { // already cheapest-first, so first per ETA wins
+          const eta = Number(r.estimated_days) > 0 ? Number(r.estimated_days) : NO_ETA
+          if (!byEta.has(eta)) byEta.set(eta, r)
+        }
+
+        const cheapest = rates[0]
+        const cheapestEta = Number(cheapest.estimated_days) > 0 ? Number(cheapest.estimated_days) : NO_ETA
+
+        // Cheapest always shown. Fill the remaining slots with strictly faster
+        // options, fastest first, so "pay more to get it sooner" reads top-down.
+        const faster = [...byEta.entries()]
+          .filter(([eta, r]) => eta < cheapestEta && r.object_id !== cheapest.object_id)
+          .sort((a, b) => a[0] - b[0])
+          .map(([, r]) => r)
+          .slice(0, MAX_RATE_OPTIONS - 1)
+
+        const chosen = [cheapest, ...faster]
+        const fastestId = chosen.reduce((best, r) => {
+          const e = Number(r.estimated_days) > 0 ? Number(r.estimated_days) : NO_ETA
+          const be = Number(best.estimated_days) > 0 ? Number(best.estimated_days) : NO_ETA
+          return e < be ? r : best
+        }, chosen[0]).object_id
+
+        const options = chosen.map((r: any) => {
+          const postageCents = Math.round(parseFloat(r.amount) * 100)
+          return {
+            shippo_rate_id: r.object_id,
+            carrier: r.provider,
+            service: r.servicelevel?.name || '',
+            estimated_days: Number(r.estimated_days) > 0 ? Number(r.estimated_days) : null,
+            postage_cents: postageCents,
+            insurance_cents: insuranceCents,
+            // What the customer is actually charged for shipping on this
+            // option. Insurance is included here because Shippo bills it
+            // separately from postage — if it were left out, the shop would
+            // quietly absorb it on every insured order.
+            total_cents: postageCents + insuranceCents,
+            cheapest: r.object_id === cheapest.object_id,
+            fastest: r.object_id === fastestId && chosen.length > 1,
+          }
+        }).sort((a, b) => a.total_cents - b.total_cents)
+
         return json({
           available: true,
-          rate_cents: Math.round(parseFloat(cheapest.amount) * 100),
-          carrier: cheapest.provider,
-          service: cheapest.servicelevel?.name || '',
-          // The rate id, not the shipment id — buying a label is a single
-          // POST /transactions/ against this.
-          shippo_rate_id: cheapest.object_id,
+          options,
+          declared_value_cents: declaredValueCents,
+          insurance_cents: insuranceCents,
+          signature_required: wantsSignature,
         })
       } catch (e) {
         return json({ available: false, reason: (e as Error).message })
@@ -217,8 +290,49 @@ Deno.serve(async (req) => {
       const items = Array.isArray(body.items) ? body.items : []
       if (!items.length) return json({ error: 'Cart is empty' }, 400)
       const fulfillment = body.fulfillment_method === 'ship' ? 'ship' : 'pickup'
-      if (fulfillment === 'ship' && !body.shipping_rate_cents) {
-        return json({ error: 'Get a shipping rate before checking out.' }, 400)
+
+      // Shipping cost is re-derived server-side from the rate id, never taken
+      // from the client. create_order() already refuses to trust client-supplied
+      // product prices (see 20260714150000); shipping was the remaining hole,
+      // and a caller hitting this endpoint directly could otherwise pass
+      // shipping_rate_cents: 1 and get overnight delivery for a penny. Now the
+      // only thing the client chooses is WHICH rate — the price attached to it
+      // comes from Shippo.
+      let shippingCents: number | null = null
+      let shippingCarrier: string | null = null
+      let shippingService: string | null = null
+
+      if (fulfillment === 'ship') {
+        const rateId = typeof body.shippo_rate_id === 'string' ? body.shippo_rate_id : ''
+        if (!rateId) return json({ error: 'Choose a shipping option before checking out.' }, 400)
+        if (!SHIPPO_API_KEY) return json({ error: 'Shipping is not configured yet.' }, 500)
+
+        const rateRes = await fetch(`https://api.goshippo.com/rates/${rateId}`, {
+          headers: { 'Authorization': `ShippoToken ${SHIPPO_API_KEY}` },
+        })
+        const rate = await rateRes.json()
+        if (!rateRes.ok || !rate?.amount) {
+          // Rates expire, so a stale checkout tab lands here rather than
+          // silently buying a price that no longer exists.
+          return json({ error: 'That shipping quote expired — please get a fresh rate.' }, 400)
+        }
+
+        // Recompute insurance from server-side prices rather than reusing the
+        // figure sent back by the browser.
+        const { data: priceRows } = await supabase
+          .from('products').select('id, price_cents').in('id', items.map((i: any) => i.product_id))
+        let declaredCents = 0
+        for (const i of items) {
+          const p = priceRows?.find((pr: any) => pr.id === i.product_id)
+          declaredCents += (p?.price_cents || 0) * (i.quantity || 1)
+        }
+        const insCents = (INSURANCE_ENABLED && declaredCents > INSURANCE_MIN_CENTS)
+          ? Math.ceil(declaredCents * INSURANCE_RATE)
+          : 0
+
+        shippingCents = Math.round(parseFloat(rate.amount) * 100) + insCents
+        shippingCarrier = rate.provider || null
+        shippingService = rate.servicelevel?.name || null
       }
 
       const { data: orderRows, error: orderErr } = await supabase.rpc('create_order', {
@@ -227,9 +341,9 @@ Deno.serve(async (req) => {
         p_guest_name: body.guest_name || null,
         p_fulfillment_method: fulfillment,
         p_shipping_address: fulfillment === 'ship' ? body.shipping_address || null : null,
-        p_shipping_rate_cents: fulfillment === 'ship' ? body.shipping_rate_cents : null,
-        p_shipping_carrier: fulfillment === 'ship' ? body.shipping_carrier || null : null,
-        p_shipping_service: fulfillment === 'ship' ? body.shipping_service || null : null,
+        p_shipping_rate_cents: shippingCents,
+        p_shipping_carrier: shippingCarrier,
+        p_shipping_service: shippingService,
         p_shippo_rate_id: fulfillment === 'ship' ? body.shippo_rate_id || null : null,
         p_items: items.map((i: any) => ({ product_id: i.product_id, quantity: i.quantity })),
       })
@@ -352,6 +466,22 @@ Deno.serve(async (req) => {
 
       await stripe.refunds.create({ payment_intent: order.stripe_payment_intent_id }, { stripeAccount: acct })
       await supabase.from('orders').update({ payment_status: 'refunded' }).eq('id', order.id)
+
+      // Put the stock back. create_order() decremented quantity_available to
+      // hold the item, and the only other release path is the
+      // checkout.session.expired webhook — which never fires for an order that
+      // was actually paid. Without this a refunded item stays at 0 available
+      // and silently disappears from the storefront forever.
+      const { data: refundedItems } = await supabase
+        .from('order_items').select('product_id, quantity').eq('order_id', order.id)
+      for (const it of refundedItems || []) {
+        if (!it.product_id) continue // product deleted since the sale
+        const { error: stockErr } = await supabase.rpc('increment_product_stock', {
+          p_product_id: it.product_id,
+          p_quantity: it.quantity,
+        })
+        if (stockErr) console.error('[shinyvault-checkout] refund restock failed', it.product_id, stockErr.message)
+      }
       return json({ ok: true })
     }
 
