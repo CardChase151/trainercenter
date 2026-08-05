@@ -15,24 +15,45 @@
 // someone notices.
 //
 // Actions:
-//   get_shipping_rate       { items: [{product_id, quantity}], to_address } -> { available, rate_cents?, carrier?, service?, easypost_shipment_id?, reason? }
-//   create_checkout_session { items, fulfillment_method, guest_email?, guest_name?, shipping_address?, shipping_rate_cents?, shipping_carrier?, shipping_service?, easypost_shipment_id? } -> { url }
+//   get_shipping_rate       { items: [{product_id, quantity}], to_address: {name, street1, street2?, city, state, zip, country} } -> { available, rate_cents?, carrier?, service?, shippo_rate_id?, reason? }
+//   create_checkout_session { items, fulfillment_method, guest_email?, guest_name?, shipping_address?, shipping_rate_cents?, shipping_carrier?, shipping_service?, shippo_rate_id? } -> { url }
 //   confirm_session          { session_id }                                 -> { ok, order_token? } — eager confirm on the success-page return trip; the
 //                                                                              shinyvault-stripe-webhook function is the durable source of truth.
 import Stripe from 'https://esm.sh/stripe@14.14.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
-const EASYPOST_API_KEY = Deno.env.get('EASYPOST_API_KEY') || ''
-const EASYPOST_FROM = {
-  name: Deno.env.get('EASYPOST_FROM_NAME') || 'ShinyVault',
-  street1: Deno.env.get('EASYPOST_FROM_STREET1') || '',
-  street2: Deno.env.get('EASYPOST_FROM_STREET2') || '',
-  city: Deno.env.get('EASYPOST_FROM_CITY') || '',
-  state: Deno.env.get('EASYPOST_FROM_STATE') || '',
-  zip: Deno.env.get('EASYPOST_FROM_ZIP') || '',
-  country: Deno.env.get('EASYPOST_FROM_COUNTRY') || 'US',
+const SHIPPO_API_KEY = Deno.env.get('SHIPPO_API_KEY') || ''
+const SHIPPO_FROM = {
+  name: Deno.env.get('SHIPPO_FROM_NAME') || 'ShinyVault',
+  street1: Deno.env.get('SHIPPO_FROM_STREET1') || '',
+  street2: Deno.env.get('SHIPPO_FROM_STREET2') || '',
+  city: Deno.env.get('SHIPPO_FROM_CITY') || '',
+  state: Deno.env.get('SHIPPO_FROM_STATE') || '',
+  zip: Deno.env.get('SHIPPO_FROM_ZIP') || '',
+  country: Deno.env.get('SHIPPO_FROM_COUNTRY') || 'US',
+  phone: Deno.env.get('SHIPPO_FROM_PHONE') || '',
+  email: Deno.env.get('SHIPPO_FROM_EMAIL') || '',
 }
+
+// Shipment extras, both intentionally OFF for launch.
+//
+// SIGNATURE_THRESHOLD_CENTS: order subtotal at or above which we request
+// signature confirmation (~$3.95/parcel on USPS, rolled into the rate the
+// customer pays, so it costs the shop nothing). Set to a positive number —
+// $250 was the figure discussed — to switch it on. Off for now because the
+// first live orders are self-shipped tests and nobody wants to be home to
+// sign for them. Note that above ~$250 declared value most insurers *require*
+// signature for coverage, so these two settings are related.
+const SIGNATURE_THRESHOLD_CENTS = Number(Deno.env.get('SHINYVAULT_SIGNATURE_THRESHOLD_CENTS') || 0)
+
+// INSURE_SHIPMENTS: Shippo insurance via XCover, 1.25% of declared value
+// domestic. Billed to the Shippo account separately rather than folded into
+// the carrier rate — so unlike signature, turning this on costs the shop
+// money directly unless the total is adjusted to match. Deliberately left off
+// until that call is made.
+const INSURE_SHIPMENTS = (Deno.env.get('SHINYVAULT_INSURE_SHIPMENTS') || '') === 'true'
+
 const SITE_URL = Deno.env.get('SHINYVAULT_SITE_URL') || 'https://shineyvault.netlify.app'
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -61,7 +82,7 @@ Deno.serve(async (req) => {
 
     // ─── Shipping rate quote (guest-callable — no auth required to price a cart) ───
     if (action === 'get_shipping_rate') {
-      if (!EASYPOST_API_KEY) {
+      if (!SHIPPO_API_KEY) {
         return json({ available: false, reason: 'Shipping isn’t set up yet — please choose local pickup at checkout.' })
       }
 
@@ -73,14 +94,20 @@ Deno.serve(async (req) => {
       const ids = items.map((i: any) => i.product_id)
       const { data: products, error: prodErr } = await supabase
         .from('products')
-        .select('id, weight_oz')
+        .select('id, weight_oz, price_cents')
         .in('id', ids)
       if (prodErr) return json({ error: prodErr.message }, 500)
 
       let totalWeightOz = 0
+      // Declared value, used for the signature threshold and (when enabled)
+      // the insurance amount. Priced server-side from the products table
+      // rather than trusted from the client.
+      let declaredValueCents = 0
       for (const item of items) {
         const p = products?.find((pr: any) => pr.id === item.product_id)
-        totalWeightOz += (p?.weight_oz || 4) * (item.quantity || 1) // 4oz default for unweighed items (single cards/sleeves)
+        const qty = item.quantity || 1
+        totalWeightOz += (p?.weight_oz || 4) * qty // 4oz default for unweighed items (single cards/sleeves)
+        declaredValueCents += (p?.price_cents || 0) * qty
       }
 
       const { data: boxes, error: boxErr } = await supabase
@@ -92,40 +119,75 @@ Deno.serve(async (req) => {
       const box = (boxes || []).find((b: any) => b.weight_oz_max >= totalWeightOz) || boxes?.[boxes.length - 1]
       if (!box) return json({ available: false, reason: 'No shipping box configured yet.' })
 
+      // Extras are priced into the rate we quote, so they have to be decided
+      // here at quote time rather than at purchase time — otherwise the
+      // customer gets charged one amount and we buy a more expensive label.
+      const extra: Record<string, unknown> = {}
+      if (SIGNATURE_THRESHOLD_CENTS > 0 && declaredValueCents >= SIGNATURE_THRESHOLD_CENTS) {
+        extra.signature_confirmation = 'STANDARD'
+      }
+      if (INSURE_SHIPMENTS && declaredValueCents > 0) {
+        extra.insurance = {
+          amount: (declaredValueCents / 100).toFixed(2),
+          currency: 'USD',
+          content: 'Trading cards and collectibles',
+        }
+      }
+
       try {
-        const epRes = await fetch('https://api.easypost.com/v2/shipments', {
+        const spRes = await fetch('https://api.goshippo.com/shipments/', {
           method: 'POST',
           headers: {
-            'Authorization': `Basic ${btoa(EASYPOST_API_KEY + ':')}`,
+            'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            shipment: {
-              to_address: {
-                street1: to.street1, street2: to.street2 || undefined, city: to.city,
-                state: to.state, zip: to.zip, country: to.country,
-              },
-              from_address: EASYPOST_FROM,
-              parcel: {
-                weight: totalWeightOz,
-                length: box.length_in, width: box.width_in, height: box.height_in,
-              },
+            address_from: SHIPPO_FROM,
+            address_to: {
+              // Carriers reject a parcel with no recipient name, so the
+              // checkout form makes this required alongside street/city/zip.
+              name: to.name || 'Customer',
+              street1: to.street1, street2: to.street2 || undefined, city: to.city,
+              state: to.state, zip: to.zip, country: to.country,
             },
+            parcels: [{
+              length: String(box.length_in), width: String(box.width_in), height: String(box.height_in),
+              distance_unit: 'in',
+              weight: String(totalWeightOz),
+              mass_unit: 'oz',
+            }],
+            ...(Object.keys(extra).length ? { extra } : {}),
+            // Synchronous so rates come back inline on this one call. Shippo
+            // defaults to async:true, which returns an empty rates array and a
+            // shipment to poll — not what a checkout page can wait around for.
+            async: false,
           }),
         })
-        const shipment = await epRes.json()
-        if (!epRes.ok) return json({ available: false, reason: shipment?.error?.message || 'Rate lookup failed' })
+        const shipment = await spRes.json()
+        if (!spRes.ok) {
+          return json({ available: false, reason: shipment?.detail || 'Rate lookup failed' })
+        }
 
-        const rates = (shipment.rates || []).slice().sort((a: any, b: any) => parseFloat(a.rate) - parseFloat(b.rate))
+        // Shippo returns an empty rates array plus a `messages` array when it
+        // can't rate (bad address, no carrier serves it, parcel over limits).
+        // Surfacing that text is the difference between the customer fixing
+        // their address and giving up.
+        const rates = (shipment.rates || []).slice()
+          .sort((a: any, b: any) => parseFloat(a.amount) - parseFloat(b.amount))
         const cheapest = rates[0]
-        if (!cheapest) return json({ available: false, reason: 'No carrier rates returned for that address' })
+        if (!cheapest) {
+          const msg = (shipment.messages || []).map((m: any) => m.text).filter(Boolean).join(' ')
+          return json({ available: false, reason: msg || 'No carrier rates returned for that address' })
+        }
 
         return json({
           available: true,
-          rate_cents: Math.round(parseFloat(cheapest.rate) * 100),
-          carrier: cheapest.carrier,
-          service: cheapest.service,
-          easypost_shipment_id: shipment.id,
+          rate_cents: Math.round(parseFloat(cheapest.amount) * 100),
+          carrier: cheapest.provider,
+          service: cheapest.servicelevel?.name || '',
+          // The rate id, not the shipment id — buying a label is a single
+          // POST /transactions/ against this.
+          shippo_rate_id: cheapest.object_id,
         })
       } catch (e) {
         return json({ available: false, reason: (e as Error).message })
@@ -168,7 +230,7 @@ Deno.serve(async (req) => {
         p_shipping_rate_cents: fulfillment === 'ship' ? body.shipping_rate_cents : null,
         p_shipping_carrier: fulfillment === 'ship' ? body.shipping_carrier || null : null,
         p_shipping_service: fulfillment === 'ship' ? body.shipping_service || null : null,
-        p_easypost_shipment_id: fulfillment === 'ship' ? body.easypost_shipment_id || null : null,
+        p_shippo_rate_id: fulfillment === 'ship' ? body.shippo_rate_id || null : null,
         p_items: items.map((i: any) => ({ product_id: i.product_id, quantity: i.quantity })),
       })
       if (orderErr) {

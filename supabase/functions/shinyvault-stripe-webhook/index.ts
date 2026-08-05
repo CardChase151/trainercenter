@@ -21,7 +21,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
 const webhookSecret = Deno.env.get('SHINYVAULT_STRIPE_WEBHOOK_SECRET') || ''
-const EASYPOST_API_KEY = Deno.env.get('EASYPOST_API_KEY') || ''
+const SHIPPO_API_KEY = Deno.env.get('SHIPPO_API_KEY') || ''
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -73,37 +73,63 @@ Deno.serve(async (req) => {
       }).eq('id', order.id)
 
       // Buy the shipping label only now that payment has actually cleared.
-      if (order.fulfillment_method === 'ship' && order.easypost_shipment_id && EASYPOST_API_KEY) {
+      // This SPENDS REAL MONEY — the rate quoted at checkout gets charged to
+      // the Shippo account on file. Shippo lets us buy straight from the rate
+      // id captured at quote time, so unlike EasyPost there's no shipment
+      // re-fetch and no risk of matching the wrong rate.
+      if (order.fulfillment_method === 'ship' && order.shippo_rate_id && SHIPPO_API_KEY) {
         try {
-          const rateRes = await fetch(`https://api.easypost.com/v2/shipments/${order.easypost_shipment_id}`, {
-            headers: { 'Authorization': `Basic ${btoa(EASYPOST_API_KEY + ':')}` },
+          const buyRes = await fetch('https://api.goshippo.com/transactions/', {
+            method: 'POST',
+            headers: {
+              'Authorization': `ShippoToken ${SHIPPO_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              rate: order.shippo_rate_id,
+              label_file_type: 'PDF_4x6',
+              // Synchronous so tracking number and label URL are on this
+              // response. Async would hand back a QUEUED transaction we'd have
+              // to poll, and a Stripe webhook has no good place to poll from.
+              async: false,
+            }),
           })
-          const shipment = await rateRes.json()
-          const rate = (shipment.rates || []).find((r: any) =>
-            r.carrier === order.shipping_carrier && r.service === order.shipping_service)
-          if (rate) {
-            const buyRes = await fetch(`https://api.easypost.com/v2/shipments/${order.easypost_shipment_id}/buy`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Basic ${btoa(EASYPOST_API_KEY + ':')}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ rate: { id: rate.id } }),
-            })
-            const bought = await buyRes.json()
-            if (buyRes.ok) {
-              await supabase.from('orders').update({
-                fulfillment_status: 'label_purchased',
-                easypost_tracking_code: bought?.tracking_code || null,
-              }).eq('id', order.id)
-            } else {
-              console.error('[shinyvault-stripe-webhook] label purchase failed', bought)
-            }
+          const bought = await buyRes.json()
+
+          // Shippo returns HTTP 201 even for a failed purchase — the real
+          // outcome is in bought.status ('SUCCESS' | 'ERROR'), with the reason
+          // in bought.messages. Checking buyRes.ok alone would mark a failed
+          // label as purchased.
+          if (buyRes.ok && bought?.status === 'SUCCESS') {
+            await supabase.from('orders').update({
+              fulfillment_status: 'label_purchased',
+              tracking_number: bought?.tracking_number || null,
+              tracking_url: bought?.tracking_url_provider || null,
+              label_url: bought?.label_url || null,
+            }).eq('id', order.id)
+          } else {
+            const why = (bought?.messages || []).map((m: any) => m.text).filter(Boolean).join(' ')
+            console.error('[shinyvault-stripe-webhook] label purchase failed', why || bought)
           }
         } catch (e) {
           console.error('[shinyvault-stripe-webhook] label purchase error', (e as Error).message)
         }
       }
+
+      // Order confirmation email. Fired after the label attempt so a shipped
+      // order's email can carry the tracking link — the customer gets one
+      // email, not a confirmation now and a tracking one seconds later. A
+      // label failure above is deliberately non-fatal here: the customer has
+      // paid and must still get a confirmation, and the admin board shows the
+      // order stuck at 'unfulfilled' for staff to resolve.
+      try {
+        await supabase.functions.invoke('shinyvault-order-email', {
+          body: { type: 'order_confirmation', order_id: order.id },
+        })
+      } catch (e) {
+        console.error('[shinyvault-stripe-webhook] confirmation email error', (e as Error).message)
+      }
+
       return new Response('ok')
     }
 
