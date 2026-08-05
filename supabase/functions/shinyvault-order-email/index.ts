@@ -6,6 +6,8 @@
 //                        was already bought, or pickup instructions)
 //   order_shipped       (staff advanced a pickup-less order to 'shipped', or a
 //                        label got bought late after a retry)
+//   order_delivered     (carrier scanned the parcel as delivered — sent by
+//                        shinyvault-track-webhook, never by a human)
 //
 // Why a separate function from send-vendor-email: that one is Trainer Center
 // branded, keyed off vendor/member ids, and its FROM is "Trainer Center HB".
@@ -179,6 +181,28 @@ Deno.serve(async (req) => {
         order.tracking_number ? `Tracking: ${order.tracking_number}` : '',
         order.tracking_url || '',
         `Total: ${money(order.total_cents)}`,
+        `View your order: ${lookupUrl}`,
+      ].filter(Boolean).join('\n')
+    } else if (type === 'order_delivered') {
+      subject = `Your ShinyVault order was delivered`
+      html = shell('Your order was delivered', `
+        <p style="font-size:0.95rem;line-height:1.55;">The carrier scanned your package as delivered. Enjoy it.</p>
+        ${trackingBlock(order)}
+        ${totals}
+        <p style="font-size:0.88rem;line-height:1.55;margin-top:18px;">
+          Not where you expected? Carriers sometimes scan a package delivered a little early, or leave it
+          with a neighbor or in a back door area. Give it until the end of the next day, then reply to this
+          email and we'll chase it down with the carrier.
+        </p>
+        <p style="font-size:0.85rem;color:#666;margin-top:18px;">
+          <a href="${lookupUrl}" style="color:#2563eb;">View your order</a>
+        </p>`)
+      text = [
+        'Your ShinyVault order was delivered.',
+        order.tracking_number ? `Tracking: ${order.tracking_number}` : '',
+        order.tracking_url || '',
+        `Total: ${money(order.total_cents)}`,
+        "Not where you expected? Give it until the end of the next day, then reply to this email and we'll chase it down with the carrier.",
         `View your order: ${lookupUrl}`,
       ].filter(Boolean).join('\n')
     } else {
