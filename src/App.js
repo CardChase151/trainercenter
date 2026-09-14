@@ -11535,8 +11535,9 @@ function VendorTeamPrompt({ vendor, isMobile, onAnswered }) {
   const [openToCall, setOpenToCall] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showYes, setShowYes] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  if (!vendor || vendor.team_asked_at) return null;
+  if (!vendor || (vendor.team_asked_at && !sent)) return null;
   if (vendor.status === 'suspended') return null;
 
   const answer = async (wantsIn) => {
@@ -11548,8 +11549,29 @@ function VendorTeamPrompt({ vendor, isMobile, onAnswered }) {
       team_asked_at: new Date().toISOString(),
     }).eq('id', vendor.id);
     setBusy(false);
+    // Saying yes and watching the card vanish reads as nothing happening.
+    if (wantsIn) { setSent(true); return; }
     if (onAnswered) onAnswered();
   };
+
+  if (sent) {
+    return (
+      <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+        <div style={{
+          backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #16a34a',
+          borderRadius: '14px', padding: isMobile ? '18px' : '20px 26px',
+        }}>
+          <div style={{ fontSize: '1rem', fontWeight: 900, color: '#166534', marginBottom: '6px' }}>
+            You are on the list
+          </div>
+          <p style={{ fontSize: '0.9rem', color: '#166534', lineHeight: 1.55, margin: 0 }}>
+            We will reach out{openToCall ? ' to set up a call' : ''} before the next big one. Nothing
+            changes about the trade nights in the meantime.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const btn = (primary) => ({
     flex: 1, padding: '13px', borderRadius: '10px', cursor: busy ? 'default' : 'pointer',
@@ -15591,6 +15613,27 @@ function VendorRichCard({ vendor, statusBadge, decisionLine, actions, onClick, i
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <strong style={{ fontSize: '0.95rem' }}>{v.name || '(no name)'}</strong>
             {statusBadge}
+            {v.team_status === 'requested' && (
+              <span
+                title={v.open_to_call ? 'Asked about the team, open to a call' : 'Asked about the team'}
+                style={{
+                  fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', padding: '3px 8px', borderRadius: '999px',
+                  backgroundColor: '#1a1a1a', color: '#fff', whiteSpace: 'nowrap',
+                }}
+              >
+                Team{v.open_to_call ? ' · will call' : ''}
+              </span>
+            )}
+            {v.team_status === 'approved' && (
+              <span style={{
+                fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.06em',
+                textTransform: 'uppercase', padding: '3px 8px', borderRadius: '999px',
+                backgroundColor: '#C8102E', color: '#fff', whiteSpace: 'nowrap',
+              }}>
+                Team
+              </span>
+            )}
             {onOpenFit && (
               <FitStatusBadge
                 status={v.staff_fit_status}
