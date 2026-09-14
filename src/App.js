@@ -10340,7 +10340,12 @@ function VendorApplyPage({ isMobile }) {
 
   const toggle = (id) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
-  const money = (cents) => cents === 0 ? 'No charge' : `$${(cents / 100).toFixed(0)}`;
+  // Non-card roles are not free, they are arranged. Showing $0 made tapping
+  // through the roles look like a way around the table fee.
+  const priceLabel = (cents) => {
+    if (!isCardVendor(role)) return comped ? 'Comped' : 'Requires a call';
+    return cents === 0 ? 'Comped' : `$${(cents / 100).toFixed(0)}`;
+  };
 
   const fmtDate = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -10465,8 +10470,8 @@ function VendorApplyPage({ isMobile }) {
             })}
           </div>
           {role && !isCardVendor(role) && (
-            <p style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 700, margin: '14px 0 0' }}>
-              No table fee for this role.
+            <p style={{ fontSize: '0.85rem', color: '#6b7280', margin: '14px 0 0', lineHeight: 1.5 }}>
+              These get set up over a quick phone call rather than a table fee.
             </p>
           )}
         </div>
@@ -10519,10 +10524,10 @@ function VendorApplyPage({ isMobile }) {
                     </div>
                   </div>
                   <div style={{
-                    fontSize: '0.92rem', fontWeight: 800, flexShrink: 0,
-                    color: fee === 0 ? '#16a34a' : '#1a1a1a',
+                    fontSize: '0.92rem', fontWeight: 800, flexShrink: 0, textAlign: 'right',
+                    color: isCardVendor(role) ? '#1a1a1a' : '#6b7280',
                   }}>
-                    {money(fee)}
+                    {priceLabel(fee)}
                   </div>
                 </button>
               );
@@ -10557,7 +10562,7 @@ function VendorApplyPage({ isMobile }) {
             />
             {codeState === 'ok' && (
               <p style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 700, margin: '10px 0 0' }}>
-                Code applied. No charge.
+                Code applied.
               </p>
             )}
             {codeState === 'bad' && (
@@ -10569,7 +10574,7 @@ function VendorApplyPage({ isMobile }) {
         )}
 
         {/* The promise about money, stated before they hand over a card */}
-        {role && (
+        {role && isCardVendor(role) && (
           <div style={{
             backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #16a34a',
             borderRadius: '12px', padding: isMobile ? '16px 18px' : '18px 22px', marginBottom: '18px',
@@ -10627,8 +10632,10 @@ function VendorApplyPage({ isMobile }) {
               <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                 {picked.length} {picked.length === 1 ? 'date' : 'dates'} selected
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: total === 0 ? '#16a34a' : '#1a1a1a' }}>
-                {total === 0 ? 'No charge' : `$${(total / 100).toFixed(0)} total`}
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1a1a1a' }}>
+                {!isCardVendor(role)
+                  ? (comped ? 'Comped' : 'We will call you')
+                  : total === 0 ? 'Comped' : `$${(total / 100).toFixed(0)} total`}
               </div>
             </div>
             <button
@@ -11193,8 +11200,8 @@ function VendorFinishPage({ isMobile }) {
               padding: '10px 0', borderTop: '1px solid #f0f0f0', fontSize: '0.92rem',
             }}>
               <span>{new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-              <strong style={{ color: feeFor(ev) === 0 ? '#16a34a' : '#1a1a1a' }}>
-                {feeFor(ev) === 0 ? 'No charge' : `$${(feeFor(ev) / 100).toFixed(0)}`}
+              <strong style={{ color: cardVendor ? '#1a1a1a' : '#6b7280' }}>
+                {!cardVendor ? 'Requires a call' : feeFor(ev) === 0 ? 'Comped' : `$${(feeFor(ev) / 100).toFixed(0)}`}
               </strong>
             </div>
           ))}
@@ -11209,8 +11216,8 @@ function VendorFinishPage({ isMobile }) {
             fontSize: '1.05rem', fontWeight: 900,
           }}>
             <span>Total</span>
-            <span style={{ color: total === 0 ? '#16a34a' : '#1a1a1a' }}>
-              {total === 0 ? 'No charge' : `$${(total / 100).toFixed(0)}`}
+            <span style={{ color: '#1a1a1a' }}>
+              {!cardVendor ? 'We will call you' : total === 0 ? 'Comped' : `$${(total / 100).toFixed(0)}`}
             </span>
           </div>
         </div>
