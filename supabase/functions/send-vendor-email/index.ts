@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
         `  <li>Pick the dates you want</li>` +
         `  <li>Trainer Center HB confirms each one within a day or two</li>` +
         `</ol>` +
-        `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your dates  →</a></p>` +
+        `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/apply" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your dates  →</a></p>` +
         `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">TC's Beach City Trade Night happens the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
       const text = `Action required: You're a Trainer Center HB vendor — pick your dates\n\n` +
         `Hi ${v.name},\n\n` +
@@ -226,7 +226,7 @@ Deno.serve(async (req: Request) => {
         `  1. Open your dashboard\n` +
         `  2. Pick the dates you want\n` +
         `  3. Trainer Center HB confirms each one within a day or two\n\n` +
-        `Pick your dates: ${SITE_URL}/vendors/dashboard\n\n` +
+        `Pick your dates: ${SITE_URL}/vendors/apply\n\n` +
         `TC's Beach City Trade Night happens the last Friday of every month at the shop.`
       await sendResendEmail([v.email], subject, wrapHtml(body), text)
       return json({ ok: true, sent: ['vendor'] })
@@ -292,13 +292,13 @@ Deno.serve(async (req: Request) => {
           (vendorTimes ? `  <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#166534">Vendor window: ${vendorTimes}</p>` : '') +
           `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">If you want a spot, you need to apply from your dashboard. Two clicks.</p>` +
           `</td></tr></table>` +
-          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
+          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/apply" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
           `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Your dashboard also has every future TC's Beach City Trade Night — pick any one. They happen the last Friday of every month at the shop.</p>`
         const text = `Action required: Apply for ${dateStr} — ${eventTitle}\n\n` +
           `Hi ${v.name},\n\n` +
           `You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.\n\n` +
           `${urgencyLabel}: ${dateStr} — ${eventTitle}\n\n` +
-          `If you want a spot, you need to apply from your dashboard:\n${SITE_URL}/vendors/dashboard\n\n` +
+          `If you want a spot, apply here:\n${SITE_URL}/vendors/apply\n\n` +
           `Can't make this date? The dashboard also lists every future TC's Beach City Trade Night. They happen the last Friday of every month at the shop.`
         try {
           await sendResendEmail([v.email], subject, wrapHtml(body), text)

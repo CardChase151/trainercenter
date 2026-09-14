@@ -173,6 +173,19 @@ Deno.serve(async (req) => {
         payment_status: 'card_saved',
       }).eq('id', app.id)
 
+      // One card covers every date a vendor applied for in the same sitting.
+      // Without this, applying to three nights would ask for the card three
+      // times, and the other two would sit unpayable at approval.
+      await supabase.from('vendor_applications').update({
+        stripe_payment_method_id: pm,
+        ...(siCustomer ? { stripe_customer_id: siCustomer } : {}),
+        payment_status: 'card_saved',
+      })
+        .eq('vendor_id', app.vendor_id)
+        .eq('status', 'pending')
+        .is('stripe_payment_method_id', null)
+        .gt('fee_cents', 0)
+
       if (!wasAlreadySaved) {
         // Only now is this a successful application — fire the "application
         // received" notification here instead of at apply time, so staff
@@ -231,7 +244,7 @@ Deno.serve(async (req) => {
     if (action === 'express_checkout') {
       const { data: ev } = await supabase
         .from('events')
-        .select('id, title, event_date, table_fee_cents, has_vendors, cancelled')
+        .select('id, title, event_date, table_fee_cents, table_fee_returning_cents, has_vendors, cancelled')
         .eq('id', body.event_id)
         .maybeSingle()
       if (!ev || !ev.has_vendors || ev.cancelled) return json({ error: 'Event not found' }, 404)
@@ -241,7 +254,7 @@ Deno.serve(async (req) => {
       if (ev.event_date < todayStr) return json({ error: 'This event has already happened. Reach out to Trainer Center HB for the current sign-up link.' }, 400)
 
       const { data: vendor } = await supabase
-        .from('vendors').select('id, name, email, status').eq('user_id', userId).maybeSingle()
+        .from('vendors').select('id, name, email, status, vendor_type').eq('user_id', userId).maybeSingle()
       if (!vendor) return json({ error: 'No vendor profile yet' }, 400)
 
       // Existing application row for this event (e.g. a pending one) gets
@@ -255,7 +268,27 @@ Deno.serve(async (req) => {
         return json({ ok: true, already: true })
       }
 
-      const fee = ev.table_fee_cents || 0
+      // Same pricing rules as the normal apply flow, so the fast-pass cannot
+      // quietly charge a returning vendor the first-timer rate, or bill a DJ
+      // for a table they were never going to pay for.
+      const { count: attendedCount } = await supabase
+        .from('vendor_attendance')
+        .select('*', { count: 'exact', head: true })
+        .eq('vendor_id', vendor.id)
+
+      const isCardVendor = (vendor.vendor_type || 'card_vendor') === 'card_vendor'
+      const returningFee = ev.table_fee_returning_cents
+      let fee = !isCardVendor
+        ? 0
+        : (attendedCount && returningFee != null ? returningFee : (ev.table_fee_cents || 0))
+
+      if (fee > 0 && body.code) {
+        const { data: codeOk } = await supabase.rpc('validate_comp_code', {
+          p_code: String(body.code),
+          p_role: vendor.vendor_type || 'card_vendor',
+        })
+        if (codeOk) fee = 0
+      }
       let appId = existingApp?.id
       if (!appId) {
         const { data: inserted, error: insErr } = await supabase

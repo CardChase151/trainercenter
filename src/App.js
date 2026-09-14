@@ -10197,207 +10197,409 @@ function ReminderSignupModal({ onClose, onComplete, onHideBell, isMobile }) {
 //     signup modal auto-opens on top. Preserves existing CTAs in the site
 //     (DashboardCard "Apply to become a partner", ApplyToVendBanner, etc.)
 //     that want to skip directly to signup.
+// ─── Vendor Apply ─────────────────────────────────────────
+// /vendors/apply is the single front door. Role first, because the role
+// decides everything downstream: a card vendor sees tiered table pricing and
+// no comp-code field, every other role sees no table fee and can redeem a
+// waiver code. Dates are picked here (all that apply) and the interview runs
+// after, so nobody has to get vetted before they can express interest.
+
+const VENDOR_ROLES = [
+  { key: 'card_vendor', label: 'Card vendor',        blurb: 'Singles, slabs, sealed. A table at the show.' },
+  { key: 'character',   label: 'Character / costume', blurb: 'Photos with trainers and families.' },
+  { key: 'dj',          label: 'DJ / music',          blurb: 'Run the sound for the night.' },
+  { key: 'airbrush',    label: 'Airbrush / face paint', blurb: 'Live art at the bigger events.' },
+  { key: 'crafts',      label: 'Crafts / activities',  blurb: 'Make-and-take, games, scavenger hunts.' },
+  { key: 'other',       label: 'Something else',       blurb: 'Tell us your idea and we will hear it.' },
+];
+
+const isCardVendor = (role) => role === 'card_vendor';
+
 function VendorApplyPage({ isMobile }) {
-  const navigate = useNavigateInternal();
   const auth = useAuth();
-  const [searchParams] = useSearchParams();
-  const skipLandingMode = searchParams.get('mode') === 'signup' ? 'signup'
-    : searchParams.get('mode') === 'login' ? 'login'
-    : null;
-  const openedRef = useRef(false);
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const navigate = useNavigate();
 
-  // Bounce signed-in users to the dashboard. The dashboard already knows how
-  // to route first-time vendors into the onboarding form.
+  const [role, setRole] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [picked, setPicked] = useState([]);          // event ids
+  const [code, setCode] = useState('');
+  const [codeState, setCodeState] = useState(null);  // null | 'ok' | 'bad' | 'checking'
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  const vendor = auth.vendor || null;
+  const signedIn = Boolean(auth.session);
+
+  // A returning vendor is someone who actually showed up before, not someone
+  // who merely applied. Drives which price they see.
+  const [isReturning, setIsReturning] = useState(false);
   useEffect(() => {
-    if (auth.isLoading) return;
-    if (auth.session) navigate('/vendors/dashboard');
-  }, [auth, auth.isLoading, auth.session, navigate]);
+    if (!vendor?.id) { setIsReturning(false); return; }
+    supabase
+      .from('vendor_attendance')
+      .select('id', { count: 'exact', head: true })
+      .eq('vendor_id', vendor.id)
+      .then(({ count }) => setIsReturning((count || 0) > 0));
+  }, [vendor?.id]);
 
-  // Auto-open the AuthModal if ?mode=signup or ?mode=login was passed in.
-  // Existing CTAs in the site rely on this shortcut.
+  // Someone already in the system keeps the role they were approved under.
   useEffect(() => {
-    if (!skipLandingMode) return;
-    if (auth.isLoading || auth.session) return;
-    if (openedRef.current) return;
-    openedRef.current = true;
-    auth.openAuthModal({
-      defaultMode: skipLandingMode,
-      intent: 'vendor',
-      onSuccess: () => navigate('/vendors/dashboard'),
-    });
-  }, [skipLandingMode, auth, navigate]);
+    if (vendor?.vendor_type) setRole(vendor.vendor_type);
+  }, [vendor?.vendor_type]);
 
-  // Fetch the next few vendor events so prospective vendors see what they'd
-  // be signing up for. Public read on events is allowed.
   useEffect(() => {
     const today = todayISO();
     supabase
       .from('events')
-      .select('id, title, event_date, vendor_start_time, vendor_end_time, start_time, end_time')
+      .select('id, title, event_date, start_time, end_time, vendor_start_time, vendor_end_time, table_fee_cents, table_fee_returning_cents')
       .eq('has_vendors', true)
       .eq('cancelled', false)
       .gte('event_date', today)
       .order('event_date', { ascending: true })
-      .limit(3)
+      .limit(8)
       .then(({ data, error }) => {
-        if (error) console.error('[VendorApplyPage] events fetch', error);
-        setUpcomingEvents(data || []);
+        if (error) console.error('[VendorApplyPage] events', error);
+        setEvents(data || []);
+        setLoadingEvents(false);
       });
   }, []);
 
-  const openSignup = () => auth.openAuthModal({
-    defaultMode: 'signup',
-    intent: 'vendor',
-    onSuccess: () => navigate('/vendors/dashboard'),
-  });
-  const openLogin = () => auth.openAuthModal({
-    defaultMode: 'login',
-    intent: 'vendor',
-    onSuccess: () => navigate('/vendors/dashboard'),
-  });
+  // Re-check a typed code whenever the role changes, since validity depends on it.
+  useEffect(() => {
+    if (!code.trim() || !role) { setCodeState(null); return; }
+    let cancelled = false;
+    setCodeState('checking');
+    supabase
+      .rpc('validate_comp_code', { p_code: code.trim(), p_role: role })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setCodeState(error ? 'bad' : (data ? 'ok' : 'bad'));
+      });
+    return () => { cancelled = true; };
+  }, [code, role]);
 
-  const fmtDate = (iso) => {
-    if (!iso) return '';
-    return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
-      weekday: 'long', month: 'long', day: 'numeric',
-    });
+  const comped = codeState === 'ok';
+
+  const feeFor = (ev) => {
+    if (!isCardVendor(role)) return 0;          // only card vendors pay for a table
+    if (comped) return 0;
+    const base = ev.table_fee_cents ?? 0;
+    const ret = ev.table_fee_returning_cents;
+    return isReturning && ret != null ? ret : base;
   };
+
+  const total = picked.reduce((sum, id) => {
+    const ev = events.find(e => e.id === id);
+    return sum + (ev ? feeFor(ev) : 0);
+  }, 0);
+
+  const toggle = (id) => setPicked(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const money = (cents) => cents === 0 ? 'No charge' : `$${(cents / 100).toFixed(0)}`;
+
+  const fmtDate = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
   const fmtTimes = (ev) => {
     const s = ev.vendor_start_time || ev.start_time;
     const e = ev.vendor_end_time || ev.end_time;
     if (!s && !e) return '';
-    return `${formatTime12h(s)} – ${formatTime12h(e)}`;
+    return `${formatTime12h(s)} to ${formatTime12h(e)}`;
+  };
+
+  // Someone who already answered the interview does not answer it again to add
+  // a date. We rebuild their answers from their vendor row and go straight to
+  // the confirm step.
+  const alreadyInterviewed = Boolean(vendor && vendor.experience_level && vendor.terms_agreed_at);
+
+  const goToInterview = () => {
+    if (alreadyInterviewed) {
+      sessionStorage.setItem('tc_vendor_application', JSON.stringify({
+        role: vendor.vendor_type || role,
+        eventIds: picked,
+        code: comped ? code.trim().toUpperCase() : '',
+        name: vendor.name || '',
+        businessName: vendor.business_name || '',
+        email: vendor.email || '',
+        phone: vendor.phone || '',
+        ig: vendor.ig_handle || '',
+        experience: vendor.experience_level,
+        inventory: vendor.inventory_profile || [],
+        pitch: vendor.pitch || '',
+        teamInterest: Boolean(vendor.team_interest),
+        openToCall: Boolean(vendor.open_to_call),
+        questions: '',
+      }));
+      navigate('/vendors/finish');
+      return;
+    }
+    const qs = new URLSearchParams({
+      role,
+      events: picked.join(','),
+      ...(comped ? { code: code.trim().toUpperCase() } : {}),
+    });
+    navigate(`/vendors/application?${qs.toString()}`);
+  };
+
+  const card = {
+    backgroundColor: '#fff', border: '1px solid #e8e8e8', borderRadius: '14px',
+    padding: isMobile ? '20px' : '24px 28px', marginBottom: '18px',
+  };
+  const eyebrow = {
+    fontSize: '11px', fontWeight: 800, color: '#666',
+    letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '14px',
   };
 
   return (
     <PageWrapper isMobile={isMobile}>
-      <div style={{ maxWidth: '720px', margin: '0 auto', marginBottom: '64px' }}>
+      <div style={{ maxWidth: '720px', margin: '0 auto', marginBottom: picked.length ? '140px' : '64px' }}>
         <SectionHeader
-          title="Want to vend with Trainer Center HB?"
-          subtitle="TC's Beach City Trade Night — free table, packed shop, last Friday of every month"
+          title="Vend with Trainer Center"
+          subtitle="TC's Beach City Trade Night and our bigger Pokemon events"
         />
 
-        {/* Value prop card */}
-        <div style={{
-          backgroundColor: '#fff', borderRadius: '14px',
-          border: '1px solid #eee', borderLeft: '4px solid #C8102E',
-          padding: isMobile ? '20px 22px' : '26px 30px',
-          marginBottom: '20px',
-        }}>
-          <p style={{ fontSize: '0.98rem', color: '#374151', lineHeight: 1.65, margin: 0 }}>
-            Trainer Center HB hosts a monthly trade night where local vendors set up across the shop —
-            singles, slabs, sealed product, whatever you specialize in. We provide a 6-foot table and
-            a black cloth (free). You bring your inventory.
-          </p>
-        </div>
-
-        {/* Upcoming dates */}
-        {upcomingEvents.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '0.75rem', fontWeight: '800',
-              letterSpacing: '0.08em', textTransform: 'uppercase',
-              color: '#666', margin: '0 0 10px',
-            }}>
-              Upcoming dates
+        {signedIn && vendor && vendor.status !== 'approved' && (
+          <div style={{
+            backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
+            borderRadius: '12px', padding: '14px 18px', marginBottom: '18px',
+          }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#92400e' }}>
+              Your application is still being reviewed
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {upcomingEvents.map(ev => (
-                <div key={ev.id} style={{
-                  backgroundColor: '#fff', border: '1px solid #eee',
-                  borderRadius: '12px', padding: isMobile ? '14px 16px' : '16px 22px',
-                  display: 'flex', alignItems: 'center', gap: '14px',
-                }}>
-                  <div style={{
-                    width: '44px', height: '44px', borderRadius: '10px',
-                    backgroundColor: '#fff0f0', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <CalendarIcon size={22} color="#C8102E" />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1a1a1a' }}>
-                      {ev.title || "TC's Beach City Trade Night"}
-                    </div>
-                    <div style={{ fontSize: '0.82rem', color: '#666', marginTop: '2px' }}>
-                      {fmtDate(ev.event_date)}{fmtTimes(ev) ? ` · ${fmtTimes(ev)}` : ''}
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div style={{ fontSize: '0.85rem', color: '#92400e', marginTop: '4px' }}>
+              You can keep adding dates while you wait. Nothing is charged either way.
             </div>
           </div>
         )}
 
-        {/* Two-step explainer */}
-        <div style={{
-          backgroundColor: '#f9fafb', borderRadius: '14px',
-          border: '1px solid #eee',
-          padding: isMobile ? '20px 22px' : '24px 30px',
-          marginBottom: '24px',
-        }}>
-          <div style={{
-            fontSize: '0.75rem', fontWeight: '800',
-            letterSpacing: '0.08em', textTransform: 'uppercase',
-            color: '#666', margin: '0 0 12px',
-          }}>
-            How it works
-          </div>
-          <ol style={{ margin: 0, paddingLeft: '20px', color: '#374151', lineHeight: 1.7 }}>
-            <li style={{ marginBottom: '10px' }}>
-              <strong>Create your vendor account.</strong> One-time application — Trainer Center HB reviews and approves.
-            </li>
-            <li>
-              <strong>Pick the dates you want.</strong> Once approved, claim any upcoming date from your dashboard in two clicks. You only commit to the events you choose.
-            </li>
-          </ol>
-        </div>
-
-        {/* CTA stack */}
-        <div style={{
-          backgroundColor: '#fff', borderRadius: '14px',
-          border: '1px solid #eee',
-          padding: isMobile ? '22px 22px' : '28px 30px',
-          textAlign: 'center',
-        }}>
-          <button
-            onClick={openSignup}
-            style={{
-              backgroundColor: '#C8102E', color: '#fff', border: 'none',
-              padding: '14px 32px', borderRadius: 10,
-              fontSize: '1rem', fontWeight: 800, cursor: 'pointer',
-              fontFamily: 'inherit',
-              boxShadow: '0 2px 8px rgba(200,16,46,0.25)',
-            }}
-          >
-            Create your vendor account
-          </button>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: '14px 0 0' }}>
-            Already a partner?{' '}
-            <button
-              onClick={openLogin}
-              style={{
-                background: 'none', border: 'none',
-                color: '#C8102E', fontWeight: '700',
-                cursor: 'pointer', fontSize: '0.85rem',
-                padding: 0, fontFamily: 'inherit',
-                textDecoration: 'underline',
-              }}
-            >
-              Log in
-            </button>
+        {/* What the night actually is */}
+        <div style={{ ...card, borderLeft: '4px solid #C8102E' }}>
+          <div style={eyebrow}>What is a Beach City Trade Night?</div>
+          <p style={{ fontSize: '0.96rem', color: '#374151', lineHeight: 1.65, margin: 0 }}>
+            A typical card show with a few differences. It is Pokemon only. We look for depth in
+            collections so people can actually find what they are hunting, and we do not allow
+            scalping vendors to participate. There is more going on than tables, too, things like
+            Pokemon characters and scavenger hunts, so families stay and enjoy the night.
+          </p>
+          <p style={{ fontSize: '0.88rem', color: '#6b7280', lineHeight: 1.6, margin: '14px 0 0' }}>
+            We are not accepting food vendors at this time.
           </p>
         </div>
 
-        {/* Footer learn-more */}
-        <p style={{ fontSize: '0.82rem', color: '#888', textAlign: 'center', margin: '20px 0 0' }}>
-          Want more detail before signing up?{' '}
-          <Link to="/vendor-day/about" style={{ color: '#C8102E', fontWeight: '700', textDecoration: 'none' }}>
-            What is TC's Beach City Trade Night?
-          </Link>
-        </p>
+        {/* Step 1 — role */}
+        <div style={card}>
+          <div style={eyebrow}>First, what are you applying as?</div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            gap: '10px',
+          }}>
+            {VENDOR_ROLES.map(r => {
+              const on = role === r.key;
+              return (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => setRole(r.key)}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                    backgroundColor: on ? '#fef2f2' : '#fff',
+                    border: on ? '2px solid #C8102E' : '1px solid #e5e5e5',
+                    borderRadius: '12px', padding: '14px 16px',
+                    touchAction: 'manipulation',
+                  }}
+                >
+                  <div style={{ fontSize: '0.95rem', fontWeight: 800, color: on ? '#C8102E' : '#1a1a1a' }}>
+                    {r.label}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: '3px', lineHeight: 1.45 }}>
+                    {r.blurb}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {role && !isCardVendor(role) && (
+            <p style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 700, margin: '14px 0 0' }}>
+              No table fee for this role.
+            </p>
+          )}
+        </div>
+
+        {/* Step 2 — dates */}
+        {role && (
+          <div style={card}>
+            <div style={eyebrow}>Pick the dates you want. All that apply.</div>
+
+            {loadingEvents && (
+              <p style={{ fontSize: '0.9rem', color: '#6b7280', margin: 0 }}>Loading dates...</p>
+            )}
+
+            {!loadingEvents && events.length === 0 && (
+              <p style={{ fontSize: '0.92rem', color: '#6b7280', margin: 0, lineHeight: 1.6 }}>
+                No dates are open right now. Apply anyway and we will put you at the front of the
+                line when the next one goes up.
+              </p>
+            )}
+
+            {events.map(ev => {
+              const on = picked.includes(ev.id);
+              const fee = feeFor(ev);
+              return (
+                <button
+                  key={ev.id}
+                  type="button"
+                  onClick={() => toggle(ev.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '14px', width: '100%',
+                    textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                    backgroundColor: on ? '#fef2f2' : '#fff',
+                    border: on ? '2px solid #C8102E' : '1px solid #e5e5e5',
+                    borderRadius: '12px', padding: '14px 16px', marginBottom: '10px',
+                    touchAction: 'manipulation',
+                  }}
+                >
+                  <div style={{
+                    width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
+                    border: on ? 'none' : '2px solid #d1d5db',
+                    backgroundColor: on ? '#C8102E' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {on && <Check size={14} color="#fff" strokeWidth={3} />}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>{fmtDate(ev.event_date)}</div>
+                    <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: '2px' }}>
+                      {ev.title || "TC's Beach City Trade Night"}{fmtTimes(ev) ? ` · ${fmtTimes(ev)}` : ''}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: '0.92rem', fontWeight: 800, flexShrink: 0,
+                    color: fee === 0 ? '#16a34a' : '#1a1a1a',
+                  }}>
+                    {money(fee)}
+                  </div>
+                </button>
+              );
+            })}
+
+            {isCardVendor(role) && events.length > 0 && (
+              <p style={{ fontSize: '0.82rem', color: '#6b7280', margin: '4px 0 0', lineHeight: 1.55 }}>
+                {isReturning
+                  ? 'Returning vendor pricing is already applied.'
+                  : 'First show with us is the first-time rate. It drops after you vend with us once.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Comp code — only meaningful for the roles that do not pay */}
+        {role && !isCardVendor(role) && (
+          <div style={card}>
+            <div style={eyebrow}>Have a code?</div>
+            <input
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="Enter code"
+              style={{
+                width: '100%', boxSizing: 'border-box', fontFamily: 'inherit',
+                padding: '12px 14px', borderRadius: '10px', fontSize: '0.95rem',
+                border: codeState === 'ok' ? '2px solid #16a34a'
+                      : codeState === 'bad' ? '2px solid #dc2626'
+                      : '1px solid #e5e5e5',
+                textTransform: 'uppercase',
+              }}
+            />
+            {codeState === 'ok' && (
+              <p style={{ fontSize: '0.85rem', color: '#16a34a', fontWeight: 700, margin: '10px 0 0' }}>
+                Code applied. No charge.
+              </p>
+            )}
+            {codeState === 'bad' && (
+              <p style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 700, margin: '10px 0 0' }}>
+                That code is not valid for this role.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* The promise about money, stated before they hand over a card */}
+        {role && (
+          <div style={{
+            backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #16a34a',
+            borderRadius: '12px', padding: isMobile ? '16px 18px' : '18px 22px', marginBottom: '18px',
+          }}>
+            <div style={{ ...eyebrow, color: '#166534', marginBottom: '8px' }}>Card payments</div>
+            <p style={{ fontSize: '0.9rem', color: '#166534', lineHeight: 1.6, margin: 0 }}>
+              You are never charged for the table until you are approved as a vendor, and as early as
+              1 to 2 weeks before the event. We ask for permission only. We do not draft anything
+              until vetting and approval.
+            </p>
+          </div>
+        )}
+
+        {alreadyInterviewed && (
+          <p style={{ fontSize: '0.84rem', color: '#6b7280', textAlign: 'center', margin: '4px 0 0' }}>
+            We already have your details, so picking dates is all you need.{' '}
+            <Link to={`/vendors/application?role=${role}&events=${picked.join(',')}`} style={{ color: '#C8102E', fontWeight: 700 }}>
+              Something changed?
+            </Link>
+          </p>
+        )}
+
+        {!signedIn && role && (
+          <p style={{ fontSize: '0.86rem', color: '#6b7280', textAlign: 'center', margin: '4px 0 0' }}>
+            Already vend with us?{' '}
+            <button
+              type="button"
+              onClick={() => auth.openAuthModal({ defaultMode: 'login', intent: 'vendor' })}
+              style={{
+                background: 'none', border: 'none', color: '#C8102E', fontWeight: 700,
+                cursor: 'pointer', fontSize: '0.86rem', padding: 0,
+                fontFamily: 'inherit', textDecoration: 'underline',
+              }}
+            >
+              Log in
+            </button>{' '}
+            and your rate updates automatically.
+          </p>
+        )}
       </div>
+
+      {/* Appears the moment they pick a date. Deliberately not a cart. */}
+      {picked.length > 0 && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 40,
+          backgroundColor: '#fff', borderTop: '1px solid #e5e5e5',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.08)',
+          padding: isMobile ? '14px 16px' : '16px 24px',
+        }}>
+          <div style={{
+            maxWidth: '720px', margin: '0 auto',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+          }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                {picked.length} {picked.length === 1 ? 'date' : 'dates'} selected
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: total === 0 ? '#16a34a' : '#1a1a1a' }}>
+                {total === 0 ? 'No charge' : `$${(total / 100).toFixed(0)} total`}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={goToInterview}
+              style={{
+                backgroundColor: '#C8102E', color: '#fff', border: 'none',
+                borderRadius: '10px', padding: '14px 28px', cursor: 'pointer',
+                fontSize: '1rem', fontWeight: 800, fontFamily: 'inherit',
+                touchAction: 'manipulation', flexShrink: 0,
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
     </PageWrapper>
   );
 }
@@ -10406,6 +10608,612 @@ function VendorApplyPage({ isMobile }) {
 // imports through (avoids changing the existing react-router imports).
 function useNavigateInternal() {
   return (path) => { window.location.href = path; };
+}
+
+// ─── Vendor Application (the interview) ───────────────────
+// /vendors/application?role=&events=&code=
+// Everything we want to know before a phone call. Questions branch on role:
+// card vendors describe inventory, everyone else pitches what they would do.
+// Nothing here writes to the database yet — the account has to exist first,
+// so this collects and hands off to the account + card step.
+
+const EXPERIENCE_OPTIONS = [
+  { key: 'first_show', label: 'This would be my first show ever' },
+  { key: '1_to_5',     label: '1 to 5 shows' },
+  { key: '5_to_10',    label: '5 to 10 shows' },
+  { key: '10_to_50',   label: '10 to 50 shows' },
+  { key: '50_plus',    label: '50 or more' },
+];
+
+const INVENTORY_OPTIONS = [
+  { key: 'singles',     label: 'Singles' },
+  { key: 'slabs',       label: 'Graded slabs' },
+  { key: 'sealed',      label: 'Sealed (older)' },
+  { key: 'modern',      label: 'Mostly modern' },
+  { key: 'vintage',     label: 'Mostly vintage' },
+  { key: 'japanese',    label: 'Japanese' },
+  { key: 'accessories', label: 'Binders, toys, prints' },
+  { key: 'everything',  label: 'A bit of everything' },
+];
+
+function VendorApplicationPage({ isMobile }) {
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const role = searchParams.get('role') || 'card_vendor';
+  const eventIds = (searchParams.get('events') || '').split(',').filter(Boolean);
+  const code = searchParams.get('code') || '';
+  const cardVendor = role === 'card_vendor';
+  const roleLabel = (VENDOR_ROLES.find(r => r.key === role) || {}).label || 'Vendor';
+
+  const vendor = auth.vendor || null;
+  const [events, setEvents] = useState([]);
+
+  // Basics
+  const [name, setName] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [ig, setIg] = useState('');
+
+  // Experience + what they bring
+  const [experience, setExperience] = useState(null);
+  const [inventory, setInventory] = useState([]);
+  const [pitch, setPitch] = useState('');
+
+  // The bigger ask
+  const [teamInterest, setTeamInterest] = useState(null);
+  const [openToCall, setOpenToCall] = useState(false);
+
+  // Logo, uploaded once and reused for badges and promo
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+
+  const [questions, setQuestions] = useState('');
+  const [agreed, setAgreed] = useState({});
+  const [error, setError] = useState('');
+
+  // Prefill anything we already know about a signed-in vendor.
+  useEffect(() => {
+    if (!vendor) return;
+    setName(v => v || vendor.name || '');
+    setBusinessName(v => v || vendor.business_name || '');
+    setEmail(v => v || vendor.email || '');
+    setPhone(v => v || vendor.phone || '');
+    setIg(v => v || vendor.ig_handle || '');
+    if (vendor.experience_level) setExperience(e => e || vendor.experience_level);
+    if (vendor.avatar_url) setLogoPreview(p => p || vendor.avatar_url);
+  }, [vendor]);
+
+  useEffect(() => {
+    if (!eventIds.length) return;
+    supabase
+      .from('events')
+      .select('id, title, event_date, table_fee_cents, table_fee_returning_cents')
+      .in('id', eventIds)
+      .order('event_date', { ascending: true })
+      .then(({ data }) => setEvents(data || []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const rules = vendorEventRules();
+  const allAgreed = rules.every(r => agreed[r.key]);
+  const firstTimeEver = experience === 'first_show';
+
+  const toggleInventory = (k) =>
+    setInventory(list => list.includes(k) ? list.filter(x => x !== k) : [...list, k]);
+
+  const onLogo = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setLogoFile(f);
+    setLogoPreview(URL.createObjectURL(f));
+  };
+
+  const missing = () => {
+    if (!name.trim()) return 'We need your name.';
+    if (!email.trim()) return 'We need an email.';
+    if (!phone.trim()) return 'We need a phone number.';
+    if (!experience) return 'Let us know how many shows you have done.';
+    if (cardVendor && inventory.length === 0) return 'Tell us what you bring.';
+    if (!cardVendor && !pitch.trim()) return 'Tell us what you would like to do.';
+    if (teamInterest === null) return 'Let us know about the Trainer Center team.';
+    if (!allAgreed) return 'Please read and agree to all of it.';
+    return null;
+  };
+
+  const onContinue = () => {
+    const problem = missing();
+    if (problem) { setError(problem); return; }
+    setError('');
+    // Hand the whole answer set to the account + card step.
+    sessionStorage.setItem('tc_vendor_application', JSON.stringify({
+      role, eventIds, code,
+      name: name.trim(), businessName: businessName.trim(),
+      email: email.trim(), phone: phone.trim(), ig: ig.trim(),
+      experience, inventory, pitch: pitch.trim(),
+      teamInterest, openToCall,
+      questions: questions.trim(),
+    }));
+    if (logoFile) window.__tcVendorLogo = logoFile;   // Files do not survive JSON
+    navigate('/vendors/finish');
+  };
+
+  const card = {
+    backgroundColor: '#fff', border: '1px solid #e8e8e8', borderRadius: '14px',
+    padding: isMobile ? '20px' : '24px 28px', marginBottom: '18px',
+  };
+  const eyebrow = {
+    fontSize: '11px', fontWeight: 800, color: '#666',
+    letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '14px',
+  };
+  const input = {
+    width: '100%', boxSizing: 'border-box', fontFamily: 'inherit',
+    padding: '12px 14px', borderRadius: '10px', fontSize: '0.95rem',
+    border: '1px solid #e5e5e5', marginBottom: '12px',
+  };
+  const pill = (on) => ({
+    textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+    backgroundColor: on ? '#fef2f2' : '#fff',
+    border: on ? '2px solid #C8102E' : '1px solid #e5e5e5',
+    borderRadius: '10px', padding: '12px 14px',
+    fontSize: '0.9rem', fontWeight: on ? 800 : 600,
+    color: on ? '#C8102E' : '#1a1a1a',
+    touchAction: 'manipulation',
+  });
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '720px', margin: '0 auto', marginBottom: '64px' }}>
+        <SectionHeader
+          title="Tell us about you"
+          subtitle={`Applying as ${roleLabel.toLowerCase()}${events.length ? ` · ${events.length} ${events.length === 1 ? 'date' : 'dates'}` : ''}`}
+        />
+
+        <div style={card}>
+          <div style={eyebrow}>The basics</div>
+          <input style={input} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" />
+          <input style={input} value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Business or shop name (optional)" />
+          <input style={input} value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" type="email" />
+          <input style={input} value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone" type="tel" />
+          <input style={{ ...input, marginBottom: 0 }} value={ig} onChange={e => setIg(e.target.value)} placeholder="Instagram handle" />
+        </div>
+
+        <div style={card}>
+          <div style={eyebrow}>{cardVendor ? 'How many shows have you vended?' : 'How long have you been doing this?'}</div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {EXPERIENCE_OPTIONS.map(o => (
+              <button key={o.key} type="button" onClick={() => setExperience(o.key)} style={pill(experience === o.key)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {firstTimeEver && (
+            <div style={{
+              backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px',
+              padding: '14px 16px', marginTop: '14px',
+            }}>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#166534' }}>
+                You might be eligible for a free table
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#166534', marginTop: '4px', lineHeight: 1.5 }}>
+                We like getting new people started. Finish the rest of this and we will let you know.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {cardVendor ? (
+          <div style={card}>
+            <div style={eyebrow}>What do you bring? Pick all that apply.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr', gap: '8px' }}>
+              {INVENTORY_OPTIONS.map(o => (
+                <button key={o.key} type="button" onClick={() => toggleInventory(o.key)} style={pill(inventory.includes(o.key))}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={card}>
+            <div style={eyebrow}>What would you like to do, and who are you?</div>
+            <textarea
+              value={pitch}
+              onChange={e => setPitch(e.target.value)}
+              rows={5}
+              placeholder="Tell us what you would bring to an event and a little about yourself, so we know before we call."
+              style={{ ...input, marginBottom: 0, resize: 'vertical', lineHeight: 1.5 }}
+            />
+          </div>
+        )}
+
+        {/* The one question that separates a table from the team */}
+        <div style={{ ...card, borderLeft: '4px solid #C8102E' }}>
+          <div style={eyebrow}>Card shows, or the Trainer Center team?</div>
+          <p style={{ fontSize: '0.9rem', color: '#4b5563', lineHeight: 1.6, margin: '0 0 14px' }}>
+            We run trade nights and we run bigger events like Pacific City. The team is who we call
+            first for the big ones, and it takes extra vetting.
+          </p>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <button type="button" onClick={() => setTeamInterest(false)} style={pill(teamInterest === false)}>
+              Just the card shows for now
+            </button>
+            <button type="button" onClick={() => setTeamInterest(true)} style={pill(teamInterest === true)}>
+              I want to be considered for the team
+            </button>
+          </div>
+          {teamInterest === true && (
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: '10px',
+              cursor: 'pointer', marginTop: '14px', fontSize: '0.9rem', color: '#374151',
+            }}>
+              <input
+                type="checkbox"
+                checked={openToCall}
+                onChange={e => setOpenToCall(e.target.checked)}
+                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: '#C8102E', flexShrink: 0 }}
+              />
+              <span>I am open to a phone call as part of that.</span>
+            </label>
+          )}
+        </div>
+
+        <div style={card}>
+          <div style={eyebrow}>Your logo</div>
+          <p style={{ fontSize: '0.88rem', color: '#6b7280', lineHeight: 1.55, margin: '0 0 14px' }}>
+            We only need this once. It goes on your table badge and gets used when we promote the
+            lineup.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {logoPreview && (
+              <img
+                src={logoPreview}
+                alt=""
+                style={{ width: '64px', height: '64px', borderRadius: '10px', objectFit: 'cover', border: '1px solid #e5e5e5' }}
+              />
+            )}
+            <label style={{
+              display: 'inline-block', cursor: 'pointer', fontFamily: 'inherit',
+              border: '1px solid #e5e5e5', borderRadius: '10px', padding: '12px 18px',
+              fontSize: '0.9rem', fontWeight: 700, touchAction: 'manipulation',
+            }}>
+              {logoPreview ? 'Change logo' : 'Upload logo'}
+              <input type="file" accept="image/*" onChange={onLogo} style={{ display: 'none' }} />
+            </label>
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={eyebrow}>Anything you want to ask us?</div>
+          <textarea
+            value={questions}
+            onChange={e => setQuestions(e.target.value)}
+            rows={3}
+            placeholder="Optional"
+            style={{ ...input, marginBottom: 0, resize: 'vertical', lineHeight: 1.5 }}
+          />
+        </div>
+
+        <VendorRulesChecklist
+          agreed={agreed}
+          onToggle={(key, val) => setAgreed(a => ({ ...a, [key]: val }))}
+        />
+
+        {error && (
+          <p style={{ fontSize: '0.9rem', color: '#dc2626', fontWeight: 700, margin: '0 0 14px' }}>{error}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={onContinue}
+          style={{
+            width: '100%', backgroundColor: '#C8102E', color: '#fff', border: 'none',
+            borderRadius: '10px', padding: '16px', cursor: 'pointer',
+            fontSize: '1rem', fontWeight: 800, fontFamily: 'inherit', touchAction: 'manipulation',
+          }}
+        >
+          Continue
+        </button>
+      </div>
+    </PageWrapper>
+  );
+}
+
+// ─── Vendor Finish (account + card) ───────────────────────
+// /vendors/finish — the last step. Creates the login if they do not have one,
+// writes the vendor row and one application per date, uploads the logo, then
+// hands off to Stripe to store a card. Nothing is charged here; the card is
+// permission only and the charge happens after approval.
+
+function VendorFinishPage({ isMobile }) {
+  const auth = useAuth();
+  const navigate = useNavigate();
+
+  const [answers, setAnswers] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [isReturning, setIsReturning] = useState(false);
+
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const signedIn = Boolean(auth.session);
+  const vendor = auth.vendor || null;
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('tc_vendor_application');
+    if (!raw) { navigate('/vendors/apply'); return; }
+    setAnswers(JSON.parse(raw));
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!answers?.eventIds?.length) return;
+    supabase
+      .from('events')
+      .select('id, title, event_date, table_fee_cents, table_fee_returning_cents')
+      .in('id', answers.eventIds)
+      .order('event_date', { ascending: true })
+      .then(({ data }) => setEvents(data || []));
+  }, [answers]);
+
+  useEffect(() => {
+    if (!vendor?.id) return;
+    supabase.from('vendor_attendance')
+      .select('id', { count: 'exact', head: true })
+      .eq('vendor_id', vendor.id)
+      .then(({ count }) => setIsReturning((count || 0) > 0));
+  }, [vendor?.id]);
+
+  if (!answers) return null;
+
+  const cardVendor = answers.role === 'card_vendor';
+  const comped = Boolean(answers.code);
+
+  const feeFor = (ev) => {
+    if (!cardVendor || comped) return 0;
+    const ret = ev.table_fee_returning_cents;
+    return isReturning && ret != null ? ret : (ev.table_fee_cents ?? 0);
+  };
+  const total = events.reduce((sum, ev) => sum + feeFor(ev), 0);
+
+  const submit = async () => {
+    setError('');
+    if (!signedIn) {
+      if (password.length < 8) { setError('Password needs to be at least 8 characters.'); return; }
+      if (password !== password2) { setError('Those passwords do not match.'); return; }
+    }
+    setBusy(true);
+
+    try {
+      // 1. Account
+      let userId = auth.session?.user?.id || null;
+      if (!userId) {
+        const { data, error: sErr } = await supabase.auth.signUp({
+          email: answers.email,
+          password,
+        });
+        if (sErr) throw new Error(sErr.message);
+        userId = data?.user?.id;
+        if (!userId) throw new Error('Could not create your login. Try again.');
+      }
+
+      // 2. Vendor row
+      const [firstName, ...restName] = answers.name.split(' ');
+      const vendorPayload = {
+        user_id: userId,
+        name: answers.name,
+        first_name: firstName || answers.name,
+        last_name: restName.join(' ') || null,
+        business_name: answers.businessName || null,
+        email: answers.email,
+        phone: answers.phone,
+        ig_handle: answers.ig || null,
+        vendor_type: answers.role,
+        experience_level: answers.experience,
+        inventory_profile: cardVendor ? answers.inventory : null,
+        pitch: cardVendor ? null : answers.pitch,
+        team_interest: Boolean(answers.teamInterest),
+        team_status: answers.teamInterest ? 'requested' : null,
+        open_to_call: Boolean(answers.openToCall),
+        applicant_questions: answers.questions || null,
+        terms_agreed_at: new Date().toISOString(),
+      };
+
+      let savedVendor = vendor;
+      if (savedVendor) {
+        const { data, error: uErr } = await supabase
+          .from('vendors').update(vendorPayload).eq('id', savedVendor.id).select().single();
+        if (uErr) throw new Error(uErr.message);
+        savedVendor = data;
+      } else {
+        const { data, error: iErr } = await supabase
+          .from('vendors').insert({ ...vendorPayload, status: 'pending' }).select().single();
+        if (iErr) throw new Error(iErr.message);
+        savedVendor = data;
+      }
+
+      // 3. Logo. A failed upload should not cost them the whole application,
+      // so it is reported but not fatal.
+      const logoFile = window.__tcVendorLogo;
+      if (logoFile) {
+        const safeName = logoFile.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const path = `${savedVendor.id}/logo/${Date.now()}_${safeName}`;
+        const { error: upErr } = await supabase.storage
+          .from('vendor-media')
+          .upload(path, logoFile, { contentType: logoFile.type, upsert: false });
+        if (!upErr) {
+          const url = `${process.env.REACT_APP_SUPABASE_URL}/storage/v1/object/public/vendor-media/${path}`;
+          await supabase.from('vendors').update({ avatar_url: url }).eq('id', savedVendor.id);
+        } else {
+          console.error('[VendorFinish] logo upload failed', upErr);
+        }
+        delete window.__tcVendorLogo;
+      }
+
+      // 4. One application per date, priced at the rate they were shown.
+      let firstPayableId = null;
+      for (const ev of events) {
+        const fee = feeFor(ev);
+        const { data: appRow, error: aErr } = await supabase
+          .from('vendor_applications')
+          .insert({
+            vendor_id: savedVendor.id,
+            event_id: ev.id,
+            status: 'pending',
+            fee_cents: fee,
+            payment_status: fee === 0 ? 'comped' : 'none',
+            vendor_note: comped ? `Comp code ${answers.code}` : null,
+            terms_agreed_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+        if (aErr && aErr.code !== '23505') throw new Error(aErr.message);
+        if (appRow && fee > 0 && !firstPayableId) firstPayableId = appRow.id;
+      }
+
+      sessionStorage.removeItem('tc_vendor_application');
+
+      // 5. Card on file, only if anything is actually owed.
+      if (firstPayableId) {
+        const { data, error: fnErr } = await supabase.functions.invoke('stripe-vendor-payment', {
+          body: { action: 'create_setup_session', application_id: firstPayableId },
+        });
+        if (fnErr || !data?.url) throw new Error('Could not open the card step. Your application is saved, you can add a card from your dashboard.');
+        window.location.href = data.url;
+        return;
+      }
+
+      setBusy(false);
+      setDone(true);
+    } catch (e) {
+      setBusy(false);
+      setError(e.message || 'Something went wrong.');
+    }
+  };
+
+  const card = {
+    backgroundColor: '#fff', border: '1px solid #e8e8e8', borderRadius: '14px',
+    padding: isMobile ? '20px' : '24px 28px', marginBottom: '18px',
+  };
+  const eyebrow = {
+    fontSize: '11px', fontWeight: 800, color: '#666',
+    letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '14px',
+  };
+  const input = {
+    width: '100%', boxSizing: 'border-box', fontFamily: 'inherit',
+    padding: '12px 14px', borderRadius: '10px', fontSize: '0.95rem',
+    border: '1px solid #e5e5e5', marginBottom: '12px',
+  };
+
+  if (done) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', marginBottom: '64px' }}>
+          <SectionHeader title="You are in the queue" subtitle="We will be in touch" />
+          <div style={{ ...card, borderLeft: '4px solid #16a34a' }}>
+            <p style={{ fontSize: '0.96rem', color: '#374151', lineHeight: 1.65, margin: 0 }}>
+              Your application is submitted and nothing has been charged. We review these by hand and
+              will reach out{answers.teamInterest ? ', and since you asked about the team we will set up a call' : ''}.
+            </p>
+          </div>
+          <Link to="/vendors/dashboard" style={{
+            display: 'block', textAlign: 'center', backgroundColor: '#C8102E', color: '#fff',
+            borderRadius: '10px', padding: '16px', fontSize: '1rem', fontWeight: 800,
+            textDecoration: 'none',
+          }}>
+            Go to my dashboard
+          </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  return (
+    <PageWrapper isMobile={isMobile}>
+      <div style={{ maxWidth: '640px', margin: '0 auto', marginBottom: '64px' }}>
+        <SectionHeader
+          title={signedIn ? 'Confirm and finish' : 'Last step, your login'}
+          subtitle={signedIn ? 'Review what you are applying for' : 'So you can check your status and apply again later'}
+        />
+
+        <div style={card}>
+          <div style={eyebrow}>What you are applying for</div>
+          {events.map(ev => (
+            <div key={ev.id} style={{
+              display: 'flex', justifyContent: 'space-between', gap: '12px',
+              padding: '10px 0', borderTop: '1px solid #f0f0f0', fontSize: '0.92rem',
+            }}>
+              <span>{new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+              <strong style={{ color: feeFor(ev) === 0 ? '#16a34a' : '#1a1a1a' }}>
+                {feeFor(ev) === 0 ? 'No charge' : `$${(feeFor(ev) / 100).toFixed(0)}`}
+              </strong>
+            </div>
+          ))}
+          {events.length === 0 && (
+            <p style={{ fontSize: '0.9rem', color: '#6b7280', margin: 0 }}>
+              No dates selected. We will add you to the list for the next one.
+            </p>
+          )}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            borderTop: '2px solid #1a1a1a', marginTop: '10px', paddingTop: '10px',
+            fontSize: '1.05rem', fontWeight: 900,
+          }}>
+            <span>Total</span>
+            <span style={{ color: total === 0 ? '#16a34a' : '#1a1a1a' }}>
+              {total === 0 ? 'No charge' : `$${(total / 100).toFixed(0)}`}
+            </span>
+          </div>
+        </div>
+
+        {!signedIn && (
+          <div style={card}>
+            <div style={eyebrow}>Create a password</div>
+            <p style={{ fontSize: '0.88rem', color: '#6b7280', lineHeight: 1.55, margin: '0 0 14px' }}>
+              This is how you get back in to check your status and pick more dates. Write it down
+              somewhere you will find it.
+            </p>
+            <input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" autoComplete="new-password" />
+            <input style={{ ...input, marginBottom: 0 }} type="password" value={password2} onChange={e => setPassword2(e.target.value)} placeholder="Confirm password" autoComplete="new-password" />
+          </div>
+        )}
+
+        {total > 0 && (
+          <div style={{
+            backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #16a34a',
+            borderRadius: '12px', padding: isMobile ? '16px 18px' : '18px 22px', marginBottom: '18px',
+          }}>
+            <div style={{ ...eyebrow, color: '#166534', marginBottom: '8px' }}>Before the card step</div>
+            <p style={{ fontSize: '0.9rem', color: '#166534', lineHeight: 1.6, margin: 0 }}>
+              We are asking for permission, not payment. Nothing is drafted until you are approved,
+              and that happens as early as 1 to 2 weeks before the event.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p style={{ fontSize: '0.9rem', color: '#dc2626', fontWeight: 700, margin: '0 0 14px' }}>{error}</p>
+        )}
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy}
+          style={{
+            width: '100%', backgroundColor: busy ? '#9ca3af' : '#C8102E', color: '#fff',
+            border: 'none', borderRadius: '10px', padding: '16px',
+            cursor: busy ? 'default' : 'pointer', fontSize: '1rem', fontWeight: 800,
+            fontFamily: 'inherit', touchAction: 'manipulation',
+          }}
+        >
+          {busy ? 'Submitting...' : total > 0 ? 'Continue to card' : 'Submit application'}
+        </button>
+      </div>
+    </PageWrapper>
+  );
 }
 
 // ─── Vendor Edit Profile Page ─────────────────────────────
@@ -10530,305 +11338,6 @@ function DashboardCard({ icon, title, subtitle, to, accent = '#C8102E', accentBg
 //   3. Logged in, no vendor row → onboarding form (collect full profile)
 //   4. Vendor (with admin) → vendor dashboard + Manage Vendors banner
 //   5. Vendor (no admin) → normal vendor dashboard
-// ─── VendorMandatorySurveyGate ──────────────────────────────────────
-// Renders a full-screen modal overlay if this vendor has a past approved
-// event without a submitted survey. Returns null otherwise.
-// On submit, it inserts the row and calls onCompleted so the dashboard
-// re-checks. The vendor cannot dismiss this without submitting.
-function VendorMandatorySurveyGate({ vendor, isMobile, onCompleted }) {
-  const [pendingEvent, setPendingEvent] = React.useState(null);
-  const [loaded, setLoaded] = React.useState(false);
-  const [q1, setQ1] = React.useState(null);
-  const [q2, setQ2] = React.useState(null);
-  const [q2Text, setQ2Text] = React.useState('');
-  const [q3, setQ3] = React.useState(null);
-  const [q3Text, setQ3Text] = React.useState('');
-  const [q4, setQ4] = React.useState(null);
-  const [q5, setQ5] = React.useState(null);
-  const [q5Text, setQ5Text] = React.useState('');
-  const [q6Amount, setQ6Amount] = React.useState('');
-  const [q6Compare, setQ6Compare] = React.useState(null);
-  const [q6CompareText, setQ6CompareText] = React.useState('');
-  const [q7, setQ7] = React.useState('');
-  const [q8, setQ8] = React.useState('');
-  const [submitting, setSubmitting] = React.useState(false);
-  const [errorMsg, setErrorMsg] = React.useState(null);
-
-  React.useEffect(() => {
-    if (!vendor?.id) return;
-    let cancelled = false;
-    (async () => {
-      const today = todayISO();
-      const [appsRes, surveysRes] = await Promise.all([
-        supabase
-          .from('vendor_applications')
-          .select('event_id, status, event:events(id, title, event_date)')
-          .eq('vendor_id', vendor.id)
-          .eq('status', 'approved'),
-        supabase
-          .from('vendor_event_surveys')
-          .select('event_id')
-          .eq('vendor_id', vendor.id),
-      ]);
-      if (cancelled) return;
-      const surveyed = new Set((surveysRes.data || []).map(r => r.event_id));
-      const pending = (appsRes.data || [])
-        .filter(a => a.event && a.event.event_date < today && !surveyed.has(a.event_id))
-        .map(a => a.event)
-        .sort((a, b) => b.event_date.localeCompare(a.event_date))[0] || null;
-      setPendingEvent(pending);
-      setLoaded(true);
-    })();
-    return () => { cancelled = true; };
-  }, [vendor?.id]);
-
-  if (!loaded || !pendingEvent) return null;
-
-  const eventDateLabel = new Date(pendingEvent.event_date + 'T12:00:00')
-    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
-  const canSubmit =
-    q1 != null && q2 != null && q3 != null && q4 != null && q5 != null &&
-    (q6Amount.trim() !== '' || q6Compare != null);
-
-  async function handleSubmit() {
-    if (!canSubmit || submitting) return;
-    setErrorMsg(null);
-    setSubmitting(true);
-    const amt = q6Amount.trim() === '' ? null : Number(q6Amount.replace(/[$,]/g, ''));
-    const row = {
-      vendor_id: vendor.id,
-      event_id: pendingEvent.id,
-      q1_overall: q1,
-      q2_community: q2,
-      q2_community_text: q2Text.trim() || null,
-      q3_community_vs: q3,
-      q3_community_vs_text: q3Text.trim() || null,
-      q4_vendors: q4,
-      q5_vendors_vs: q5,
-      q5_vendors_vs_text: q5Text.trim() || null,
-      q6_sales_amount: Number.isFinite(amt) ? amt : null,
-      q6_sales_compare: q6Compare,
-      q6_sales_compare_text: q6CompareText.trim() || null,
-      q7_provide: q7.trim() || null,
-      q8_other: q8.trim() || null,
-    };
-    const { error } = await supabase.from('vendor_event_surveys').insert(row);
-    if (error) {
-      setSubmitting(false);
-      setErrorMsg(error.message || 'Could not submit survey. Try again.');
-      return;
-    }
-    setSubmitting(false);
-    onCompleted?.();
-  }
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 10000,
-      background: 'rgba(0,0,0,0.55)',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      padding: isMobile ? '12px' : '40px 24px',
-      overflowY: 'auto',
-    }}>
-      <div style={{
-        background: '#fff', borderRadius: '14px',
-        maxWidth: '720px', width: '100%',
-        padding: isMobile ? '20px 18px' : '28px 32px',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
-      }}>
-        {/* Mandatory banner */}
-        <div style={{
-          border: '2.5px solid #C8102E', borderRadius: '10px',
-          background: 'linear-gradient(180deg, #fff5f5 0%, #fff 100%)',
-          padding: '14px 18px', marginBottom: '18px',
-        }}>
-          <div style={{ fontSize: '11px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>
-            Action Required
-          </div>
-          <div style={{ fontSize: '18px', fontWeight: 800, color: '#000', marginBottom: '6px', letterSpacing: '-0.3px' }}>
-            We need your feedback.
-          </div>
-          <div style={{ fontSize: '14px', color: '#333', lineHeight: 1.5 }}>
-            Quick mandatory survey for <strong>{pendingEvent.title}</strong> ({eventDateLabel}) before you can use your dashboard. Takes about 2 minutes. Your honest answers shape what we change for the next event.
-          </div>
-          <div style={{ fontSize: '12px', color: '#777', marginTop: '8px', fontStyle: 'italic' }}>
-            Can't close until submitted. We only ask once per event.
-          </div>
-        </div>
-
-        <SurveyScaleQuestion
-          num="Question 1"
-          required
-          label="On a scale of 1–10, how was your overall personal experience?"
-          helper="Just your general feeling — the night as a whole."
-          value={q1} onChange={setQ1}
-          lowLabel="Rough night" highLabel="Loved it"
-        />
-        <SurveyScaleQuestion
-          num="Question 2 · Community"
-          required
-          label="1–10, how much did you enjoy the type of people who came to the event?"
-          helper="The crowd, the energy, the conversations."
-          value={q2} onChange={setQ2}
-          textValue={q2Text} setTextValue={setQ2Text}
-        />
-        <SurveyScaleQuestion
-          num="Question 3 · Community vs other events"
-          required
-          label="1–10, how does our crowd compare to other shows you've vended?"
-          value={q3} onChange={setQ3}
-          textValue={q3Text} setTextValue={setQ3Text}
-          lowLabel="Way worse" highLabel="Way better"
-        />
-        <SurveyScaleQuestion
-          num="Question 4 · Vendor neighbors"
-          required
-          label="1–10, how were your interactions with the other vendors here?"
-          value={q4} onChange={setQ4}
-        />
-        <SurveyScaleQuestion
-          num="Question 5 · Vendor neighbors vs other events"
-          required
-          label="1–10, how does that compare to other events you've worked?"
-          value={q5} onChange={setQ5}
-          textValue={q5Text} setTextValue={setQ5Text}
-        />
-
-        {/* Q6 — A or B */}
-        <div style={surveyCardStyle}>
-          <div style={surveyNumStyle}>Question 6 · Sales · Required</div>
-          <div style={surveyLabelStyle}>Pick one. Both help us, but specifics are always better.</div>
-          <div style={surveyHelperStyle}>Just your revenue from the night, separate from what you bought to restock.</div>
-          <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row', marginTop: '8px' }}>
-            <div style={{ flex: 1, border: '1.5px solid #C8102E', borderRadius: '8px', padding: '12px 14px' }}>
-              <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>Option A · Preferred</div>
-              <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>Total sales / cash earned</div>
-              <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>Best signal. Stays private to TC HB owners.</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontWeight: 700, color: '#333' }}>$</span>
-                <input type="number" step="0.01" min="0" value={q6Amount}
-                  onChange={e => setQ6Amount(e.target.value)}
-                  onFocus={() => setQ6Compare(null)}
-                  placeholder="0.00"
-                  style={{
-                    flex: 1, padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px',
-                    fontSize: '14px', fontFamily: 'inherit',
-                  }} />
-              </div>
-            </div>
-            <div style={{ flex: 1, border: '1.5px solid #C8102E', borderRadius: '8px', padding: '12px 14px' }}>
-              <div style={{ fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' }}>Option B</div>
-              <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>1–10, how does May 29 compare to other shows for sales?</div>
-              <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>If you'd rather not share the dollar figure.</div>
-              <ScaleRow value={q6Compare} onChange={v => { setQ6Compare(v); setQ6Amount(''); }} />
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>Tell us why (optional):</div>
-              <textarea value={q6CompareText} onChange={e => setQ6CompareText(e.target.value)}
-                placeholder="Type here…"
-                rows={2}
-                style={surveyTextareaStyle} />
-            </div>
-          </div>
-        </div>
-
-        {/* Q7 */}
-        <div style={surveyCardStyle}>
-          <div style={surveyNumStyle}>Question 7 · What can we provide</div>
-          <div style={surveyLabelStyle}>We already cover tables, cloths, lights, canopies, food, everything. Anything else we should provide to make your night easier?</div>
-          <div style={surveyHelperStyle}>Hardware, supplies, signage, drinks, anything. Optional but really helpful.</div>
-          <textarea value={q7} onChange={e => setQ7(e.target.value)}
-            placeholder="Type here…" rows={3}
-            style={surveyTextareaStyle} />
-        </div>
-
-        {/* Q8 */}
-        <div style={surveyCardStyle}>
-          <div style={surveyNumStyle}>Question 8 · Anything else</div>
-          <div style={surveyLabelStyle}>Any other feedback for us? Good, bad, or weird — we read everything.</div>
-          <textarea value={q8} onChange={e => setQ8(e.target.value)}
-            placeholder="Type here…" rows={3}
-            style={surveyTextareaStyle} />
-        </div>
-
-        {errorMsg && (
-          <div style={{ color: '#C8102E', fontSize: '13px', marginTop: '10px', fontWeight: 600 }}>
-            {errorMsg}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-          <button onClick={handleSubmit} disabled={!canSubmit || submitting}
-            style={{
-              background: (!canSubmit || submitting) ? '#aaa' : '#C8102E',
-              color: '#fff', padding: '12px 24px', borderRadius: '6px',
-              fontWeight: 800, fontSize: '14px', letterSpacing: '0.5px', textTransform: 'uppercase',
-              border: 'none', cursor: (!canSubmit || submitting) ? 'not-allowed' : 'pointer',
-            }}>
-            {submitting ? 'Submitting…' : 'Submit Survey'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const surveyCardStyle = { background: '#fafafa', border: '1px solid #e5e5e5', borderRadius: '8px', padding: '14px 16px', marginBottom: '12px' };
-const surveyNumStyle = { fontSize: '10px', fontWeight: 800, color: '#C8102E', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px' };
-const surveyLabelStyle = { fontSize: '14px', fontWeight: 700, color: '#000', marginBottom: '4px', lineHeight: 1.35 };
-const surveyHelperStyle = { fontSize: '12px', color: '#666', marginBottom: '6px', lineHeight: 1.4 };
-const surveyTextareaStyle = {
-  width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: '4px',
-  fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', marginTop: '4px',
-};
-
-function ScaleRow({ value, onChange }) {
-  return (
-    <div style={{ display: 'flex', gap: '3px', marginTop: '4px' }}>
-      {[1,2,3,4,5,6,7,8,9,10].map(n => {
-        const selected = value === n;
-        return (
-          <button key={n} type="button" onClick={() => onChange(n)}
-            style={{
-              flex: 1, padding: '8px 0',
-              border: selected ? '1.5px solid #C8102E' : '1px solid #ccc',
-              background: selected ? '#C8102E' : '#fff',
-              color: selected ? '#fff' : '#555',
-              borderRadius: '4px', fontWeight: 800, fontSize: '13px',
-              cursor: 'pointer',
-            }}>
-            {n}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function SurveyScaleQuestion({ num, label, helper, value, onChange, lowLabel, highLabel, textValue, setTextValue, required }) {
-  return (
-    <div style={surveyCardStyle}>
-      <div style={surveyNumStyle}>{num}{required ? ' · Required' : ''}</div>
-      <div style={surveyLabelStyle}>{label}</div>
-      {helper && <div style={surveyHelperStyle}>{helper}</div>}
-      <ScaleRow value={value} onChange={onChange} />
-      {(lowLabel || highLabel) && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#888', marginTop: '4px', padding: '0 2px' }}>
-          <span>{lowLabel || ''}</span><span>{highLabel || ''}</span>
-        </div>
-      )}
-      {setTextValue && (
-        <>
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>Tell us why (optional):</div>
-          <textarea value={textValue} onChange={e => setTextValue(e.target.value)}
-            placeholder="Type here…" rows={2}
-            style={surveyTextareaStyle} />
-        </>
-      )}
-    </div>
-  );
-}
-
-// Vendor-facing "Pokedex July 31" checklist page (mark which pool cards they also hold).
 function VendorChallengePage({ isMobile }) {
   const { vendor, isLoading } = useAuth();
   if (isLoading) {
@@ -10923,110 +11432,11 @@ function VendorDashboardPage({ isMobile }) {
   };
 
   // ─── State 1: not logged in — themed card hub ─────────────
+  // The dashboard is vendor-only. Anyone signed out goes to /vendors/apply,
+  // which is now the single front door for both new applicants and returning
+  // vendors picking dates.
   if (authReady && !session) {
-    return (
-      <PageWrapper isMobile={isMobile}>
-        <div style={{ marginBottom: '64px', maxWidth: '900px', margin: '0 auto' }}>
-          <SectionHeader title="Vendor Dashboard" subtitle="Last-Friday Vendor Day at Trainer Center HB" />
-
-          {/* How it works — explicit two-step flow so first-timers know what
-              the path is before they click anything. Also doubles as
-              anti-confusion for returning vendors who land here unsure
-              whether they already have an account. */}
-          <div style={{
-            backgroundColor: '#fff',
-            border: '1px solid #e5e5e5',
-            borderRadius: '14px',
-            padding: isMobile ? '20px' : '24px 28px',
-            marginBottom: '20px',
-          }}>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: 800,
-              color: '#666',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '14px',
-            }}>
-              How vending works
-            </div>
-            {[
-              { n: 1, title: 'Apply to become a partner', sub: 'One-time signup. Chef reviews and approves you as a Trainer Center HB vendor partner.' },
-              { n: 2, title: 'Apply for each Vendor Day', sub: 'After approval, pick the dates you want from your dashboard. Two clicks per event.' },
-              { n: 3, title: 'Show up and vend', sub: 'Chef confirms each event within a day or two. Then the date is yours.' },
-            ].map(step => (
-              <div key={step.n} style={{
-                display: 'flex',
-                gap: '14px',
-                alignItems: 'flex-start',
-                marginBottom: step.n === 3 ? '0' : '14px',
-              }}>
-                <div style={{
-                  width: '32px', height: '32px', flexShrink: 0,
-                  borderRadius: '16px',
-                  backgroundColor: '#C8102E',
-                  color: '#fff',
-                  fontSize: '15px', fontWeight: 800,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  lineHeight: '32px',
-                }}>{step.n}</div>
-                <div style={{ flex: 1, paddingTop: '4px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '2px' }}>{step.title}</div>
-                  <div style={{ fontSize: '13px', color: '#525252', lineHeight: 1.5 }}>{step.sub}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Anti-duplicate-account warning. We had vendors create 2-3 logins
-              with different email addresses, which then created duplicate
-              vendor rows that can't be merged cleanly. Loud-but-friendly so
-              returning users always pick Log In, never Sign Up. */}
-          <div style={{
-            backgroundColor: '#fef9e6',
-            borderLeft: '3px solid #d97706',
-            borderRadius: '6px',
-            padding: '12px 16px',
-            marginBottom: '24px',
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'flex-start',
-          }}>
-            <div style={{ fontSize: '18px', lineHeight: 1, paddingTop: '1px' }}>⚠️</div>
-            <div style={{ fontSize: '13px', lineHeight: 1.5, color: '#1a1a1a' }}>
-              <strong>Already a partner?</strong> Use <strong>Log In</strong> below — don't create a new account. Multiple accounts confuse approvals and we can't merge them later. If you forgot which email you used, reply to any of our emails or call the shop at (714) 951-9100.
-            </div>
-          </div>
-
-          <DashboardCardGrid isMobile={isMobile}>
-            <DashboardCard
-              icon={<LogIn size={22} />}
-              title="Log In"
-              subtitle="Already a partner? Sign in to your dashboard."
-              to="/vendors/apply?mode=login"
-              accent="#C8102E"
-              accentBg="#fff0f0"
-            />
-            <DashboardCard
-              icon={<FileEdit size={22} />}
-              title="Apply to be a vendor"
-              subtitle="See upcoming dates and start your application."
-              to="/vendors/apply"
-              accent="#1a1a1a"
-              accentBg="#f4f4f5"
-            />
-            <DashboardCard
-              icon={<HelpCircle size={22} />}
-              title="What is TC's Beach City Trade Night?"
-              subtitle="Read what these events are and how they work."
-              to="/vendor-day/about"
-              accent="#0369a1"
-              accentBg="#f0f9ff"
-            />
-          </DashboardCardGrid>
-        </div>
-      </PageWrapper>
-    );
+    return <Navigate to="/vendors/apply" replace />;
   }
 
   // ─── Staff (admin) WITHOUT a vendor row — staff hub ───────
@@ -11101,40 +11511,14 @@ function VendorDashboardPage({ isMobile }) {
     .map(eventId => ({ eventId, event: events.find(e => e.id === eventId) }))
     .filter(x => x.event && x.event.event_date < todayStr)
     .sort((a, b) => b.event.event_date.localeCompare(a.event.event_date))[0];
-  const recentAttendedDateStr = recentAttended
-    ? new Date(recentAttended.event.event_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : '';
   const isApproved = vendor.status === 'approved';
   const isPending = vendor.status === 'pending';
   const isSuspended = vendor.status === 'suspended';
 
   return (
     <PageWrapper isMobile={isMobile}>
-      <VendorMandatorySurveyGate vendor={vendor} isMobile={isMobile} onCompleted={() => window.location.reload()} />
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
-
-        {/* Dexter's Challenge — vendors mark which scavenger cards they also carry */}
-        {isApproved && (
-          <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
-            <Link to="/vendors/challenge" style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '12px',
-              padding: isMobile ? '14px 16px' : '16px 20px', textDecoration: 'none', color: '#1a1a1a',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#16a34a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Award size={18} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '2px' }}>Pokedex Challenge — mark your cards</div>
-                  <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>Check off any hunt cards you also have, so you count as a correct answer.</div>
-                </div>
-              </div>
-              <ChevronRight size={18} color="#16a34a" />
-            </Link>
-          </div>
-        )}
 
         {/* Staff who are also vendors (Chef, Seth) get a Manage Vendors
             shortcut at the top of their own vendor dashboard so they can
@@ -11178,7 +11562,7 @@ function VendorDashboardPage({ isMobile }) {
         {isApproved && (
           <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
             <button
-              onClick={() => navigate('/vendors/events')}
+              onClick={() => navigate('/vendors/apply')}
               className="tap-row"
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -13080,17 +13464,24 @@ function vendorEventRules() {
     },
     {
       key: 'full_window',
-      title: 'I can do the full day, 12 PM to 10 PM',
-      body: 'Our events are typically the last Friday of the month, 12 PM to 10 PM. You are signing up for '
-        + 'the whole day. You cannot pick a shorter time inside it. Only check this if you can actually '
-        + 'commit to that window. There is daylight early on, so bring a canopy just in case. Once it gets '
-        + 'dark, bring lights: some for the look of your setup, and some that actually help people see the cards.',
-      note: 'Exact hours are on each event, but plan for a full 12-to-10 day.',
+      title: 'I can do the full window of the event',
+      body: 'You are signing up for the whole event, start to finish. You cannot pick a shorter time '
+        + 'inside it. Only check this if you can actually commit to the hours listed on the date you '
+        + 'picked. If any of it runs after dark, bring lights: some for the look of your setup, and '
+        + 'some that actually help people see the cards.',
+      note: 'The exact hours are listed on each date when you apply.',
     },
     {
       key: 'rotate_spot',
       title: 'Move your spot each event',
       body: 'Please do not set up in the same place two events in a row. Pick a different table than you had last time.',
+    },
+    {
+      key: 'conduct',
+      title: 'Conduct at the show',
+      body: 'No alcohol, no drugs, no theft, no harassment. Families and kids are at every one of '
+        + 'these. Anything that makes the room feel unsafe ends your table that night and your '
+        + 'standing with us after it.',
     },
     {
       key: 'one_team',
@@ -16871,6 +17262,8 @@ function ExpressVendorPage({ isMobile }) {
   const [phase, setPhase] = useState(paidSession ? 'confirming' : 'landing');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Comp code, so a character or DJ sent a fast-pass link is not asked to pay.
+  const [expressCode, setExpressCode] = useState('');
 
   // Account / mini-profile form state (only used when needed)
   const [mode, setMode] = useState('signup');
@@ -16914,7 +17307,7 @@ function ExpressVendorPage({ isMobile }) {
     setBusy(true);
     setError('');
     const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
-      body: { action: 'express_checkout', event_id: eventId },
+      body: { action: 'express_checkout', event_id: eventId, code: expressCode.trim() || undefined },
     });
     if (fn?.url) { window.location.href = fn.url; return; }
     if (fn?.already) { setPhase('already'); setBusy(false); return; }
@@ -17136,6 +17529,12 @@ function ExpressVendorPage({ isMobile }) {
                 ? 'Pay the table fee and your spot is locked the moment the payment clears — no waiting on a review.'
                 : 'Reserve and your spot is locked instantly.'}
             </p>
+            <input
+              value={expressCode}
+              onChange={e => setExpressCode(e.target.value)}
+              placeholder="Have a code? (optional)"
+              style={{ ...inputCss, textTransform: 'uppercase' }}
+            />
             <button onClick={startPayment} disabled={busy} style={bigBtn}>
               {busy ? 'One sec…' : feeCents > 0 ? `Pay ${feeLabel} & lock in my table` : 'Reserve my table'}
             </button>
@@ -27804,6 +28203,8 @@ function App() {
         <Route path="/staff/preview" element={<StaffPreviewPage isMobile={isMobile} />} />
         <Route path="/vendors" element={<VendorsPage isMobile={isMobile} staff={staff} />} />
         <Route path="/vendors/apply" element={<VendorApplyPage isMobile={isMobile} />} />
+        <Route path="/vendors/application" element={<VendorApplicationPage isMobile={isMobile} />} />
+        <Route path="/vendors/finish" element={<VendorFinishPage isMobile={isMobile} />} />
         <Route path="/vendors/express" element={<ExpressVendorPage isMobile={isMobile} />} />
         <Route path="/vendors/dashboard" element={<VendorDashboardPage isMobile={isMobile} />} />
         <Route path="/vendors/edit" element={<VendorEditProfilePage isMobile={isMobile} />} />
