@@ -11006,7 +11006,7 @@ function VendorFinishPage({ isMobile }) {
     if (!answers?.eventIds?.length) return;
     supabase
       .from('events')
-      .select('id, title, event_date, table_fee_cents, table_fee_returning_cents')
+      .select('id, title, event_date, start_time, end_time, vendor_start_time, vendor_end_time, table_fee_cents, table_fee_returning_cents')
       .in('id', answers.eventIds)
       .order('event_date', { ascending: true })
       .then(({ data }) => setEvents(data || []));
@@ -11116,6 +11116,9 @@ function VendorFinishPage({ isMobile }) {
             vendor_id: savedVendor.id,
             event_id: ev.id,
             status: 'pending',
+            // NOT NULL on this table. Default to the event's own vendor window.
+            requested_start_time: ev.vendor_start_time || ev.start_time || '12:00',
+            requested_end_time: ev.vendor_end_time || ev.end_time || '22:00',
             fee_cents: fee,
             payment_status: fee === 0 ? 'comped' : 'none',
             vendor_note: comped ? `Comp code ${answers.code}` : null,
