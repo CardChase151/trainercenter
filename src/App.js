@@ -11071,7 +11071,17 @@ function VendorFinishPage({ isMobile }) {
           email: answers.email,
           password,
         });
-        if (sErr) throw new Error(sErr.message);
+        if (sErr) {
+          // They already have a login. Dead-ending them on "User already
+          // registered" is the wrong answer when the fix is one tap.
+          if (/already registered|already exists|user_repeated_signup/i.test(sErr.message)) {
+            setBusy(false);
+            setErrorKind('login');
+            setError('');
+            return;
+          }
+          throw new Error(sErr.message);
+        }
         userId = data?.user?.id;
         if (!userId) throw new Error('Could not create your login. Try again.');
       }
@@ -11276,6 +11286,36 @@ function VendorFinishPage({ isMobile }) {
 
         {error && errorKind === 'form' && (
           <p style={{ fontSize: '0.9rem', color: '#dc2626', fontWeight: 700, margin: '0 0 14px' }}>{error}</p>
+        )}
+
+        {errorKind === 'login' && (
+          <div style={{
+            backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderLeft: '4px solid #2563eb',
+            borderRadius: '12px', padding: '16px 18px', marginBottom: '16px',
+          }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e40af', marginBottom: '6px' }}>
+              You already have an account
+            </div>
+            <div style={{ fontSize: '0.88rem', color: '#1e40af', lineHeight: 1.55, marginBottom: '12px' }}>
+              Log in with {answers.email} and we will pick this right back up. Your answers are saved.
+            </div>
+            <button
+              type="button"
+              onClick={() => auth.openAuthModal({
+                defaultMode: 'login',
+                intent: 'vendor',
+                onSuccess: () => { setErrorKind('form'); setError(''); },
+              })}
+              style={{
+                width: '100%', backgroundColor: '#2563eb', color: '#fff', border: 'none',
+                borderRadius: '10px', padding: '13px', cursor: 'pointer',
+                fontSize: '0.95rem', fontWeight: 800, fontFamily: 'inherit',
+                touchAction: 'manipulation',
+              }}
+            >
+              Log in instead
+            </button>
+          </div>
         )}
 
         {error && errorKind === 'system' && (
