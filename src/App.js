@@ -9117,33 +9117,41 @@ function VendorDayAboutPage({ isMobile }) {
           padding: isMobile ? '22px 18px' : '32px 36px',
         }}>
           <p style={{ ...para, fontSize: '1.05rem' }}>
-            Once a month, Trainer Center HB hosts a Vendor Day. Pokemon vendors set up tables across the shop. Collectors come through, swap cards, talk shop, and walk out with the binder they have been chasing. New to trading? Even better — regulars are happy to walk you through fair values.
+            A trade night at Trainer Center HB is a card show with a few differences. It is Pokemon only. Vendors set up across the shop with singles, slabs, sealed and whatever they specialize in, and collectors come through to trade, buy, sell and finally finish a set. New to trading? Even better, the regulars are happy to walk you through fair values.
           </p>
 
           <h2 style={h2}>What makes it different</h2>
           <p style={para}>
-            <strong>About 90% of our Vendor Days are completely free for vendors.</strong> No table fees, no gatekeeping. We provide the room, the foot traffic, and the platform.
+            <strong>We look for depth.</strong> The point is that someone hunting a specific card can actually find it, so we build the lineup around what vendors bring rather than how fast they can fill a table. We do not allow scalping vendors to participate.
+          </p>
+          <p style={para}>
+            <strong>There is more going on than tables.</strong> Pokemon characters out for photos, scavenger hunts, giveaways and music, so families stay for the night instead of walking a room of tables. Our bigger events, the Pacific City kind, lean even harder that way.
           </p>
 
           <h2 style={h2}>How vending here works</h2>
           <ol style={{ ...para, paddingLeft: '18px', margin: '0 0 14px 0' }}>
             <li style={{ marginBottom: '10px' }}>
-              <strong>Apply once to partner.</strong> A short application — we review profiles to keep the room healthy.
+              <strong>Pick the dates you want.</strong> All of them if you like. You do not have to be approved first to raise your hand.
             </li>
             <li style={{ marginBottom: '10px' }}>
-              <strong>Pick your dates.</strong> Approved partners apply for any Vendor Day in two taps from their dashboard.
+              <strong>Tell us about you.</strong> What you bring, how long you have been doing this, and whether you want just the trade nights or the bigger events too.
             </li>
             <li style={{ marginBottom: '10px' }}>
-              <strong>Show up. Sell. Trade.</strong> Bring what you specialize in — singles, sealed, slabs, vintage, Japanese.
+              <strong>We vet, then you pay.</strong> We ask for a card up front as permission only. Nothing is charged until you are approved, and that is usually one to two weeks out.
             </li>
             <li style={{ marginBottom: '10px' }}>
-              <strong>Boost your IG.</strong> Post on your account after. DM-share TC posts to friends — the IG algorithm rewards DM-shares more than likes, and that is how a low-volume page like ours grows.
+              <strong>Show up. Sell. Trade.</strong> Bring what you specialize in, singles, sealed, slabs, vintage, Japanese.
             </li>
           </ol>
 
-          <h2 style={h2}>Beyond Vendor Day</h2>
+          <h2 style={h2}>It is not only card vendors</h2>
           <p style={para}>
-            Vendor Day is one night a month. The rest of the time we are still working with the same community:
+            We are building a team for the bigger shows and it is wider than tables. Characters and costumes, crafts and activities, DJs, airbrush and face paint. If you do something that would make an event better, apply and tell us what it is.
+          </p>
+
+          <h2 style={h2}>Beyond the trade nights</h2>
+          <p style={para}>
+            A trade night is one night. The rest of the time we are still working with the same community:
           </p>
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 8px 0' }}>
             {[
@@ -9494,6 +9502,15 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
   const [igChatOpen, setIgChatOpen] = useState(false);
   const isAdmin = !!staff?.isAdmin;
 
+  // The lineup is held until a week out so it lands as an announcement instead
+  // of trickling in one approval at a time. Staff always see the real thing.
+  const LINEUP_RELEASE_DAYS = 7;
+  const lineupReleased = isPast || dayDiff <= LINEUP_RELEASE_DAYS || isAdmin;
+  // Give people the actual day it lands, not "one week before". A date is
+  // something you can come back for.
+  const releaseDate = new Date(d.getTime() - LINEUP_RELEASE_DAYS * 86400000)
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
       <div style={{
@@ -9528,13 +9545,42 @@ function VendorDaySingleEvent({ event, myVendorId, isMobile, compact = false, st
           fontSize: '0.95rem',
           color: '#666',
         }}>
-          {vendors.length > 0
-            ? `${vendors.length} vendor${vendors.length === 1 ? '' : 's'} ${isPast ? 'set up' : 'confirmed'}`
-            : (isPast ? 'No vendors recorded for this date.' : 'Lineup coming together.')}
+          {!lineupReleased
+            ? ''
+            : vendors.length > 0
+              ? `${vendors.length} vendor${vendors.length === 1 ? '' : 's'} ${isPast ? 'set up' : 'confirmed'}`
+              : (isPast ? 'No vendors recorded for this date.' : 'Lineup coming together.')}
         </p>
       </div>
 
-      {vendors.length === 0 ? (
+      {!lineupReleased ? (
+        /* Solid card, not a dashed placeholder. Nothing is missing here, the
+           lineup is being held on purpose, so it should not look like a gap. */
+        <div style={{
+          background: 'linear-gradient(135deg, #1a1a1a 0%, #2a1116 100%)',
+          borderRadius: '16px', padding: isMobile ? '32px 24px' : '44px 40px',
+          textAlign: 'center', maxWidth: '560px', margin: '0 auto',
+        }}>
+          <div style={{
+            fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.14em',
+            textTransform: 'uppercase', color: '#ff8c9e', marginBottom: '14px',
+          }}>
+            Lineup drops
+          </div>
+          <div style={{
+            fontSize: isMobile ? '1.5rem' : '1.9rem', fontWeight: 900,
+            color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.15,
+          }}>
+            {releaseDate}
+          </div>
+          <div style={{
+            fontSize: '0.92rem', color: 'rgba(255,255,255,0.72)',
+            lineHeight: 1.6, marginTop: '14px',
+          }}>
+            We announce every vendor at once, one week out. Applications stay open until then.
+          </div>
+        </div>
+      ) : vendors.length === 0 ? (
         <div style={{
           backgroundColor: '#fafafa', border: '1px dashed #ddd', borderRadius: '12px',
           padding: '48px 20px', textAlign: 'center', color: '#888',
