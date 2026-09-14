@@ -10274,6 +10274,9 @@ function VendorApplyPage({ isMobile }) {
 
   const vendor = auth.vendor || null;
   const signedIn = Boolean(auth.session);
+  // A suspended vendor sees the notice and nothing else. Letting them pick
+  // dates and hand over a card would only create work to undo later.
+  const suspended = Boolean(vendor && vendor.status === 'suspended');
 
   // A returning vendor is someone who actually showed up before, not someone
   // who merely applied. Drives which price they see.
@@ -10408,7 +10411,21 @@ function VendorApplyPage({ isMobile }) {
           subtitle="TC's Beach City Trade Night and our bigger Pokemon events"
         />
 
-        {signedIn && vendor && vendor.status !== 'approved' && (
+        {suspended && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626',
+            borderRadius: '12px', padding: '16px 18px', marginBottom: '18px',
+          }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#991b1b' }}>
+              Your vendor account is on hold
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#991b1b', marginTop: '4px', lineHeight: 1.5 }}>
+              You cannot apply for dates right now. Reach out to us if you think this is a mistake.
+            </div>
+          </div>
+        )}
+
+        {signedIn && vendor && vendor.status === 'pending' && (
           <div style={{
             backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #d97706',
             borderRadius: '12px', padding: '14px 18px', marginBottom: '18px',
@@ -10437,6 +10454,7 @@ function VendorApplyPage({ isMobile }) {
         </div>
 
         {/* Step 1 — role */}
+        {!suspended && (
         <div style={card}>
           <div style={eyebrow}>First, what are you applying as?</div>
           <div style={{
@@ -10475,6 +10493,7 @@ function VendorApplyPage({ isMobile }) {
             </p>
           )}
         </div>
+        )}
 
         {/* Step 2 — dates */}
         {role && (
@@ -10617,7 +10636,7 @@ function VendorApplyPage({ isMobile }) {
       </div>
 
       {/* Appears the moment they pick a date. Deliberately not a cart. */}
-      {picked.length > 0 && (
+      {picked.length > 0 && !suspended && (
         <div style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 40,
           backgroundColor: '#fff', borderTop: '1px solid #e5e5e5',
