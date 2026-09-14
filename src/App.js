@@ -11010,6 +11010,9 @@ function VendorFinishPage({ isMobile }) {
   const [password2, setPassword2] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 'form' errors are theirs to fix. 'system' errors are ours, and a raw
+  // Postgres message helps nobody, so those get a way to reach us instead.
+  const [errorKind, setErrorKind] = useState('form');
   const [done, setDone] = useState(false);
 
   const signedIn = Boolean(auth.session);
@@ -11053,6 +11056,7 @@ function VendorFinishPage({ isMobile }) {
 
   const submit = async () => {
     setError('');
+    setErrorKind('form');
     if (!signedIn) {
       if (password.length < 8) { setError('Password needs to be at least 8 characters.'); return; }
       if (password !== password2) { setError('Those passwords do not match.'); return; }
@@ -11165,6 +11169,7 @@ function VendorFinishPage({ isMobile }) {
       setDone(true);
     } catch (e) {
       setBusy(false);
+      setErrorKind('system');
       setError(e.message || 'Something went wrong.');
     }
   };
@@ -11269,8 +11274,39 @@ function VendorFinishPage({ isMobile }) {
           </div>
         )}
 
-        {error && (
+        {error && errorKind === 'form' && (
           <p style={{ fontSize: '0.9rem', color: '#dc2626', fontWeight: 700, margin: '0 0 14px' }}>{error}</p>
+        )}
+
+        {error && errorKind === 'system' && (
+          <div style={{
+            backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #dc2626',
+            borderRadius: '12px', padding: '16px 18px', marginBottom: '16px',
+          }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#991b1b', marginBottom: '6px' }}>
+              That one is on us
+            </div>
+            <div style={{ fontSize: '0.88rem', color: '#991b1b', lineHeight: 1.55 }}>
+              Your spot is not lost. Send us a DM on Instagram at{' '}
+              <a
+                href="https://www.instagram.com/trainercenter.pokemon/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#991b1b', fontWeight: 800 }}
+              >
+                @trainercenter.pokemon
+              </a>{' '}
+              with the message below and we will get you sorted quickly.
+            </div>
+            <div style={{
+              marginTop: '12px', padding: '10px 12px', borderRadius: '8px',
+              backgroundColor: 'rgba(0,0,0,0.05)', color: '#7f1d1d',
+              fontSize: '0.78rem', fontFamily: 'ui-monospace, Menlo, monospace',
+              wordBreak: 'break-word', lineHeight: 1.45,
+            }}>
+              {error}
+            </div>
+          </div>
         )}
 
         <button
