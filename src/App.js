@@ -10382,6 +10382,9 @@ function VendorApplyPage({ isMobile }) {
         teamInterest: Boolean(vendor.team_interest),
         openToCall: Boolean(vendor.open_to_call),
         questions: '',
+        // Skipping the interview means nobody asked them the team question, so
+        // this must not count as an answer or the dashboard prompt disappears.
+        askedTeam: Boolean(vendor.team_asked_at),
       }));
       navigate('/vendors/finish');
       return;
@@ -10807,6 +10810,7 @@ function VendorApplicationPage({ isMobile }) {
       experience, inventory, pitch: pitch.trim(),
       teamInterest, openToCall,
       questions: questions.trim(),
+      askedTeam: true,
     }));
     if (logoFile) window.__tcVendorLogo = logoFile;   // Files do not survive JSON
     navigate('/vendors/finish');
@@ -11103,6 +11107,7 @@ function VendorFinishPage({ isMobile }) {
         pitch: cardVendor ? null : answers.pitch,
         team_interest: Boolean(answers.teamInterest),
         team_status: answers.teamInterest ? 'requested' : null,
+        ...(answers.askedTeam ? { team_asked_at: new Date().toISOString() } : {}),
         open_to_call: Boolean(answers.openToCall),
         applicant_questions: answers.questions || null,
         terms_agreed_at: new Date().toISOString(),
@@ -11522,6 +11527,93 @@ function VendorChallengePage({ isMobile }) {
   );
 }
 
+// ─── Team question, asked once ────────────────────────────
+// Vendors who were already in the system before the team existed skip the
+// interview when they apply, so they would never be asked. This puts it in
+// front of them once, on their dashboard, and then never again.
+function VendorTeamPrompt({ vendor, isMobile, onAnswered }) {
+  const [openToCall, setOpenToCall] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [showYes, setShowYes] = useState(false);
+
+  if (!vendor || vendor.team_asked_at) return null;
+  if (vendor.status === 'suspended') return null;
+
+  const answer = async (wantsIn) => {
+    setBusy(true);
+    await supabase.from('vendors').update({
+      team_interest: wantsIn,
+      team_status: wantsIn ? 'requested' : null,
+      open_to_call: wantsIn ? openToCall : false,
+      team_asked_at: new Date().toISOString(),
+    }).eq('id', vendor.id);
+    setBusy(false);
+    if (onAnswered) onAnswered();
+  };
+
+  const btn = (primary) => ({
+    flex: 1, padding: '13px', borderRadius: '10px', cursor: busy ? 'default' : 'pointer',
+    fontFamily: 'inherit', fontSize: '0.92rem', fontWeight: 800,
+    border: primary ? 'none' : '1px solid #d1d5db',
+    backgroundColor: primary ? '#C8102E' : '#fff',
+    color: primary ? '#fff' : '#374151',
+    touchAction: 'manipulation',
+  });
+
+  return (
+    <div style={{ maxWidth: '900px', margin: '0 auto 16px' }}>
+      <div style={{
+        backgroundColor: '#fff', border: '1px solid #e5e5e5', borderLeft: '4px solid #C8102E',
+        borderRadius: '14px', padding: isMobile ? '18px' : '22px 26px',
+      }}>
+        <div style={{
+          fontSize: '11px', fontWeight: 800, color: '#C8102E',
+          letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px',
+        }}>
+          One question
+        </div>
+        <div style={{ fontSize: isMobile ? '1.05rem' : '1.15rem', fontWeight: 900, marginBottom: '8px' }}>
+          Want in on the bigger events?
+        </div>
+        <p style={{ fontSize: '0.9rem', color: '#4b5563', lineHeight: 1.6, margin: '0 0 16px' }}>
+          We are building the Trainer Center team, the vendors we call first for shows like Pacific
+          City. It is separate from the trade nights and takes a bit more vetting.
+        </p>
+
+        {showYes && (
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer',
+            marginBottom: '14px', fontSize: '0.9rem', color: '#374151',
+          }}>
+            <input
+              type="checkbox"
+              checked={openToCall}
+              onChange={e => setOpenToCall(e.target.checked)}
+              style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: '#C8102E', flexShrink: 0 }}
+            />
+            <span>I am open to a phone call as part of that.</span>
+          </label>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {showYes ? (
+            <button type="button" disabled={busy} onClick={() => answer(true)} style={btn(true)}>
+              {busy ? 'Saving...' : 'Send my request'}
+            </button>
+          ) : (
+            <button type="button" disabled={busy} onClick={() => setShowYes(true)} style={btn(true)}>
+              Yes, consider me
+            </button>
+          )}
+          <button type="button" disabled={busy} onClick={() => answer(false)} style={btn(false)}>
+            Not right now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VendorDashboardPage({ isMobile }) {
   // Single source of truth for auth + roles. No local session/vendor
   // listeners -- they live at App root via AuthContext now, so navigating
@@ -11688,6 +11780,8 @@ function VendorDashboardPage({ isMobile }) {
     <PageWrapper isMobile={isMobile}>
       <div style={{ marginBottom: '64px' }}>
         <SectionHeader title={`Welcome, ${vendor.name}`} subtitle="Your Vendor Day dashboard" />
+
+        <VendorTeamPrompt vendor={vendor} isMobile={isMobile} onAnswered={() => refreshAuth()} />
 
         {/* Staff who are also vendors (Chef, Seth) get a Manage Vendors
             shortcut at the top of their own vendor dashboard so they can
