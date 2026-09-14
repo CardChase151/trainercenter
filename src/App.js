@@ -11140,10 +11140,14 @@ function VendorFinishPage({ isMobile }) {
       }
 
       // 4. One application per date, priced at the rate they were shown.
-      let firstPayableId = null;
+      // A submit that finds nothing to apply for is a bug, not a success. This
+      // happens if the events fetch has not landed yet.
+      if (answers.eventIds.length > 0 && events.length === 0) {
+        throw new Error('Your dates did not load. Give it a second and press it again.');
+      }
       for (const ev of events) {
         const fee = feeFor(ev);
-        const { data: appRow, error: aErr } = await supabase
+        const { error: aErr } = await supabase
           .from('vendor_applications')
           .insert({
             vendor_id: savedVendor.id,
@@ -11156,12 +11160,26 @@ function VendorFinishPage({ isMobile }) {
             payment_status: fee === 0 ? 'comped' : 'none',
             vendor_note: comped ? `Comp code ${answers.code}` : null,
             terms_agreed_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
+          });
+        // 23505 is a duplicate, which just means they already applied for this
+        // date. That is fine, and it must not change what happens next.
         if (aErr && aErr.code !== '23505') throw new Error(aErr.message);
-        if (appRow && fee > 0 && !firstPayableId) firstPayableId = appRow.id;
       }
+
+      // Ask the database what still owes a card rather than trusting what the
+      // inserts returned. On a retry the insert returns nothing, and reading
+      // the payable id from it is how someone reaches the confirmation screen
+      // without ever being asked to pay.
+      const { data: unpaid } = await supabase
+        .from('vendor_applications')
+        .select('id')
+        .eq('vendor_id', savedVendor.id)
+        .in('event_id', events.map(e => e.id))
+        .gt('fee_cents', 0)
+        .is('stripe_payment_method_id', null)
+        .order('applied_at', { ascending: true })
+        .limit(1);
+      const firstPayableId = unpaid && unpaid[0] ? unpaid[0].id : null;
 
       sessionStorage.removeItem('tc_vendor_application');
 
