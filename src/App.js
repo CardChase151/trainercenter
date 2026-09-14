@@ -13454,29 +13454,6 @@ function vendorEventRules() {
       body: 'You can sell binders, toys, 3D prints, anything you would like in addition to cards. We just ask that you keep it Pokemon.',
     },
     {
-      key: 'no_recent_sealed',
-      title: 'No recent sealed product',
-      body: 'We are building a reputation that TC vendors are never scalpers, and we intend to deliver on that. '
-        + 'People can\'t tell these days if you are or are not a scalper EXCEPT for the massive sealed stack up. '
-        + 'So, nothing sealed that Pokemon has released in the last 12 months. Anything older is fair game. '
-        + 'If your setup reads as scalping, stacks of current ETBs and the like, we will ask you to change it.',
-      note: 'Sealed collectors absolutely come to our events, but they are looking for things from years back.',
-    },
-    {
-      key: 'full_window',
-      title: 'I can do the full window of the event',
-      body: 'You are signing up for the whole event, start to finish. You cannot pick a shorter time '
-        + 'inside it. Only check this if you can actually commit to the hours listed on the date you '
-        + 'picked. If any of it runs after dark, bring lights: some for the look of your setup, and '
-        + 'some that actually help people see the cards.',
-      note: 'The exact hours are listed on each date when you apply.',
-    },
-    {
-      key: 'rotate_spot',
-      title: 'Move your spot each event',
-      body: 'Please do not set up in the same place two events in a row. Pick a different table than you had last time.',
-    },
-    {
       key: 'conduct',
       title: 'Conduct at the show',
       body: 'No alcohol, no drugs, no theft, no harassment. Families and kids are at every one of '
