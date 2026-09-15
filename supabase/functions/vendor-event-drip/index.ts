@@ -49,6 +49,13 @@ const SIGNUP_STEPS: Step[] = [
   { key: 'signup.t2',  from: 2,  to: 2,  track: 'signup' },
   { key: 'signup.t1',  from: 1,  to: 1,  track: 'signup' },
 ]
+// The card chase runs on its own cadence: soon after they bail, then again as
+// the date closes in.
+const CARD_STEPS: Step[] = [
+  { key: 'card.t10', from: 9,  to: 14, track: 'card' },
+  { key: 'card.t5',  from: 4,  to: 8,  track: 'card' },
+  { key: 'card.t2',  from: 1,  to: 3,  track: 'card' },
+]
 const LINEUP_STEPS: Step[] = [
   { key: 'lineup.t21', from: 15, to: 21, track: 'lineup' },
   { key: 'lineup.t14', from: 8,  to: 14, track: 'lineup' },
@@ -421,6 +428,54 @@ Deno.serve(async (req) => {
             .eq('vendor_id', v.id)
             .eq('event_id', ev.id)
             .eq('step_key', signupStep.key)
+        }
+      }
+    }
+
+    // Track C: the card chase. Someone who reached Stripe and closed the page
+    // sits in card_pending forever with nothing following up. The event never
+    // knows they meant to come, and they think they are done. Three nudges,
+    // then the auto-close handles the rest.
+    const cardStep = activeStep(CARD_STEPS, daysUntil)
+    if (cardStep) {
+      const { data: stuck } = await supabase
+        .from('vendor_applications')
+        .select('id, fee_cents, vendor:vendors(id, name, email, user_id)')
+        .eq('event_id', ev.id)
+        .eq('status', 'pending')
+        .gt('fee_cents', 0)
+        .is('stripe_payment_method_id', null)
+
+      for (const app of (stuck || [])) {
+        const v: any = app.vendor
+        if (!v?.email) continue
+        const { error: logErr } = await supabase
+          .from('vendor_email_log')
+          .insert({ vendor_id: v.id, event_id: ev.id, step_key: cardStep.key })
+        if (logErr) continue // already sent this step
+        const fee = `$${Math.round((app.fee_cents || 0) / 100)}`
+        const subject = `One step left for ${dateStr}`
+        const html =
+          `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
+          `<p style="margin:0 0 24px">Your application for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong> is in, but we never got a card on file, so it is not finished yet.</p>` +
+          `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fffbeb;border-left:4px solid #f59e0b;padding:20px 22px;border-radius:6px">` +
+          `<p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">Table fee is ${fee}, and it is still only charged if we approve you. Adding the card takes about thirty seconds.</p>` +
+          `</td></tr></table>` +
+          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Finish my application  &rarr;</a></p>` +
+          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">On your dashboard it shows as "Add card to complete" next to ${dateStr}.</p>`
+        const text = `One step left for ${dateStr}\n\nHi ${v.name},\n\n` +
+          `Your application for ${eventTitle} on ${dateStr} is in, but we never got a card on file.\n\n` +
+          `Table fee is ${fee}, still only charged if we approve you.\n\n` +
+          `Finish here: ${SITE_URL}/vendors/dashboard`
+        try {
+          await new Promise(r => setTimeout(r, 550))
+          await sendResendEmail(v.email, subject, wrapHtml(html), text)
+          sentSummary[cardStep.key] = (sentSummary[cardStep.key] || 0) + 1
+          sentDetails.push({ vendor_id: v.id, event_id: ev.id, step_key: cardStep.key, email: v.email })
+        } catch (err) {
+          failed.push({ vendor_id: v.id, event_id: ev.id, step_key: cardStep.key, reason: (err as Error).message })
+          await supabase.from('vendor_email_log').delete()
+            .eq('vendor_id', v.id).eq('event_id', ev.id).eq('step_key', cardStep.key)
         }
       }
     }
