@@ -166,8 +166,8 @@ Deno.serve(async (req: Request) => {
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
       const subject = 'Welcome to Trainer Center HB vendors'
       const body = `<p>Hi ${v.name},</p>` +
-        `<p>Your vendor profile is in. The Trainer Center HB team will personally review it before approving you. Once approved, you can apply for any upcoming TC's Beach City Trade Night in two clicks from your dashboard.</p>` +
-        `<p><strong>Cadence:</strong> last Friday of every month at the shop.</p>` +
+        `<p>Your application is in. The Trainer Center HB team reviews these by hand. Nothing is charged while you wait, and you can add more dates any time from the same page you applied on.</p>` +
+        `<p><strong>Cadence:</strong> trade nights at the shop, plus bigger events through the year.</p>` +
         `<p>While you wait, drop by Trainer Center HB or follow <a href="https://instagram.com/trainercenter.pokemon" style="color:#C8102E">@trainercenter.pokemon</a> on Instagram.</p>` +
         `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`
       await sendResendEmail([v.email], subject, wrapHtml(body), `Welcome to Trainer Center HB vendors, ${v.name}!\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
       if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
       const { data: v, error: vErr } = await supabase.from('vendors').select('*').eq('id', payload.vendor_id).single()
       if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
-      const subject = "Action required: You're a Trainer Center HB vendor — pick your dates"
+      const subject = "You're a Trainer Center HB vendor — pick your dates"
       const body =
         `<p style="font-size:15px;color:#16a34a;font-weight:700;margin:0 0 4px">✓ Approved as a vendor partner</p>` +
         `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
@@ -217,8 +217,8 @@ Deno.serve(async (req: Request) => {
         `  <li>Trainer Center HB confirms each one within a day or two</li>` +
         `</ol>` +
         `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/apply" style="display:inline-block;background:#16a34a;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Pick your dates  →</a></p>` +
-        `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">TC's Beach City Trade Night happens the last Friday of every month at the shop. Custom dates show up on the dashboard too.</p>`
-      const text = `Action required: You're a Trainer Center HB vendor — pick your dates\n\n` +
+        `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Every open date is on the same page, trade nights and the bigger events both.</p>`
+      const text = `You're a Trainer Center HB vendor — pick your dates\n\n` +
         `Hi ${v.name},\n\n` +
         `You're now a recognized Trainer Center HB vendor partner. Welcome.\n\n` +
         `YOU'RE NOT DONE YET — being approved as a partner does NOT put you on a TC's Beach City Trade Night automatically. You still need to pick which dates you want to be at.\n\n` +
@@ -227,7 +227,7 @@ Deno.serve(async (req: Request) => {
         `  2. Pick the dates you want\n` +
         `  3. Trainer Center HB confirms each one within a day or two\n\n` +
         `Pick your dates: ${SITE_URL}/vendors/apply\n\n` +
-        `TC's Beach City Trade Night happens the last Friday of every month at the shop.`
+        `Every open date is on the same page, trade nights and the bigger events both.`
       await sendResendEmail([v.email], subject, wrapHtml(body), text)
       return json({ ok: true, sent: ['vendor'] })
     }
@@ -261,6 +261,25 @@ Deno.serve(async (req: Request) => {
 
       const dateStr = ev.event_date ? formatEventDate(ev.event_date) : "the next TC's Beach City Trade Night"
       const eventTitle = ev.title || "TC's Beach City Trade Night"
+
+      // These vendors mostly vended free. Sending them to a checkout without
+      // naming the price first is how you lose a list.
+      const { data: attendedRows } = await supabase
+        .from('vendor_attendance')
+        .select('vendor_id')
+        .in('vendor_id', targets.map(v => v.id))
+      const returningSet = new Set((attendedRows || []).map(a => a.vendor_id))
+      const baseFee = ev.table_fee_cents ?? 0
+      const returnFee = ev.table_fee_returning_cents
+      const money = (c: number) => `$${Math.round(c / 100)}`
+      const feeLineFor = (vendorId: string) => {
+        if (!baseFee) return 'No table fee for this one.'
+        const isReturning = returningSet.has(vendorId)
+        const fee = isReturning && returnFee != null ? returnFee : baseFee
+        return isReturning && returnFee != null
+          ? `Table fee ${money(fee)} (your returning rate, ${money(baseFee)} for first-timers).`
+          : `Table fee ${money(fee)}.`
+      }
       const vendorTimes = vendorTimeLine(ev)
       // Detect "tomorrow" for urgency framing in subject
       const today = new Date(); today.setHours(0,0,0,0)
@@ -271,8 +290,8 @@ Deno.serve(async (req: Request) => {
       const urgencyLabel = isTomorrow ? 'TOMORROW' : (isSoon ? 'THIS WEEK' : 'COMING UP')
 
       const subject = isTomorrow
-        ? `Action required: Apply for tomorrow — ${eventTitle}`
-        : `Action required: Apply for ${dateStr} — ${eventTitle}`
+        ? `Vendor spots for tomorrow — ${eventTitle}`
+        : `Vendor spots open for ${dateStr} — ${eventTitle}`
 
       const sentTo: string[] = []
       const failed: string[] = []
@@ -283,23 +302,27 @@ Deno.serve(async (req: Request) => {
         if (!v.email) continue
         if (!firstSend) await sleep(600)
         firstSend = false
+        const feeLine = feeLineFor(v.id)
         const body =
           `<p style="margin:0 0 20px">Hi ${v.name},</p>` +
-          `<p style="margin:0 0 24px">You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.</p>` +
+          `<p style="margin:0 0 24px">You're approved as a Trainer Center HB vendor — we just don't have you on this one yet.</p>` +
           `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px"><tr><td style="background:#fef3c7;border-left:4px solid #f59e0b;padding:20px 22px;border-radius:6px">` +
-          `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#92400e;letter-spacing:0.06em">⏰ ${urgencyLabel}: ${dateStr.toUpperCase()}</p>` +
+          `  <p style="margin:0 0 8px;font-size:12px;font-weight:800;color:#92400e;letter-spacing:0.06em">${urgencyLabel}: ${dateStr.toUpperCase()}</p>` +
           `  <p style="margin:0 0 8px;font-size:18px;font-weight:800;color:#1f2937">${eventTitle}</p>` +
           (vendorTimes ? `  <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#166534">Vendor window: ${vendorTimes}</p>` : '') +
-          `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">If you want a spot, you need to apply from your dashboard. Two clicks.</p>` +
+          `  <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#1f2937">${feeLine}</p>` +
+          `  <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.5">Pick your date, answer a couple of questions, and add a card. Nothing is charged until you're approved, usually one to two weeks out.</p>` +
           `</td></tr></table>` +
-          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/apply" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  →</a></p>` +
-          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Your dashboard also has every future TC's Beach City Trade Night — pick any one. They happen the last Friday of every month at the shop.</p>`
-        const text = `Action required: Apply for ${dateStr} — ${eventTitle}\n\n` +
+          `<p style="margin:24px 0;text-align:center"><a href="${SITE_URL}/vendors/apply" style="display:inline-block;background:#C8102E;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">Apply for ${dateStr}  &rarr;</a></p>` +
+          `<p style="margin:28px 0 0;font-size:13px;color:#666;border-top:1px solid #eee;padding-top:16px">Can't make ${isTomorrow ? 'tomorrow' : 'this date'}? Every open date is on the same page, so pick whichever ones work. While you're there, you can also ask to be considered for the Trainer Center team, the vendors we call first for the bigger events.</p>`
+        const text = `Vendor spots open for ${dateStr} — ${eventTitle}\n\n` +
           `Hi ${v.name},\n\n` +
           `You're approved as a Trainer Center HB vendor partner — but we don't have you on this event yet.\n\n` +
-          `${urgencyLabel}: ${dateStr} — ${eventTitle}\n\n` +
-          `If you want a spot, apply here:\n${SITE_URL}/vendors/apply\n\n` +
-          `Can't make this date? The dashboard also lists every future TC's Beach City Trade Night. They happen the last Friday of every month at the shop.`
+          `${urgencyLabel}: ${dateStr} — ${eventTitle}\n` +
+          `${feeLine}\n\n` +
+          `Pick your date, answer a couple of questions, and add a card. Nothing is charged until you're approved, usually one to two weeks out.\n\n` +
+          `Apply here:\n${SITE_URL}/vendors/apply\n\n` +
+          `Can't make this date? Every open date is on the same page. You can also ask to be considered for the Trainer Center team while you're there.`
         try {
           await sendResendEmail([v.email], subject, wrapHtml(body), text)
           sentTo.push(v.email)
