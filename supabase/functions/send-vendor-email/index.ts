@@ -28,6 +28,9 @@ const FROM_ADDRESS = '"Trainer Center HB" <noreply@mysendz.com>'
 // with a profiles.is_admin lookup. Seth is intentionally excluded; he
 // doesn't want these on his inbox.
 const STAFF_EMAILS = ['Trainercenter.pokemon@gmail.com', 'chase@cardchase.org']
+// Application notifications are a decision queue, not an announcement, so
+// they go to Chase alone rather than the shop inbox.
+const OWNER_EMAILS = ['chase@cardchase.org']
 const SITE_URL = 'https://pokemontrainercenter.com'
 
 const corsHeaders = {
@@ -533,19 +536,70 @@ Deno.serve(async (req: Request) => {
         await sendResendEmail([v.email], vendorSubject,
           wrapHtml(vendorBody + `<p style="margin-top:24px"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>`),
           `${vendorSubject}${feeText}\n\nDashboard: ${SITE_URL}/vendors/dashboard`)
+        // Staff copy. Goes to Chase only — this is a decision queue, not an
+        // announcement — and carries everything needed to decide without
+        // opening the admin: who they are, what they bring, what they owe,
+        // and whether they asked about the team.
         const isFirst = !!payload.is_first_time
-        const staffSubject = isFirst ? `New vendor: ${v.name}` : `${v.name} wants to vend on ${dateStr}`
-        const staffBody = `<p><strong>${v.name}</strong> ${isFirst ? 'just applied as a new vendor' : `applied for ${eventTitle} on ${dateStr}`}.</p>` +
-          `<p style="font-size:13px;color:#444">${v.email}${v.phone ? ' · ' + v.phone : ''}<br/>` +
-          `${v.specialty ? 'Specialty: ' + v.specialty + '<br/>' : ''}` +
-          `${v.ig_handle ? 'IG: @' + v.ig_handle + '<br/>' : ''}` +
-          `${v.heard_from ? 'Heard from: ' + v.heard_from.replace(/_/g, ' ') + '<br/>' : ''}` +
-          `${v.referred_by_name ? 'Referred by: ' + v.referred_by_name + (v.referred_by_handle ? ' (@' + v.referred_by_handle + ')' : '') : ''}</p>` +
-          `<p>${v.bio ? `"${v.bio}"` : ''}</p>` +
+        const ROLE_LABELS: Record<string, string> = {
+          card_vendor: 'Card vendor', character: 'Character / costume', dj: 'DJ / music',
+          airbrush: 'Airbrush / face paint', crafts: 'Crafts / activities', other: 'Something else',
+        }
+        const EXP_LABELS: Record<string, string> = {
+          first_show: 'First show ever', '1_to_5': '1-5 shows', '5_to_10': '5-10 shows',
+          '10_to_50': '10-50 shows', '50_plus': '50+ shows',
+        }
+        const roleLabel = ROLE_LABELS[v.vendor_type || 'card_vendor'] || v.vendor_type
+        const expLabel = EXP_LABELS[v.experience_level] || v.experience_level || 'not given'
+        const feeLabel = feeCents > 0 ? `$${Math.round(feeCents / 100)}` : 'Comped'
+        const { count: priorShows } = await supabaseApp
+          .from('vendor_attendance').select('*', { count: 'exact', head: true }).eq('vendor_id', v.id)
+
+        const flags: string[] = []
+        if (isFirst) flags.push('NEW APPLICANT')
+        if (v.team_interest) flags.push(v.open_to_call ? 'WANTS TEAM · will take a call' : 'WANTS TEAM')
+        if (v.staff_fit_status === 'not_fit') flags.push(`FLAGGED NOT A FIT${v.staff_fit_reason ? ': ' + v.staff_fit_reason : ''}`)
+        if (v.staff_fit_status === 'favorite') flags.push('FAVORITE')
+        if (v.experience_level === 'first_show') flags.push('Never vended anywhere — free table candidate')
+
+        const row = (label: string, value: string) =>
+          `<tr><td style="padding:5px 12px 5px 0;color:#666;font-size:13px;white-space:nowrap">${label}</td>` +
+          `<td style="padding:5px 0;font-size:13px;color:#111"><strong>${value}</strong></td></tr>`
+
+        const staffSubject = `${v.name}${v.business_name ? ` (${v.business_name})` : ''} — ${roleLabel} — ${dateStr}`
+        const staffBody =
+          (flags.length
+            ? `<p style="margin:0 0 18px"><span style="display:inline-block;background:#1a1a1a;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:800;letter-spacing:0.04em">${flags.join('</span> <span style="display:inline-block;background:#1a1a1a;color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:800;letter-spacing:0.04em">')}</span></p>`
+            : '') +
+          `<p style="margin:0 0 16px"><strong>${v.name}</strong> applied for <strong>${eventTitle}</strong> on <strong>${dateStr}</strong>.</p>` +
+          `<table cellpadding="0" cellspacing="0" style="margin:0 0 20px">` +
+          row('Applying as', roleLabel) +
+          row('Table fee', feeLabel) +
+          row('Experience', expLabel) +
+          row('Shows with us', String(priorShows || 0)) +
+          (v.business_name ? row('Business', v.business_name) : '') +
+          (v.inventory_profile?.length ? row('Brings', v.inventory_profile.join(', ')) : '') +
+          row('Email', v.email || '') +
+          (v.phone ? row('Phone', v.phone) : '') +
+          (v.ig_handle ? row('Instagram', v.ig_handle.replace(/^@/, '@')) : '') +
+          `</table>` +
+          (v.pitch ? `<p style="margin:0 0 18px;padding:12px 16px;background:#f9fafb;border-left:3px solid #C8102E;font-size:14px;line-height:1.55"><em>What they would do:</em><br/>${v.pitch}</p>` : '') +
+          (v.applicant_questions ? `<p style="margin:0 0 18px;padding:12px 16px;background:#fffbeb;border-left:3px solid #f59e0b;font-size:14px;line-height:1.55"><em>They asked:</em><br/>${v.applicant_questions}</p>` : '') +
           `<p style="margin-top:24px"><a href="${SITE_URL}/staff/vendors" style="display:inline-block;background:#1a1a1a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700">Review in admin</a></p>`
-        await sendResendEmail(STAFF_EMAILS, staffSubject, wrapHtml(staffBody),
-          `${staffSubject}\n\nName: ${v.name}\nEmail: ${v.email}\nReview: ${SITE_URL}/staff/vendors`)
-        return json({ ok: true, sent: ['vendor', 'staff'] })
+
+        const staffText = `${staffSubject}\n\n` +
+          (flags.length ? flags.join(' | ') + '\n\n' : '') +
+          `Applying as: ${roleLabel}\nTable fee: ${feeLabel}\nExperience: ${expLabel}\n` +
+          `Shows with us: ${priorShows || 0}\n` +
+          (v.inventory_profile?.length ? `Brings: ${v.inventory_profile.join(', ')}\n` : '') +
+          `Email: ${v.email}\n${v.phone ? 'Phone: ' + v.phone + '\n' : ''}` +
+          (v.ig_handle ? `IG: ${v.ig_handle}\n` : '') +
+          (v.pitch ? `\nWhat they would do: ${v.pitch}\n` : '') +
+          (v.applicant_questions ? `\nThey asked: ${v.applicant_questions}\n` : '') +
+          `\nReview: ${SITE_URL}/staff/vendors`
+
+        await sendResendEmail(OWNER_EMAILS, staffSubject, wrapHtml(staffBody), staffText)
+        return json({ ok: true, sent: ['vendor', 'owner'] })
       }
 
       const status = app.status
