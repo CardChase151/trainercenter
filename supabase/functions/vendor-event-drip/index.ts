@@ -328,6 +328,43 @@ Deno.serve(async (req) => {
     .lte('event_date', horizonISO)
   if (evErr) return json({ error: evErr.message }, 500)
 
+  // ── Close out anything the event has already passed with no decision ──
+  // An applicant nobody acted on otherwise hears nothing, ever: the recruiting
+  // drip skips them because they applied, the lineup track skips them because
+  // they were never approved, and the decision email only fires on a decision.
+  let autoClosed = 0
+  {
+    const { data: staleApps } = await supabase
+      .from('vendor_applications')
+      .select('id, event:events!inner(event_date)')
+      .eq('status', 'pending')
+      .lt('events.event_date', todayISO)
+
+    for (const app of (staleApps || [])) {
+      const { error: upErr } = await supabase
+        .from('vendor_applications')
+        .update({
+          status: 'declined',
+          decided_at: new Date().toISOString(),
+          decision_note: 'That date filled up before we could get to you. Nothing was charged.',
+        })
+        .eq('id', app.id)
+        .eq('status', 'pending')
+      if (upErr) continue
+      autoClosed += 1
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/send-vendor-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE}` },
+          body: JSON.stringify({ type: 'application_decided', application_id: app.id }),
+        })
+      } catch (err) {
+        console.error('[vendor-event-drip] auto-close notify failed', app.id, err)
+      }
+      await new Promise(r => setTimeout(r, 600))
+    }
+  }
+
   const sentSummary: Record<string, number> = {}
   const sentDetails: { vendor_id: string; event_id: string; step_key: string; email: string }[] = []
   const failed: { vendor_id: string; event_id: string; step_key: string; reason: string }[] = []
@@ -426,5 +463,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ ok: true, summary: sentSummary, details: sentDetails, failed, today: todayISO })
+  return json({ ok: true, auto_closed: autoClosed, summary: sentSummary, details: sentDetails, failed, today: todayISO })
 })

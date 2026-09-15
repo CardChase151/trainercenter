@@ -196,7 +196,21 @@ Deno.serve(async (req) => {
         // can't rate (bad address, no carrier serves it, parcel over limits).
         // Surfacing that text is the difference between the customer fixing
         // their address and giving up.
+        // CARRIERS WE CAN QUOTE BUT CANNOT BUY FROM (Chase 2026-08-27).
+        // Shippo will happily rate a carrier whose account has not been
+        // activated, then refuse the label purchase after the customer has
+        // already paid - which is exactly what happened on 2026-08-26:
+        // "The UPS account is not yet registered." The customer is charged,
+        // no label exists, and someone has to sort it out by hand.
+        //
+        // Quoting a carrier we cannot actually ship with is worse than not
+        // offering it. Remove this entry the moment UPS is activated in
+        // Shippo (apps.goshippo.com -> Settings -> Carriers -> Activate).
+        const UNBUYABLE_CARRIERS = ['ups']
+
         const rates = (shipment.rates || []).slice()
+          .filter((r: any) => !UNBUYABLE_CARRIERS.includes(
+            String(r.provider || '').toLowerCase()))
           .sort((a: any, b: any) => parseFloat(a.amount) - parseFloat(b.amount))
         if (!rates.length) {
           const msg = (shipment.messages || []).map((m: any) => m.text).filter(Boolean).join(' ')

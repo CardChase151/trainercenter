@@ -11150,9 +11150,10 @@ function VendorFinishPage({ isMobile }) {
       if (answers.eventIds.length > 0 && events.length === 0) {
         throw new Error('Your dates did not load. Give it a second and press it again.');
       }
+      const createdAppIds = [];
       for (const ev of events) {
         const fee = feeFor(ev);
-        const { error: aErr } = await supabase
+        const { data: appRow, error: aErr } = await supabase
           .from('vendor_applications')
           .insert({
             vendor_id: savedVendor.id,
@@ -11165,10 +11166,21 @@ function VendorFinishPage({ isMobile }) {
             payment_status: fee === 0 ? 'comped' : 'none',
             vendor_note: comped ? `Comp code ${answers.code}` : null,
             terms_agreed_at: new Date().toISOString(),
-          });
+          })
+          .select('id')
+          .maybeSingle();
         // 23505 is a duplicate, which just means they already applied for this
         // date. That is fine, and it must not change what happens next.
         if (aErr && aErr.code !== '23505') throw new Error(aErr.message);
+        if (appRow?.id) createdAppIds.push(appRow.id);
+      }
+
+      // Confirm the moment it exists. This used to fire only after a card was
+      // saved, which meant a DJ with no fee, or anyone who abandoned the card
+      // step, got no confirmation and staff got no notification at all.
+      const isFirstTime = !vendor;
+      for (const appId of createdAppIds) {
+        sendVendorEmail({ type: 'application_received', application_id: appId, is_first_time: isFirstTime });
       }
 
       // Ask the database what still owes a card rather than trusting what the

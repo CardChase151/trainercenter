@@ -161,7 +161,6 @@ Deno.serve(async (req) => {
       // session (stale bookmark, back button, retried network call) — only
       // treat it as "the application just became real" the first time the
       // card actually lands, not on a replay.
-      const wasAlreadySaved = app.payment_status === 'card_saved'
       // Keep the stored customer consistent with the card we just saved.
       // Checkout attaches the setup_intent's payment method to the session
       // customer, so read it back from the intent and persist BOTH together —
@@ -186,24 +185,9 @@ Deno.serve(async (req) => {
         .is('stripe_payment_method_id', null)
         .gt('fee_cents', 0)
 
-      if (!wasAlreadySaved) {
-        // Only now is this a successful application — fire the "application
-        // received" notification here instead of at apply time, so staff
-        // never get notified about a card that was never actually saved.
-        const { count } = await supabase
-          .from('vendor_attendance')
-          .select('*', { count: 'exact', head: true })
-          .eq('vendor_id', app.vendor_id)
-        try {
-          await fetch(`${SUPABASE_URL}/functions/v1/send-vendor-email`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-            body: JSON.stringify({ type: 'application_received', application_id: app.id, is_first_time: !count }),
-          })
-        } catch (notifyErr) {
-          console.error('[stripe-vendor-payment] application_received notify failed', notifyErr)
-        }
-      }
+      // The "application received" confirmation is sent when the application is
+      // created, not here. Gating it on a saved card meant every non-paying
+      // role, and everyone who abandoned this step, heard nothing at all.
       return json({ ok: true, application_id: app.id })
     }
 

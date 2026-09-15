@@ -502,7 +502,15 @@ Deno.serve(async (req: Request) => {
 
     if (type === 'application_received' || type === 'application_decided') {
       if (!payload.application_id) return json({ error: 'application_id required' }, 400)
-      const { data: app, error: aErr } = await supabase.from('vendor_applications').select('*, vendor:vendors(*), event:events(*)').eq('id', payload.application_id).single()
+      // Service-role read. These are also sent by automation (the nightly
+      // auto-close) and re-sent by staff, where there is no vendor session to
+      // satisfy the owner-only RLS on a pending application. The only output
+      // is mail to addresses taken from the row itself, never from the caller.
+      const supabaseApp = createClient(
+        Deno.env.get('SUPABASE_URL') || '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      )
+      const { data: app, error: aErr } = await supabaseApp.from('vendor_applications').select('*, vendor:vendors(*), event:events(*)').eq('id', payload.application_id).single()
       if (aErr || !app) return json({ error: aErr?.message || 'application not found' }, 404)
       const v = app.vendor
       const e = app.event
