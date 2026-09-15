@@ -10258,10 +10258,16 @@ const VENDOR_ROLES = [
   { key: 'dj',          label: 'DJ / music',          blurb: 'Run the sound for the night.' },
   { key: 'airbrush',    label: 'Airbrush / face paint', blurb: 'Live art at the bigger events.' },
   { key: 'crafts',      label: 'Crafts / activities',  blurb: 'Make-and-take, games, scavenger hunts.' },
-  { key: 'other',       label: 'Something else',       blurb: 'Tell us your idea and we will hear it.' },
+  { key: 'other',       label: 'Something else',       blurb: 'Tell us your idea. Table fee applies unless we agree otherwise.' },
 ];
 
-const isCardVendor = (role) => role === 'card_vendor';
+// Roles that owe a table fee. 'other' is in here because it is the catch-all,
+// and a catch-all that skips the fee is just a way around paying: a food or
+// retail vendor picks "Something else" and lands at no charge. If someone in
+// this bucket turns out to be a contributor rather than a seller, comp them at
+// approval — the machinery for that already exists.
+const PAYS_FOR_TABLE = ['card_vendor', 'other'];
+const isCardVendor = (role) => PAYS_FOR_TABLE.includes(role);
 
 function VendorApplyPage({ isMobile }) {
   const auth = useAuth();
@@ -11227,7 +11233,7 @@ function VendorFinishPage({ isMobile }) {
 
   if (!answers) return null;
 
-  const cardVendor = answers.role === 'card_vendor';
+  const cardVendor = PAYS_FOR_TABLE.includes(answers.role);
   const comped = Boolean(answers.code);
 
   const feeFor = (ev) => {

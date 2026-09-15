@@ -342,7 +342,9 @@ Deno.serve(async (req) => {
         .select('*', { count: 'exact', head: true })
         .eq('vendor_id', vendor.id)
 
-      const isCardVendor = (vendor.vendor_type || 'card_vendor') === 'card_vendor'
+      // Same rule as the apply flow: the catch-all role owes a table fee, so
+      // it cannot be used as a way around one on a fast-pass link either.
+      const isCardVendor = ['card_vendor', 'other'].includes(vendor.vendor_type || 'card_vendor')
       const returningFee = ev.table_fee_returning_cents
       let fee = !isCardVendor
         ? 0
