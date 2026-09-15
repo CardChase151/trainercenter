@@ -97,6 +97,88 @@ Deno.serve(async (req) => {
     }
 
     // ─── Vendor: save a card (Checkout setup mode, no charge) ───
+    // ─── Vendor: inline card entry (Stripe Elements) ───
+    // The hosted Checkout redirect loses people: they leave the site, close
+    // the tab, and the application sits with no card. This returns a
+    // SetupIntent the page can confirm in place, so nobody has to navigate
+    // away to finish.
+    if (action === 'create_setup_intent') {
+      const app = await loadApp(body.application_id)
+      if (!app) return json({ error: 'Application not found' }, 404)
+      if (app.vendor?.user_id !== userId) return json({ error: 'Not your application' }, 403)
+      if (!app.fee_cents) return json({ error: 'This event has no table fee' }, 400)
+
+      // Same customer reuse as the hosted flow, so a vendor keeps one record.
+      let customerId = app.stripe_customer_id as string | null
+      if (!customerId) {
+        const { data: prev } = await supabase
+          .from('vendor_applications')
+          .select('stripe_customer_id')
+          .eq('vendor_id', app.vendor_id)
+          .not('stripe_customer_id', 'is', null)
+          .order('applied_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        customerId = prev?.stripe_customer_id || null
+      }
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          name: app.vendor.name || undefined,
+          email: app.vendor.email || undefined,
+          metadata: { vendor_id: app.vendor_id },
+        }, onAcct)
+        customerId = customer.id
+      }
+
+      const intent = await stripe.setupIntents.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        usage: 'off_session',
+        metadata: { application_id: app.id, vendor_id: app.vendor_id },
+      }, onAcct)
+
+      await supabase.from('vendor_applications').update({
+        stripe_customer_id: customerId,
+        payment_status: 'card_pending',
+      }).eq('id', app.id)
+
+      return json({
+        client_secret: intent.client_secret,
+        account_id: acct,
+        customer_id: customerId,
+      })
+    }
+
+    // ─── Vendor: inline card saved — attach it everywhere it applies ───
+    if (action === 'confirm_setup_intent') {
+      const app = await loadApp(body.application_id)
+      if (!app) return json({ error: 'Application not found' }, 404)
+      if (app.vendor?.user_id !== userId) return json({ error: 'Not your application' }, 403)
+
+      const intent = await stripe.setupIntents.retrieve(body.setup_intent_id, {}, onAcct)
+      if (intent.status !== 'succeeded') {
+        return json({ error: `Card was not saved (${intent.status})` }, 400)
+      }
+      const pm = typeof intent.payment_method === 'string'
+        ? intent.payment_method
+        : intent.payment_method?.id
+      if (!pm) return json({ error: 'No payment method on that setup' }, 400)
+      const cust = typeof intent.customer === 'string' ? intent.customer : intent.customer?.id
+
+      // One card covers every date they applied for in the same sitting.
+      await supabase.from('vendor_applications').update({
+        stripe_payment_method_id: pm,
+        ...(cust ? { stripe_customer_id: cust } : {}),
+        payment_status: 'card_saved',
+      })
+        .eq('vendor_id', app.vendor_id)
+        .eq('status', 'pending')
+        .is('stripe_payment_method_id', null)
+        .gt('fee_cents', 0)
+
+      return json({ ok: true, application_id: app.id })
+    }
+
     if (action === 'create_setup_session') {
       const app = await loadApp(body.application_id)
       if (!app) return json({ error: 'Application not found' }, 404)

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useContext, createContext } from 'react';
 import { Link, Routes, Route, Navigate, useLocation, useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import BLOG_DATA from './blogData';
 import { GRADING_CARDS } from './gradingData';
 import { supabase } from './supabaseClient';
@@ -10996,6 +10998,181 @@ function VendorApplicationPage({ isMobile }) {
   );
 }
 
+// ─── Inline card entry ────────────────────────────────────
+// Stripe Checkout is a redirect, and people who leave the site to finish a
+// card step often never come back — the application sits in card_pending and
+// the vendor believes they are done. This keeps the whole thing on the page.
+//
+// The platform key is public by design (it ships in the browser). Cards never
+// touch our servers; Elements posts them straight to Stripe.
+const STRIPE_PK = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || '';
+
+// Connect: the SetupIntent lives on Trainer Center's connected account, so
+// Stripe.js has to be loaded pointed at that same account. The id comes back
+// with the client secret, so the promise is built per account and cached.
+const stripePromises = {};
+function stripeForAccount(accountId) {
+  if (!STRIPE_PK) return null;
+  const key = accountId || 'platform';
+  if (!stripePromises[key]) {
+    stripePromises[key] = loadStripe(STRIPE_PK, accountId ? { stripeAccount: accountId } : undefined);
+  }
+  return stripePromises[key];
+}
+
+function CardFields({ onSaved, onError, feeLabel, busyLabel = 'Saving card...' }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setBusy(true);
+    onError('');
+    const { error, setupIntent } = await stripe.confirmSetup({
+      elements,
+      redirect: 'if_required',
+    });
+    if (error) {
+      setBusy(false);
+      onError(error.message || 'That card could not be saved.');
+      return;
+    }
+    if (setupIntent?.status === 'succeeded') {
+      await onSaved(setupIntent.id);
+      return;
+    }
+    setBusy(false);
+    onError('That card could not be saved. Try another one.');
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <PaymentElement options={{ layout: 'tab' }} />
+      <button
+        type="submit"
+        disabled={!stripe || busy}
+        style={{
+          width: '100%', marginTop: '18px',
+          backgroundColor: busy ? '#9ca3af' : '#C8102E', color: '#fff',
+          border: 'none', borderRadius: '10px', padding: '16px',
+          cursor: busy ? 'default' : 'pointer', fontSize: '1rem', fontWeight: 800,
+          fontFamily: 'inherit', touchAction: 'manipulation',
+        }}
+      >
+        {busy ? busyLabel : feeLabel}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Drop-in card step. Creates a SetupIntent for `applicationId`, renders the
+ * card fields, and reports back once the card is attached to every pending
+ * application that needs one.
+ */
+function InlineCardStep({ applicationId, feeCents, onComplete, isMobile }) {
+  const [clientSecret, setClientSecret] = useState(null);
+  const [accountId, setAccountId] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!applicationId) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: fnErr } = await supabase.functions.invoke('stripe-vendor-payment', {
+        body: { action: 'create_setup_intent', application_id: applicationId },
+      });
+      if (cancelled) return;
+      if (fnErr || !data?.client_secret) {
+        setError(data?.error || 'Could not start the card step.');
+        setLoading(false);
+        return;
+      }
+      setClientSecret(data.client_secret);
+      setAccountId(data.account_id || null);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [applicationId]);
+
+  const handleSaved = async (setupIntentId) => {
+    const { data, error: fnErr } = await supabase.functions.invoke('stripe-vendor-payment', {
+      body: { action: 'confirm_setup_intent', application_id: applicationId, setup_intent_id: setupIntentId },
+    });
+    if (fnErr || !data?.ok) {
+      setError(data?.error || 'Card saved with Stripe but we could not attach it. Message us and we will finish it.');
+      return;
+    }
+    onComplete();
+  };
+
+  const money = feeCents ? `$${Math.round(feeCents / 100)}` : '';
+
+  // No publishable key configured yet: fall back to hosted Checkout rather
+  // than showing a dead form. Worse conversion, but it still works.
+  if (!STRIPE_PK) {
+    return (
+      <button
+        type="button"
+        onClick={async () => {
+          setError('');
+          const { data, error: fnErr } = await supabase.functions.invoke('stripe-vendor-payment', {
+            body: { action: 'create_setup_session', application_id: applicationId },
+          });
+          if (fnErr || !data?.url) { setError(data?.error || 'Could not open the card step.'); return; }
+          window.location.href = data.url;
+        }}
+        style={{
+          width: '100%', backgroundColor: '#C8102E', color: '#fff', border: 'none',
+          borderRadius: '10px', padding: '16px', cursor: 'pointer',
+          fontSize: '1rem', fontWeight: 800, fontFamily: 'inherit', touchAction: 'manipulation',
+        }}
+      >
+        {money ? `Add card — ${money} only if approved` : 'Add card'}
+      </button>
+    );
+  }
+  if (loading) {
+    return <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>Loading the card form...</div>;
+  }
+  if (error && !clientSecret) {
+    return <div style={{ fontSize: '0.9rem', color: '#dc2626', fontWeight: 700 }}>{error}</div>;
+  }
+
+  const stripeObj = stripeForAccount(accountId);
+
+  return (
+    <div>
+      <Elements
+        stripe={stripeObj}
+        options={{
+          clientSecret,
+          appearance: {
+            theme: 'stripe',
+            variables: { colorPrimary: '#C8102E', borderRadius: '10px', fontFamily: 'inherit' },
+          },
+        }}
+      >
+        <CardFields
+          onSaved={handleSaved}
+          onError={setError}
+          feeLabel={money ? `Save card — ${money} only if approved` : 'Save card'}
+        />
+      </Elements>
+      {error && (
+        <p style={{ fontSize: '0.88rem', color: '#dc2626', fontWeight: 700, margin: '12px 0 0' }}>{error}</p>
+      )}
+      <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: '12px 0 0', lineHeight: 1.5 }}>
+        Handled by Stripe. Your card is stored with them, not with us, and nothing is charged until
+        you are approved.
+      </p>
+    </div>
+  );
+}
+
 // ─── Vendor Finish (account + card) ───────────────────────
 // /vendors/finish — the last step. Creates the login if they do not have one,
 // writes the vendor row and one application per date, uploads the logo, then
@@ -11018,6 +11195,8 @@ function VendorFinishPage({ isMobile }) {
   // Postgres message helps nobody, so those get a way to reach us instead.
   const [errorKind, setErrorKind] = useState('form');
   const [done, setDone] = useState(false);
+  // Set once the applications exist and one of them still owes a table fee.
+  const [payableId, setPayableId] = useState(null);
 
   const signedIn = Boolean(auth.session);
   const vendor = auth.vendor || null;
@@ -11200,13 +11379,11 @@ function VendorFinishPage({ isMobile }) {
 
       sessionStorage.removeItem('tc_vendor_application');
 
-      // 5. Card on file, only if anything is actually owed.
+      // 5. Card on file, only if anything is actually owed. Stays on the page
+      // now — the old redirect to hosted Checkout is where people dropped out.
       if (firstPayableId) {
-        const { data, error: fnErr } = await supabase.functions.invoke('stripe-vendor-payment', {
-          body: { action: 'create_setup_session', application_id: firstPayableId },
-        });
-        if (fnErr || !data?.url) throw new Error('Could not open the card step. Your application is saved, you can add a card from your dashboard.');
-        window.location.href = data.url;
+        setBusy(false);
+        setPayableId(firstPayableId);
         return;
       }
 
@@ -11251,6 +11428,36 @@ function VendorFinishPage({ isMobile }) {
           }}>
             Go to my dashboard
           </Link>
+        </div>
+      </PageWrapper>
+    );
+  }
+
+  if (payableId) {
+    return (
+      <PageWrapper isMobile={isMobile}>
+        <div style={{ maxWidth: '560px', margin: '0 auto', marginBottom: '64px' }}>
+          <SectionHeader title="One last step" subtitle="Add a card to hold your table" />
+          <div style={{
+            backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #16a34a',
+            borderRadius: '12px', padding: '16px 18px', marginBottom: '18px',
+          }}>
+            <p style={{ fontSize: '0.9rem', color: '#166534', lineHeight: 1.6, margin: 0 }}>
+              Your application is already submitted. This is permission only, nothing is drafted
+              until we approve you, usually 1 to 2 weeks before the event.
+            </p>
+          </div>
+          <div style={{
+            backgroundColor: '#fff', border: '1px solid #e8e8e8', borderRadius: '14px',
+            padding: isMobile ? '20px' : '24px 28px',
+          }}>
+            <InlineCardStep
+              applicationId={payableId}
+              feeCents={total}
+              isMobile={isMobile}
+              onComplete={() => { setPayableId(null); setDone(true); }}
+            />
+          </div>
         </div>
       </PageWrapper>
     );
@@ -12396,16 +12603,10 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
 
   // Re-enter the Stripe card-save flow for a paid application whose card
   // step was abandoned (or couldn't start). Same setup session action.
-  const resumeCardSetup = async () => {
-    const { data: fn, error: fnError } = await supabase.functions.invoke('stripe-vendor-payment', {
-      body: { action: 'create_setup_session', application_id: application.id },
-    });
-    if (fn?.url) {
-      window.location.href = fn.url;
-    } else {
-      alert('Could not start the card step: ' + (fn?.error || fnError?.message || 'unknown error'));
-    }
-  };
+  // Opens the card fields inline. The old version sent them to hosted Checkout,
+  // which is exactly where people leave and never come back.
+  const [showCardForm, setShowCardForm] = useState(false);
+  const resumeCardSetup = () => setShowCardForm(v => !v);
 
   // Pre-application opt-out: vendor says "not interested in this date" without
   // ever applying. Inserts a not_interested row so the signup-track drip filter
@@ -12650,7 +12851,7 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
           cursor: 'pointer', fontFamily: 'inherit',
           display: 'inline-flex', alignItems: 'center', gap: 6,
         }}>
-          <AlertCircle size={14} /> Add card to complete — {feeLabel(feeCents)} only if approved
+          <AlertCircle size={14} /> {showCardForm ? 'Close' : 'Add card to complete'} — {feeLabel(feeCents)} only if approved
         </button>
       );
     }
@@ -12658,6 +12859,26 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
 
   return (
     <>
+      {showCardForm && application && (
+        <div style={{
+          backgroundColor: '#fff', border: '1px solid #e8e8e8', borderLeft: '4px solid #C8102E',
+          borderRadius: '12px', padding: isMobile ? '18px' : '22px 28px', marginBottom: '10px',
+        }}>
+          <div style={{
+            fontSize: '11px', fontWeight: 800, color: '#666', letterSpacing: '0.08em',
+            textTransform: 'uppercase', marginBottom: '12px',
+          }}>
+            Add your card for {dateStr}
+          </div>
+          <InlineCardStep
+            applicationId={application.id}
+            feeCents={feeCents}
+            isMobile={isMobile}
+            onComplete={() => { setShowCardForm(false); if (onApplied) onApplied(); }}
+          />
+        </div>
+      )}
+
       <div style={{
         backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '12px',
         padding: isMobile ? '18px' : '22px 28px',
