@@ -4180,6 +4180,9 @@ function shinyVaultMediaUrl(storagePath) {
 }
 
 // Tagged so the store can tell Trainer Center traffic from Instagram traffic.
+// Both links point at the store's front page (featured cards), not /shop: every
+// Trainer Center session that landed on the /shop grid left without opening a
+// card, while Instagram traffic that lands on a card sticks. 09.17.2026.
 const svLink = (path, content) =>
   `${SHINYVAULT_URL}${path}?utm_source=trainercenter&utm_medium=site&utm_campaign=store_promo&utm_content=${content}`;
 
@@ -4278,7 +4281,7 @@ function ShinyVaultSection({ isMobile, inFlow = false }) {
 
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <a
-          href={svLink('/shop', 'shop_all')}
+          href={svLink('/', 'shop_all')}
           target="_blank"
           rel="noopener noreferrer"
           style={{
@@ -22308,7 +22311,7 @@ const buildNavItems = ({ isStaff, isOwner, isVendor, isMember, isLoggedIn, hasRe
     // domain under its own name.
     {
       label: 'Shop Online',
-      href: 'https://shinyvaultlgs.com/shop?utm_source=trainercenter&utm_medium=site&utm_campaign=store_promo&utm_content=nav',
+      href: 'https://shinyvaultlgs.com/?utm_source=trainercenter&utm_medium=site&utm_campaign=store_promo&utm_content=nav',
       external: true,
     },
     {
