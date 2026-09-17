@@ -4160,6 +4160,148 @@ function EventDayBody({ event, authUser, isMobile, isPreview }) {
   );
 }
 
+// ─── Shiny Vault promo (online store) ─────────────────────
+// The store lives on its own domain under its own name, so the section names
+// it out loud before anyone clicks. Landing on "Shiny Vault LGS" after tapping
+// something that only said "our online store" is the half second where people
+// wonder if they clicked the wrong thing.
+//
+// Real inventory rather than a copy-only banner: a row of actual products with
+// prices is self-evidently a shop, and answers "what is in there" in the same
+// beat as "there is a there". Same Supabase project, public read on active
+// products, so this is a direct query rather than another service to keep up.
+
+const SHINYVAULT_URL = 'https://shinyvaultlgs.com';
+
+function shinyVaultMediaUrl(storagePath) {
+  if (!storagePath) return null;
+  if (/^https?:\/\//.test(storagePath)) return storagePath;
+  return supabase.storage.from('shinyvault-media').getPublicUrl(storagePath).data.publicUrl;
+}
+
+// Tagged so the store can tell Trainer Center traffic from Instagram traffic.
+const svLink = (path, content) =>
+  `${SHINYVAULT_URL}${path}?utm_source=trainercenter&utm_medium=site&utm_campaign=store_promo&utm_content=${content}`;
+
+function ShinyVaultSection({ isMobile, inFlow = false }) {
+  const [products, setProducts] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('products')
+      .select('id, name, slug, price_cents, quantity_available, set_name, product_media(storage_path, sort_order)')
+      .eq('status', 'active')
+      .gt('quantity_available', 0)
+      .order('created_at', { ascending: false })
+      .limit(4)
+      .then(({ data, error }) => {
+        if (error) console.error('[ShinyVaultSection] products', error);
+        setProducts(data || []);
+        setLoaded(true);
+      });
+  }, []);
+
+  // Nothing in stock is not an error, it is just not worth a section.
+  if (loaded && products.length === 0) return null;
+
+  const photoOf = (p) => {
+    const photos = (p.product_media || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+    return photos[0] ? shinyVaultMediaUrl(photos[0].storage_path) : null;
+  };
+  const money = (c) => `$${(c / 100).toFixed(2).replace(/\.00$/, '')}`;
+
+  return (
+    <div style={inFlow ? { marginBottom: '64px' } : {
+      padding: isMobile ? '48px 20px' : '64px 48px',
+      maxWidth: '1200px', margin: '0 auto',
+    }}>
+      <SectionHeader
+        title="Shiny Vault, our online store"
+        subtitle="Sealed, singles and slabs you can buy without waiting for the shop to open"
+      />
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
+        gap: isMobile ? '12px' : '18px',
+        marginBottom: '26px',
+      }}>
+        {(loaded ? products : Array.from({ length: 4 })).map((p, i) => {
+          if (!p) {
+            return (
+              <div key={`ph-${i}`} style={{
+                backgroundColor: '#f3f4f6', borderRadius: '14px',
+                aspectRatio: '3 / 4',
+              }} />
+            );
+          }
+          const img = photoOf(p);
+          return (
+            <a
+              key={p.id}
+              href={svLink(`/product/${p.slug}`, 'product')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tap-row"
+              style={{
+                display: 'block', textDecoration: 'none', color: '#1a1a1a',
+                backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px',
+                overflow: 'hidden', touchAction: 'manipulation',
+              }}
+            >
+              <div style={{ aspectRatio: '1 / 1', backgroundColor: '#f3f4f6' }}>
+                {img && (
+                  <img
+                    src={img}
+                    alt={p.name}
+                    loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                )}
+              </div>
+              <div style={{ padding: isMobile ? '10px 12px 12px' : '12px 14px 14px' }}>
+                <div style={{
+                  fontSize: isMobile ? '0.84rem' : '0.9rem', fontWeight: 800, lineHeight: 1.3,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {p.name}
+                </div>
+                <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#C8102E', marginTop: '5px' }}>
+                  {money(p.price_cents)}
+                </div>
+              </div>
+            </a>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <a
+          href={svLink('/shop', 'shop_all')}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '10px',
+            backgroundColor: '#C8102E', color: '#fff', textDecoration: 'none',
+            padding: '14px 28px', borderRadius: '999px',
+            fontSize: '0.95rem', fontWeight: 800, touchAction: 'manipulation',
+          }}
+        >
+          Shop Shiny Vault <ArrowRight size={18} />
+        </a>
+      </div>
+
+      <p style={{
+        textAlign: 'center', fontSize: '0.8rem', color: '#6b7280',
+        margin: '14px 0 0', lineHeight: 1.5,
+      }}>
+        Shiny Vault LGS is our online store. Orders ship within 24 to 72 hours.
+      </p>
+    </div>
+  );
+}
+
 function HomePage({ isMobile, authUser }) {
   const [searchParams] = useSearchParams();
   const isLocalPreview = searchParams.get('preview') === 'tradenight';
@@ -4351,6 +4493,9 @@ function HomePage({ isMobile, authUser }) {
             </p>
           </div>
         </div>
+
+        {/* ── ONLINE STORE ── */}
+        <ShinyVaultSection isMobile={isMobile} inFlow />
 
         {/* ── CARDS ── */}
         <div id="cards" style={{ marginBottom: '64px' }}>
@@ -22158,6 +22303,14 @@ const buildNavItems = ({ isStaff, isOwner, isVendor, isMember, isLoggedIn, hasRe
   const items = [
     { label: 'Home', to: '/' },
     { label: 'Calendar', to: '/calendar' },
+    // The store is a destination, not a service page, so it sits at the top
+    // level rather than inside Guests. External because it lives on its own
+    // domain under its own name.
+    {
+      label: 'Shop Online',
+      href: 'https://shinyvaultlgs.com/shop?utm_source=trainercenter&utm_medium=site&utm_campaign=store_promo&utm_content=nav',
+      external: true,
+    },
     {
       // Guests becomes "Member" once they log in as a member — same dropdown,
       // just acknowledges who they are. Orange label when logged in.
@@ -28526,19 +28679,40 @@ function App() {
             }
             // Top-level non-dropdown items (Home).
             const isActive = location.pathname === item.to;
+            const simpleStyle = {
+              color: isActive ? '#C8102E' : '#555',
+              textDecoration: 'none',
+              fontSize: '0.85rem',
+              fontWeight: '600',
+              transition: 'color 0.2s',
+            };
+            const hoverIn = e => { e.currentTarget.style.color = '#C8102E'; };
+            const hoverOut = e => { if (!isActive) e.currentTarget.style.color = '#555'; };
+
+            // The store lives on its own domain, so it is a real anchor.
+            if (item.external) {
+              return (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={simpleStyle}
+                  onMouseEnter={hoverIn}
+                  onMouseLeave={hoverOut}
+                >
+                  {item.label}
+                </a>
+              );
+            }
+
             return (
               <Link
                 key={item.label}
                 to={item.to}
-                style={{
-                  color: isActive ? '#C8102E' : '#555',
-                  textDecoration: 'none',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = '#C8102E'}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#555'; }}
+                style={simpleStyle}
+                onMouseEnter={hoverIn}
+                onMouseLeave={hoverOut}
               >
                 {item.label}
               </Link>
@@ -28683,20 +28857,35 @@ function App() {
             }
             // Top-level non-dropdown items (Home).
             const isActive = location.pathname === item.to;
+            const mobileStyle = {
+              color: isActive ? '#C8102E' : '#555',
+              textDecoration: 'none',
+              fontSize: '0.95rem',
+              fontWeight: '600',
+              padding: '14px 24px',
+              borderBottom: '1px solid #f0f0f0',
+              transition: 'background-color 0.2s, color 0.2s',
+            };
+            if (item.external) {
+              return (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
+                  style={mobileStyle}
+                >
+                  {item.label}
+                </a>
+              );
+            }
             return (
               <Link
                 key={item.label}
                 to={item.to}
                 onClick={() => { setMenuOpen(false); setOpenDropdown(null); }}
-                style={{
-                  color: isActive ? '#C8102E' : '#555',
-                  textDecoration: 'none',
-                  fontSize: '0.95rem',
-                  fontWeight: '600',
-                  padding: '14px 24px',
-                  borderBottom: '1px solid #f0f0f0',
-                  transition: 'background-color 0.2s, color 0.2s',
-                }}
+                style={mobileStyle}
               >
                 {item.label}
               </Link>
