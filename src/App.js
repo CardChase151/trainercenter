@@ -4176,7 +4176,12 @@ const SHINYVAULT_URL = 'https://shinyvaultlgs.com';
 function shinyVaultMediaUrl(storagePath) {
   if (!storagePath) return null;
   if (/^https?:\/\//.test(storagePath)) return storagePath;
-  return supabase.storage.from('shinyvault-media').getPublicUrl(storagePath).data.publicUrl;
+  // The originals are 5712px phone photos around 3.5MB each. These paint at
+  // card size, so go through Supabase's render endpoint. 09.17.2026.
+  return supabase.storage
+    .from('shinyvault-media')
+    .getPublicUrl(storagePath, { transform: { width: 600, quality: 72, resize: 'contain' } })
+    .data.publicUrl;
 }
 
 // Tagged so the store can tell Trainer Center traffic from Instagram traffic.
