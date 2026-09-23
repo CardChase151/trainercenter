@@ -11208,7 +11208,14 @@ function CardFields({ onSaved, onError, feeLabel, busyLabel = 'Saving card...' }
 
   return (
     <form onSubmit={submit}>
-      <PaymentElement options={{ layout: 'tab' }} />
+      {/* 'tabs', not 'tab'. Stripe rejects the singular with an
+          IntegrationError and the element never mounts, so the vendor sees an
+          empty space where the card fields should be and cannot pay at all.
+          It went unnoticed from 09.14 because REACT_APP_STRIPE_PUBLISHABLE_KEY
+          was unset, which sent everyone down the hosted Checkout fallback
+          instead. Setting that key on 09.22 switched this path on and broke
+          card entry for every vendor until this line was fixed. */}
+      <PaymentElement options={{ layout: 'tabs' }} />
       <button
         type="submit"
         disabled={!stripe || busy}

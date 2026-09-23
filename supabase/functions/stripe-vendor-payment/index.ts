@@ -48,15 +48,23 @@ const json = (body: unknown, status = 200) =>
 
 const money = (cents: number) => `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
 
-// App Catalyst gets half of what's left after Stripe's own processing cut
-// (estimated at the standard 2.9% + 30¢ card rate) — the store's connected
-// account keeps the other half. Exact Stripe fee isn't known until the
-// charge settles, so this is an estimate; it lands within a cent or two of
-// a true post-fee 50/50 split on ordinary domestic card charges.
+// App Catalyst takes the whole table fee; the store's connected account keeps
+// nothing. Changed 09.22.2026 on Chase's instruction, with Trainer Center's
+// agreement — it was a post-Stripe-fee 50/50 split before this.
+//
+// The charge still runs on the connected account, because every saved card
+// belongs to that account and moving the charge to the platform would void
+// them all. So the fee is taken as an application fee instead.
+//
+// What is NOT taken is Stripe's own processing cut (estimated at the standard
+// 2.9% + 30¢ domestic card rate), which comes out of the connected account on
+// a direct charge. Leaving that behind is deliberate: sweeping the literal
+// full amount would push the store's balance negative by Stripe's fee on every
+// single charge. This way the store nets about zero and App Catalyst receives
+// everything above processing.
 const platformFeeCents = (amountCents: number) => {
   const estStripeFee = Math.round(amountCents * 0.029) + 30
-  const remainder = Math.max(amountCents - estStripeFee, 0)
-  return Math.round(remainder / 2)
+  return Math.max(amountCents - estStripeFee, 0)
 }
 
 Deno.serve(async (req) => {
@@ -215,6 +223,9 @@ Deno.serve(async (req) => {
         success_url: `${SITE_URL}/vendors/dashboard?fee_setup={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_URL}/vendors/dashboard?fee_setup_cancelled=1`,
         metadata: { application_id: app.id },
+        // the webhook reads this off the setup intent as a second way in,
+        // for the case where the session event is missed (2026-09-21)
+        setup_intent_data: { metadata: { application_id: app.id } },
       }, onAcct)
 
       await supabase.from('vendor_applications').update({
