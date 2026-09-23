@@ -17297,7 +17297,7 @@ function StaffAddContactModal({ onClose, onAdded, isMobile }) {
 function StaffCommsPage({ isMobile, staff }) {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const initialTab = tabParam === 'contacts' ? 'contacts' : tabParam === 'schedule' ? 'schedule' : 'vendors';
+  const initialTab = tabParam === 'contacts' ? 'contacts' : tabParam === 'schedule' ? 'schedule' : tabParam === 'activity' ? 'activity' : 'vendors';
   const [tab, setTab] = useState(initialTab);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -17527,13 +17527,18 @@ function StaffCommsPage({ isMobile, staff }) {
           {tabBtn('vendors', 'To Vendors')}
           {tabBtn('contacts', 'To Contacts')}
           {tabBtn('schedule', 'Drip Schedule')}
+          {tabBtn('activity', 'Email Activity')}
         </div>
 
         {tab === 'schedule' && (
           <DripScheduleView isMobile={isMobile} />
         )}
 
-        {tab !== 'schedule' && (
+        {tab === 'activity' && (
+          <EmailActivityView isMobile={isMobile} />
+        )}
+
+        {tab !== 'schedule' && tab !== 'activity' && (
         <>
         {/* Audience picker per tab */}
         <div style={{
@@ -17734,6 +17739,90 @@ function StaffCommsPage({ isMobile, staff }) {
 //      approval, cancellation)
 // Source of truth lives in supabase/functions/{vendor-event-drip,send-vendor-email}/index.ts;
 // templates mirrored to src/lib/dripSchedule.js for display only.
+// ─── Email activity (opens + clicks) ──────────────────────
+// Reads public.email_events, which the resend-email-events edge function
+// fills from Resend's webhook. One row per recipient, newest activity first.
+function EmailActivityView({ isMobile }) {
+  const [rows, setRows] = useState(null);
+  const [names, setNames] = useState({});
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const since = new Date(Date.now() - 30 * 86400000).toISOString();
+      const { data, error } = await supabase
+        .from('email_events')
+        .select('to_email, event_type, subject, link, occurred_at')
+        .gte('occurred_at', since)
+        .order('occurred_at', { ascending: false })
+        .limit(5000);
+      if (!alive) return;
+      if (error) { setErr(error.message); setRows([]); return; }
+      setRows(data || []);
+      const { data: vs } = await supabase.from('vendors').select('email, name, business_name');
+      if (!alive) return;
+      const m = {};
+      (vs || []).forEach(v => { if (v.email) m[v.email.toLowerCase()] = v.business_name || v.name; });
+      setNames(m);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  if (rows === null) return <div style={{ color: '#6b7280', padding: '24px 0' }}>Loading…</div>;
+
+  const byPerson = {};
+  rows.forEach(r => {
+    const p = byPerson[r.to_email] || (byPerson[r.to_email] = { email: r.to_email, sent: 0, opens: 0, clicks: 0, bounced: false, last: r.occurred_at, lastSubject: r.subject, lastClick: null });
+    if (r.event_type === 'delivered') p.sent += 1;
+    if (r.event_type === 'opened') p.opens += 1;
+    if (r.event_type === 'clicked') { p.clicks += 1; if (!p.lastClick) p.lastClick = r.link; }
+    if (r.event_type === 'bounced') p.bounced = true;
+    if (r.occurred_at > p.last) p.last = r.occurred_at;
+  });
+  const people = Object.values(byPerson).sort((a, b) => (b.clicks - a.clicks) || (b.opens - a.opens) || (a.last < b.last ? 1 : -1));
+  const cell = { padding: '10px 12px', borderBottom: '1px solid #f0f0f0', fontSize: '0.85rem', textAlign: 'left' };
+
+  return (
+    <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px', padding: isMobile ? '14px' : '20px 24px', marginBottom: '18px' }}>
+      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '12px' }}>
+        Last 30 days, mail sent from Trainer Center HB. Clicks are reliable. Opens are a rough signal, since some mail apps report an open on their own.
+      </div>
+      {err && <div style={{ color: '#b91c1c', marginBottom: '10px' }}>{err}</div>}
+      {people.length === 0 ? (
+        <div style={{ color: '#6b7280', padding: '16px 0' }}>Nothing recorded yet. Activity shows up here for emails sent from now on.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Who', 'Delivered', 'Opens', 'Clicks', 'Last activity'].map(h => (
+                  <th key={h} style={{ ...cell, fontWeight: 800, color: '#374151', background: '#f9fafb' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {people.map(p => (
+                <tr key={p.email}>
+                  <td style={cell}>
+                    <div style={{ fontWeight: 700 }}>{names[p.email] || p.email}</div>
+                    {names[p.email] && <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>{p.email}</div>}
+                    {p.bounced && <div style={{ color: '#b91c1c', fontSize: '0.75rem', fontWeight: 700 }}>Bounced</div>}
+                  </td>
+                  <td style={cell}>{p.sent}</td>
+                  <td style={cell}>{p.opens}</td>
+                  <td style={cell}>{p.clicks}</td>
+                  <td style={cell}>{new Date(p.last).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DripScheduleView({ isMobile }) {
   const sections = [
     { id: 'signup-track', label: 'Signup track', kind: 'track', color: '#0891b2', audience: DRIP_SIGNUP_AUDIENCE, steps: DRIP_SIGNUP_STEPS, blurb: 'Daily cron, 8 AM PT. Pushes approved vendors who haven\'t signed up yet for an upcoming Vendor Day.' },
