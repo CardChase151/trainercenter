@@ -17743,24 +17743,19 @@ function StaffCommsPage({ isMobile, staff }) {
 // Reads public.email_events, which the resend-email-events edge function
 // fills from Resend's webhook. One row per recipient, newest activity first.
 function EmailActivityView({ isMobile }) {
-  const [rows, setRows] = useState(null);
+  const [camps, setCamps] = useState(null);
   const [names, setNames] = useState({});
   const [err, setErr] = useState('');
-  const [subject, setSubject] = useState('');
+  const [pick, setPick] = useState('');
+  const [people, setPeople] = useState([]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const since = new Date(Date.now() - 60 * 86400000).toISOString();
-      const { data, error } = await supabase
-        .from('email_events')
-        .select('to_email, event_type, subject, link, occurred_at')
-        .gte('occurred_at', since)
-        .order('occurred_at', { ascending: false })
-        .limit(10000);
+      const { data, error } = await supabase.rpc('email_campaigns_summary');
       if (!alive) return;
-      if (error) { setErr(error.message); setRows([]); return; }
-      setRows(data || []);
+      if (error) { setErr(error.message); setCamps([]); return; }
+      setCamps(data || []);
       const { data: vs } = await supabase.from('vendors').select('email, name, business_name');
       const { data: cs } = await supabase.from('marketing_contacts').select('email, first_name, last_name').not('email', 'is', null).limit(5000);
       if (!alive) return;
@@ -17772,61 +17767,84 @@ function EmailActivityView({ isMobile }) {
     return () => { alive = false; };
   }, []);
 
-  if (rows === null) return <div style={{ color: '#6b7280', padding: '24px 0' }}>Loading…</div>;
+  useEffect(() => {
+    if (!pick) { setPeople([]); return; }
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase.rpc('email_campaign_people', { p_campaign: pick });
+      if (!alive) return;
+      if (error) { setErr(error.message); return; }
+      setPeople(data || []);
+    })();
+    return () => { alive = false; };
+  }, [pick]);
 
-  const subjects = [];
-  rows.forEach(r => { if (r.subject && !subjects.includes(r.subject)) subjects.push(r.subject); });
-  const shown = subject ? rows.filter(r => r.subject === subject) : rows;
+  if (camps === null) return <div style={{ color: '#6b7280', padding: '24px 0' }}>Loading…</div>;
 
-  const uniq = (type) => new Set(shown.filter(r => r.event_type === type).map(r => r.to_email)).size;
+  const label = (c) => `${c.subject || c.campaign} · ${new Date(c.first_at).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: 'numeric' })} · ${c.sent} sent`;
+  const rowsShown = pick ? camps.filter(c => c.campaign === pick) : camps;
+  const sum = (k) => rowsShown.reduce((n, c) => n + (c[k] || 0), 0);
+  const sent = sum('sent'), delivered = sum('delivered');
+  const pct = (n, d) => (d > 0 ? `${Math.round((n / d) * 100)}%` : '-');
   const tiles = [
-    { label: 'Delivered', n: uniq('delivered') },
-    { label: 'Opened', n: uniq('opened') },
-    { label: 'Clicked', n: uniq('clicked') },
-    { label: 'Bounced', n: uniq('bounced'), bad: true },
+    { label: 'Sent', n: sent, sub: '' },
+    { label: 'Delivered', n: delivered, sub: pct(delivered, sent) + ' of sent' },
+    { label: 'Opened', n: sum('opened'), sub: pct(sum('opened'), delivered) + ' of delivered' },
+    { label: 'Clicked', n: sum('clicked'), sub: pct(sum('clicked'), delivered) + ' of delivered' },
+    { label: 'Bounced', n: sum('bounced'), sub: pct(sum('bounced'), sent) + ' of sent', bad: true },
   ];
-
-  const byPerson = {};
-  shown.forEach(r => {
-    const p = byPerson[r.to_email] || (byPerson[r.to_email] = { email: r.to_email, delivered: false, opens: 0, clicks: 0, bounced: false, last: r.occurred_at });
-    if (r.event_type === 'delivered') p.delivered = true;
-    if (r.event_type === 'opened') p.opens += 1;
-    if (r.event_type === 'clicked') p.clicks += 1;
-    if (r.event_type === 'bounced') p.bounced = true;
-    if (r.occurred_at > p.last) p.last = r.occurred_at;
-  });
-  const people = Object.values(byPerson).sort((a, b) => (b.clicks - a.clicks) || (b.opens - a.opens) || (a.last < b.last ? 1 : -1));
   const cell = { padding: '10px 12px', borderBottom: '1px solid #f0f0f0', fontSize: '0.85rem', textAlign: 'left' };
 
   return (
     <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px', padding: isMobile ? '14px' : '20px 24px', marginBottom: '18px' }}>
       <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '12px' }}>
-        Last 60 days, mail sent from Trainer Center HB. Clicks are reliable. Opens are a rough signal, since some mail apps report an open on their own.
+        Every email sent from Trainer Center HB since tracking started, kept permanently. Counts are people, not events. Clicks are reliable. Opens are a rough signal, since some mail apps report an open on their own.
       </div>
-      <select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: '0.9rem', fontFamily: 'inherit', marginBottom: '14px', background: '#fff' }}>
+      <select value={pick} onChange={e => setPick(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: '0.9rem', fontFamily: 'inherit', marginBottom: '14px', background: '#fff' }}>
         <option value="">All emails</option>
-        {subjects.map(sj => <option key={sj} value={sj}>{sj}</option>)}
+        {camps.map(c => <option key={c.campaign} value={c.campaign}>{label(c)}</option>)}
       </select>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
         {tiles.map(t => (
           <div key={t.label} style={{ border: '1px solid #eee', borderRadius: '10px', padding: '10px 12px', background: '#fafafa' }}>
             <div style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6b7280' }}>{t.label}</div>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: t.bad && t.n > 0 ? '#b91c1c' : '#1a1a1a' }}>{t.n}</div>
+            <div style={{ fontSize: '0.72rem', color: '#6b7280', minHeight: '1em' }}>{t.sub}</div>
           </div>
         ))}
       </div>
       {err && <div style={{ color: '#b91c1c', marginBottom: '10px' }}>{err}</div>}
-      {people.length === 0 ? (
-        <div style={{ color: '#6b7280', padding: '16px 0' }}>Nothing recorded yet. Activity shows up here for emails sent from now on.</div>
-      ) : (
+      {camps.length === 0 && <div style={{ color: '#6b7280', padding: '16px 0' }}>Nothing recorded yet. Activity shows up here for emails sent from now on.</div>}
+      {!pick && camps.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                {['Who', 'Delivered', 'Opens', 'Clicks', 'Last activity'].map(h => (
-                  <th key={h} style={{ ...cell, fontWeight: 800, color: '#374151', background: '#f9fafb' }}>{h}</th>
-                ))}
-              </tr>
+              <tr>{['Email', 'Sent', 'Delivered', 'Opened', 'Clicked', 'Bounced'].map(h => (
+                <th key={h} style={{ ...cell, fontWeight: 800, color: '#374151', background: '#f9fafb' }}>{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {camps.map(c => (
+                <tr key={c.campaign} onClick={() => setPick(c.campaign)} style={{ cursor: 'pointer' }}>
+                  <td style={cell}><div style={{ fontWeight: 700 }}>{c.subject || c.campaign}</div><div style={{ color: '#6b7280', fontSize: '0.75rem' }}>{new Date(c.first_at).toLocaleDateString()}</div></td>
+                  <td style={cell}>{c.sent}</td>
+                  <td style={cell}>{c.delivered} <span style={{ color: '#6b7280' }}>({pct(c.delivered, c.sent)})</span></td>
+                  <td style={cell}>{c.opened} <span style={{ color: '#6b7280' }}>({pct(c.opened, c.delivered)})</span></td>
+                  <td style={cell}>{c.clicked} <span style={{ color: '#6b7280' }}>({pct(c.clicked, c.delivered)})</span></td>
+                  <td style={cell}>{c.bounced}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {pick && people.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>{['Who', 'Delivered', 'Opens', 'Clicks', 'Last activity'].map(h => (
+                <th key={h} style={{ ...cell, fontWeight: 800, color: '#374151', background: '#f9fafb' }}>{h}</th>
+              ))}</tr>
             </thead>
             <tbody>
               {people.map(p => (
@@ -17839,7 +17857,7 @@ function EmailActivityView({ isMobile }) {
                   <td style={cell}>{p.delivered ? 'Yes' : p.bounced ? 'No' : 'Pending'}</td>
                   <td style={cell}>{p.opens}</td>
                   <td style={cell}>{p.clicks}</td>
-                  <td style={cell}>{new Date(p.last).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                  <td style={cell}>{new Date(p.last_at).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
                 </tr>
               ))}
             </tbody>

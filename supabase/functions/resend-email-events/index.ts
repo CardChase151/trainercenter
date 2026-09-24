@@ -24,7 +24,14 @@ async function verify(body: string, req: Request) {
   return sigHeader.split(' ').some(s => s.split(',')[1] === expected)
 }
 
-const KEEP = new Set(['email.delivered', 'email.opened', 'email.clicked', 'email.bounced', 'email.complained'])
+// Resend returns tags as an object ({campaign: 'x'}) or a list of {name, value}.
+function campaignOf(tags: any): string | null {
+  if (!tags) return null
+  if (Array.isArray(tags)) return tags.find((t: any) => t.name === 'campaign')?.value || null
+  return tags.campaign || null
+}
+
+const KEEP = new Set(['email.sent', 'email.delivered', 'email.opened', 'email.clicked', 'email.bounced', 'email.complained'])
 
 Deno.serve(async (req) => {
   const body = await req.text()
@@ -41,6 +48,7 @@ Deno.serve(async (req) => {
     to_email: String(to).toLowerCase(),
     subject: d.subject || null,
     link: d.click?.link || null,
+    campaign: campaignOf(d.tags),
     occurred_at: d.click?.timestamp || d.created_at || evt.created_at || new Date().toISOString(),
   })
   if (error && error.code !== '23505') {
