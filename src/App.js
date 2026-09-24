@@ -17746,23 +17746,26 @@ function EmailActivityView({ isMobile }) {
   const [rows, setRows] = useState(null);
   const [names, setNames] = useState({});
   const [err, setErr] = useState('');
+  const [subject, setSubject] = useState('');
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const since = new Date(Date.now() - 30 * 86400000).toISOString();
+      const since = new Date(Date.now() - 60 * 86400000).toISOString();
       const { data, error } = await supabase
         .from('email_events')
         .select('to_email, event_type, subject, link, occurred_at')
         .gte('occurred_at', since)
         .order('occurred_at', { ascending: false })
-        .limit(5000);
+        .limit(10000);
       if (!alive) return;
       if (error) { setErr(error.message); setRows([]); return; }
       setRows(data || []);
       const { data: vs } = await supabase.from('vendors').select('email, name, business_name');
+      const { data: cs } = await supabase.from('marketing_contacts').select('email, first_name, last_name').not('email', 'is', null).limit(5000);
       if (!alive) return;
       const m = {};
+      (cs || []).forEach(c => { const n = [c.first_name, c.last_name].filter(Boolean).join(' '); if (c.email && n) m[c.email.toLowerCase()] = n; });
       (vs || []).forEach(v => { if (v.email) m[v.email.toLowerCase()] = v.business_name || v.name; });
       setNames(m);
     })();
@@ -17771,12 +17774,24 @@ function EmailActivityView({ isMobile }) {
 
   if (rows === null) return <div style={{ color: '#6b7280', padding: '24px 0' }}>Loading…</div>;
 
+  const subjects = [];
+  rows.forEach(r => { if (r.subject && !subjects.includes(r.subject)) subjects.push(r.subject); });
+  const shown = subject ? rows.filter(r => r.subject === subject) : rows;
+
+  const uniq = (type) => new Set(shown.filter(r => r.event_type === type).map(r => r.to_email)).size;
+  const tiles = [
+    { label: 'Delivered', n: uniq('delivered') },
+    { label: 'Opened', n: uniq('opened') },
+    { label: 'Clicked', n: uniq('clicked') },
+    { label: 'Bounced', n: uniq('bounced'), bad: true },
+  ];
+
   const byPerson = {};
-  rows.forEach(r => {
-    const p = byPerson[r.to_email] || (byPerson[r.to_email] = { email: r.to_email, sent: 0, opens: 0, clicks: 0, bounced: false, last: r.occurred_at, lastSubject: r.subject, lastClick: null });
-    if (r.event_type === 'delivered') p.sent += 1;
+  shown.forEach(r => {
+    const p = byPerson[r.to_email] || (byPerson[r.to_email] = { email: r.to_email, delivered: false, opens: 0, clicks: 0, bounced: false, last: r.occurred_at });
+    if (r.event_type === 'delivered') p.delivered = true;
     if (r.event_type === 'opened') p.opens += 1;
-    if (r.event_type === 'clicked') { p.clicks += 1; if (!p.lastClick) p.lastClick = r.link; }
+    if (r.event_type === 'clicked') p.clicks += 1;
     if (r.event_type === 'bounced') p.bounced = true;
     if (r.occurred_at > p.last) p.last = r.occurred_at;
   });
@@ -17786,7 +17801,19 @@ function EmailActivityView({ isMobile }) {
   return (
     <div style={{ backgroundColor: '#fff', border: '1px solid #eee', borderRadius: '14px', padding: isMobile ? '14px' : '20px 24px', marginBottom: '18px' }}>
       <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '12px' }}>
-        Last 30 days, mail sent from Trainer Center HB. Clicks are reliable. Opens are a rough signal, since some mail apps report an open on their own.
+        Last 60 days, mail sent from Trainer Center HB. Clicks are reliable. Opens are a rough signal, since some mail apps report an open on their own.
+      </div>
+      <select value={subject} onChange={e => setSubject(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: '0.9rem', fontFamily: 'inherit', marginBottom: '14px', background: '#fff' }}>
+        <option value="">All emails</option>
+        {subjects.map(sj => <option key={sj} value={sj}>{sj}</option>)}
+      </select>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+        {tiles.map(t => (
+          <div key={t.label} style={{ border: '1px solid #eee', borderRadius: '10px', padding: '10px 12px', background: '#fafafa' }}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#6b7280' }}>{t.label}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: t.bad && t.n > 0 ? '#b91c1c' : '#1a1a1a' }}>{t.n}</div>
+          </div>
+        ))}
       </div>
       {err && <div style={{ color: '#b91c1c', marginBottom: '10px' }}>{err}</div>}
       {people.length === 0 ? (
@@ -17809,7 +17836,7 @@ function EmailActivityView({ isMobile }) {
                     {names[p.email] && <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>{p.email}</div>}
                     {p.bounced && <div style={{ color: '#b91c1c', fontSize: '0.75rem', fontWeight: 700 }}>Bounced</div>}
                   </td>
-                  <td style={cell}>{p.sent}</td>
+                  <td style={cell}>{p.delivered ? 'Yes' : p.bounced ? 'No' : 'Pending'}</td>
                   <td style={cell}>{p.opens}</td>
                   <td style={cell}>{p.clicks}</td>
                   <td style={cell}>{new Date(p.last).toLocaleString([], { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
