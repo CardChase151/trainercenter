@@ -20115,6 +20115,10 @@ function StaffVendorsPage({ isMobile, staff }) {
     return null;
   };
 
+  // Decisions that end the vendor's involvement with this date. None of them
+  // ends in us taking money, so each one releases a saved card.
+  const DEAD_DECISIONS = ['declined', 'cancelled', 'not_interested', 'vendor_cancelled'];
+
   const decideApplication = async (appId, status, note) => {
     // Paid application being approved with money still uncollected →
     // route through the charge modal (Approve & collect). The modal
@@ -20143,6 +20147,14 @@ function StaffVendorsPage({ isMobile, staff }) {
       return;
     }
     sendVendorEmail({ type: 'application_decided', application_id: appId });
+    // A declined vendor should not be left with a card sitting on file for a
+    // table they never got. Nothing is ever charged on decline, so this hands
+    // the card back and there is nothing to explain if they ask.
+    if (DEAD_DECISIONS.includes(status) && findAppById(appId)?.payment_status === 'card_saved') {
+      supabase.functions.invoke('stripe-vendor-payment', {
+        body: { action: 'release_card', application_id: appId },
+      }).catch(() => {});
+    }
     // Optimistic local update — avoids the full refetch flash that was
     // collapsing expanded events and re-running every query on the page.
     setEvents(prev => prev.map(ev => ({

@@ -17,6 +17,7 @@
 //   charge          { application_id, amount_cents, note } -> { ok } | { ok:false, decline }
 //   create_pay_link { application_id, amount_cents }       -> { url }
 //   refund          { application_id }                     -> { ok }
+//   release_card    { application_id }                     -> { ok, detached }
 //
 // Express = the "last-minute fast pass" link staff share directly:
 // /vendors/express?event=<id>. Vendor pays the full fee up front and is
@@ -598,6 +599,36 @@ Deno.serve(async (req) => {
         refunded_at: new Date().toISOString(),
       }).eq('id', app.id)
       return json({ ok: true })
+    }
+
+    // Declining leaves a vendor with a card saved against a table they never
+    // got. Nothing was ever charged, but the stored card is theirs, not ours,
+    // so the decline path releases it. Detach is best effort: if Stripe has
+    // already lost the payment method we still clear our own columns.
+    if (action === 'release_card') {
+      if (!(await requireStaff())) return json({ error: 'Staff only' }, 403)
+      const app = await loadApp(body.application_id)
+      if (!app) return json({ error: 'Application not found' }, 404)
+      if (app.payment_status === 'charged') {
+        return json({ error: 'Already charged. Refund it before releasing the card.' }, 400)
+      }
+      if (!app.stripe_payment_method_id) return json({ ok: true, nothing_to_release: true })
+
+      let detached = true
+      try {
+        await stripe.paymentMethods.detach(app.stripe_payment_method_id, onAcct)
+      } catch (err) {
+        detached = false
+        console.error('[release_card] detach failed', (err as Error).message)
+      }
+      await supabase.from('vendor_applications').update({
+        stripe_payment_method_id: null,
+        payment_status: 'none',
+        payment_note: detached
+          ? 'Card released, never charged'
+          : 'Card cleared locally, Stripe detach failed',
+      }).eq('id', app.id)
+      return json({ ok: true, detached })
     }
 
     return json({ error: 'Unknown action' }, 400)
