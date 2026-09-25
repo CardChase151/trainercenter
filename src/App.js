@@ -3606,12 +3606,17 @@ function useTodayEvent({ forcePreview, previewEvent }) {
         .eq('has_vendors', true)
         .order('event_date', { ascending: true })
         .limit(1);
-      const { data } = forcePreview
-        ? await query.gte('event_date', today)
-        : await query.eq('event_date', today);
+      const [{ data }, { data: settings }] = await Promise.all([
+        forcePreview ? query.gte('event_date', today) : query.eq('event_date', today),
+        supabase.from('site_settings').select('takeover_off_event_id').eq('id', 1).maybeSingle(),
+      ]);
       if (cancelled) return;
       const ev = (data || []).find(e => !e.cancelled);
-      setEvent(ev || null);
+      // Manual off switch. Staff can suppress the takeover for one event from
+      // /staff/preview without touching has_vendors, so door check-in and
+      // voting keep working for that same event.
+      const suppressed = ev && settings?.takeover_off_event_id === ev.id;
+      setEvent(suppressed ? null : (ev || null));
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -8009,6 +8014,8 @@ function StaffPreviewPage({ isMobile }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [takeoverOffId, setTakeoverOffId] = useState(null);
+  const [takeoverBusy, setTakeoverBusy] = useState(false);
   const activePreview = useActivePreview();
 
   useEffect(() => {
@@ -8022,17 +8029,36 @@ function StaffPreviewPage({ isMobile }) {
           .gte('event_date', today)
           .order('event_date', { ascending: true })
           .limit(10),
-        supabase.from('site_settings').select('shop_door_token').eq('id', 1).maybeSingle(),
+        supabase.from('site_settings').select('shop_door_token, takeover_off_event_id').eq('id', 1).maybeSingle(),
       ]);
       if (cancelled) return;
       const upcoming = (eventData || []).filter(e => !e.cancelled);
       setEvents(upcoming);
       if (upcoming.length > 0) setSelectedId(upcoming[0].id);
       setShopToken(settings?.shop_door_token || null);
+      setTakeoverOffId(settings?.takeover_off_event_id || null);
       setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // The event happening today, if any. Only this one can have its takeover
+  // switched off — the switch is per-event on purpose so it cannot be left
+  // on by accident and silently kill a future event night.
+  const eventToday = events.find(e => e.event_date === todayISO()) || null;
+  const takeoverOff = !!eventToday && takeoverOffId === eventToday.id;
+
+  async function setTakeover(off) {
+    if (!eventToday) return;
+    setTakeoverBusy(true); setError(null);
+    const { error: err } = await supabase
+      .from('site_settings')
+      .update({ takeover_off_event_id: off ? eventToday.id : null })
+      .eq('id', 1);
+    if (err) setError(err.message);
+    else setTakeoverOffId(off ? eventToday.id : null);
+    setTakeoverBusy(false);
+  }
 
   // Reusable shop QR — same physical print works for every event night
   // (real or in preview). Routes to whatever has_vendors event is today.
@@ -8079,6 +8105,34 @@ function StaffPreviewPage({ isMobile }) {
             disabled={busy}
             style={{ background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 16px', fontWeight: 800, fontSize: '13px', cursor: busy ? 'wait' : 'pointer' }}
           >Exit preview now</button>
+        </div>
+      )}
+
+      {eventToday && (
+        <div style={{ background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '14px', padding: '20px', marginBottom: '28px' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: 800, margin: '0 0 6px', color: '#1a1a1a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Today's home page takeover
+          </h3>
+          <p style={{ fontSize: '13px', color: '#525252', lineHeight: 1.5, margin: '0 0 16px' }}>
+            <strong>{eventToday.title}</strong> is today, so the home page has swapped itself for the event page.
+            Turning it off puts the normal home page back for everyone. The door QR, check-in and voting keep
+            working either way, and the switch clears itself after today.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setTakeover(!takeoverOff)}
+              disabled={takeoverBusy}
+              style={{
+                background: takeoverOff ? '#15803d' : '#1a1a1a',
+                color: '#fff', border: 'none', borderRadius: '10px',
+                padding: '12px 20px', fontWeight: 800, fontSize: '14px',
+                cursor: takeoverBusy ? 'wait' : 'pointer',
+              }}
+            >{takeoverOff ? 'Turn the takeover back on' : 'Turn the takeover off'}</button>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: takeoverOff ? '#b45309' : '#15803d' }}>
+              {takeoverOff ? 'Off — visitors see the normal home page' : 'On — visitors see the event page'}
+            </span>
+          </div>
         </div>
       )}
 
