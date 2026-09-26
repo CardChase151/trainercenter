@@ -10493,16 +10493,16 @@ function VendorApplyPage({ isMobile }) {
   // dates and hand over a card would only create work to undo later.
   const suspended = Boolean(vendor && vendor.status === 'suspended');
 
-  // A returning vendor is someone who actually showed up before, not someone
-  // who merely applied. Drives which price they see.
+  // A returning vendor is someone who has PAID for a table before. It used to
+  // key off door check-ins, which quoted the first-timer rate to vendors who
+  // paid and were never scanned in. Changed 09.26.2026. The rule lives in
+  // vendor_is_returning so the express fast-pass cannot price it differently.
   const [isReturning, setIsReturning] = useState(false);
   useEffect(() => {
     if (!vendor?.id) { setIsReturning(false); return; }
     supabase
-      .from('vendor_attendance')
-      .select('id', { count: 'exact', head: true })
-      .eq('vendor_id', vendor.id)
-      .then(({ count }) => setIsReturning((count || 0) > 0));
+      .rpc('vendor_is_returning', { p_vendor_id: vendor.id })
+      .then(({ data }) => setIsReturning(!!data));
   }, [vendor?.id]);
 
   // Someone already in the system keeps the role they were approved under.
@@ -12923,14 +12923,10 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
   if (event.cancelled) {
     actionEl = statusPill('#fef2f2', '#dc2626', <AlertCircle size={14} />, 'Event cancelled');
   } else if (!application) {
-    if (vendorStatus !== 'approved') {
-      // Profile gate — until the vendor's profile is approved, hide the
-      // apply button on every event card and show why.
+    if (vendorStatus === 'suspended') {
       actionEl = (
         <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic', maxWidth: '240px', textAlign: 'right' }}>
-          {vendorStatus === 'suspended'
-            ? 'Account suspended — contact Trainer Center HB.'
-            : "Profile pending review. You'll be able to apply once approved."}
+          Account suspended — contact Trainer Center HB.
         </span>
       );
     } else {
@@ -12961,7 +12957,15 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
       );
     }
   } else if (application.status === 'pending') {
-    actionEl = statusPill('#fef3c7', '#92400e', <Clock size={14} />, "Pending review");
+    actionEl = (
+      <div style={{ maxWidth: '260px', textAlign: isMobile ? 'left' : 'right' }}>
+        {statusPill('#fef3c7', '#92400e', <Clock size={14} />, "Application received")}
+        <div style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.5, marginTop: '6px' }}>
+          We have your application for this date. We will let you know once it is
+          finalized and approved.
+        </div>
+      </div>
+    );
   } else if (application.status === 'declined') {
     actionEl = statusPill('#fee2e2', '#991b1b', <AlertCircle size={14} />, 'Not approved this time');
   } else if (application.status === 'cancelled') {

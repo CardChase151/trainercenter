@@ -349,10 +349,10 @@ Deno.serve(async (req) => {
       // Same pricing rules as the normal apply flow, so the fast-pass cannot
       // quietly charge a returning vendor the first-timer rate, or bill a DJ
       // for a table they were never going to pay for.
-      const { count: attendedCount } = await supabase
-        .from('vendor_attendance')
-        .select('*', { count: 'exact', head: true })
-        .eq('vendor_id', vendor.id)
+      // Same rule as the apply flow: paying for a table before is what earns
+      // the returning rate, not a door scan. Shared so the two cannot drift.
+      const { data: attendedCount } = await supabase
+        .rpc('vendor_is_returning', { p_vendor_id: vendor.id })
 
       // Same rule as the apply flow: the catch-all role owes a table fee, so
       // it cannot be used as a way around one on a fast-pass link either.
