@@ -46,6 +46,16 @@ Publish `vendor-roster.html` with `roster-data.json` alongside it, to the same
 URL. Then tell him the numbers in a line or two: confirmed, collected, and how
 far off the target.
 
+## Show checklist
+
+`production` in the same json tracks everything that is not a table: characters,
+DJ, face painting, balloon artist, drinks, giveaway product, pack battle product,
+venue. Each is `locked`, `talking` or `open`, with who and a note.
+
+This part is not in the database. It is kept by hand in the json, because most
+of it lives in Chase's DMs rather than in the vendor system. Update it when he
+says something is booked.
+
 ## Next event
 
 Change the header fields and the event id in the query. Nothing in the page is

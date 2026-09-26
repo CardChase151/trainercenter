@@ -107,6 +107,29 @@
   .legend b { color: var(--ink); }
   .empty { color: var(--faint); font-size: 14px; font-style: italic;
     padding: 4px 2px; }
+
+  /* ---------- show checklist: everything that is not a table ---------- */
+  .prod { display: grid; gap: 9px; }
+  .pitem { background: var(--card); border: 1px solid var(--line);
+    border-left: 5px solid var(--line); border-radius: 12px; padding: 13px 15px;
+    box-shadow: var(--shadow); display: flex; gap: 14px;
+    align-items: flex-start; flex-wrap: wrap; }
+  .pitem.locked  { border-left-color: var(--in); }
+  .pitem.talking { border-left-color: var(--gold); }
+  .pitem.open    { border-left-color: var(--stop); }
+  .pitem .main { flex: 1 1 240px; min-width: 0; }
+  .pname { font-weight: 800; font-size: 16px; }
+  .pwho { font-size: 13.5px; color: var(--soft); margin-top: 2px; }
+  .pcontact { font-size: 12.5px; color: var(--faint); margin-top: 3px;
+    word-break: break-word; }
+  .pnote { font-size: 12.5px; color: var(--faint); margin-top: 6px; font-style: italic; }
+  .pill.locked  { background: var(--in-bg);   color: var(--in); }
+  .pill.talking { background: #fdf3dd;        color: var(--gold); }
+  .pill.open    { background: var(--stop-bg); color: var(--stop); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pill.talking { background: #2e2413; }
+  }
+  :root[data-theme="dark"] .pill.talking { background: #2e2413; }
 </style>
 
 <div class="wrap">
@@ -135,6 +158,9 @@
 
   <h2>Needs a card <span class="count" id="h-nocard"></span></h2>
   <div class="rows" id="list-nocard"></div>
+
+  <h2>Show checklist <span class="count" id="h-prod"></span></h2>
+  <div class="prod" id="list-prod"></div>
 
   <p class="legend">
     <b>Two states that matter.</b> A vendor is either in, meaning the card is charged
@@ -182,6 +208,7 @@
     document.getElementById('t-bar').style.width =
       Math.min(100, Math.round(booked / d.target * 100)) + '%';
 
+    renderProduction(d.production || []);
     fill('list-in', ins, 'in', 'Nobody confirmed yet.');
     fill('list-comped', comps, 'comped', 'No comped vendors.');
     fill('list-nocard', nocards, 'nocard', 'Nobody is stuck. Good.');
@@ -191,6 +218,25 @@
   }
 
   const LABEL = { in: 'Paid', comped: 'Comped', nocard: 'No card' };
+  const PLABEL = { locked: 'Locked', talking: 'Talking', open: 'Open' };
+
+  function renderProduction(items) {
+    const host = document.getElementById('list-prod');
+    const open = items.filter(i => i.state !== 'locked').length;
+    document.getElementById('h-prod').textContent =
+      open ? open + ' still open' : 'all locked';
+    if (!items.length) { host.innerHTML = '<p class="empty">Nothing tracked.</p>'; return; }
+    host.innerHTML = items.map(i =>
+      '<div class="pitem ' + i.state + '">' +
+        '<div class="main">' +
+          '<div class="pname">' + esc(i.item) + '</div>' +
+          (i.who ? '<div class="pwho">' + esc(i.who) + '</div>' : '') +
+          (i.contact ? '<div class="pcontact">' + esc(i.contact) + '</div>' : '') +
+          (i.note ? '<div class="pnote">' + esc(i.note) + '</div>' : '') +
+        '</div>' +
+        '<span class="pill ' + i.state + '">' + PLABEL[i.state] + '</span>' +
+      '</div>').join('');
+  }
 
   function fill(id, list, state, emptyMsg) {
     const host = document.getElementById(id);

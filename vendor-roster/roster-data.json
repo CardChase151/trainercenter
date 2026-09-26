@@ -88,5 +88,63 @@
       "table": true
     }
   ],
-  "targetLabel": "card vendor tables"
+  "targetLabel": "card vendor tables",
+  "production": [
+    {
+      "item": "Characters",
+      "state": "talking",
+      "who": "Poke For Rent",
+      "contact": "chuongtravels@gmail.com \u00b7 714 392 6975",
+      "note": "Applied for Oct, comped, not approved yet. Gengar and Dragonite promised in the email."
+    },
+    {
+      "item": "DJ",
+      "state": "talking",
+      "who": "DjYeahBrah!",
+      "contact": "tweekd88@yahoo.com \u00b7 386 847 5187",
+      "note": "In the system as a DJ but has not applied for Oct."
+    },
+    {
+      "item": "Drinks",
+      "state": "talking",
+      "who": "Pearlfect Boba",
+      "contact": "luongseastars@gmail.com \u00b7 909 560 6334",
+      "note": "Applied for Oct, comped, not approved yet. Starter drinks are announced as confirmed."
+    },
+    {
+      "item": "Face painting",
+      "state": "open",
+      "who": "",
+      "contact": "",
+      "note": "Announced to 591 people. Nobody booked."
+    },
+    {
+      "item": "Balloon artist",
+      "state": "open",
+      "who": "",
+      "contact": "",
+      "note": "Announced as Pokemon balloons. Nobody booked."
+    },
+    {
+      "item": "Giveaway product",
+      "state": "open",
+      "who": "",
+      "contact": "",
+      "note": "Announced as giveaways all show. Nothing bought or set aside."
+    },
+    {
+      "item": "Pack battle product",
+      "state": "open",
+      "who": "",
+      "contact": "",
+      "note": "Announced as pack battles all afternoon. Nothing bought or set aside."
+    },
+    {
+      "item": "Venue",
+      "state": "open",
+      "who": "",
+      "contact": "",
+      "note": "Announced as coming soon. Everything else waits on this."
+    }
+  ]
 }
