@@ -92,59 +92,80 @@
   "production": [
     {
       "item": "Characters",
-      "state": "talking",
+      "state": "applied",
       "who": "Poke For Rent",
       "contact": "chuongtravels@gmail.com \u00b7 714 392 6975",
-      "note": "Applied for Oct, comped, not approved yet. Gengar and Dragonite promised in the email."
-    },
-    {
-      "item": "DJ",
-      "state": "talking",
-      "who": "DjYeahBrah!",
-      "contact": "tweekd88@yahoo.com \u00b7 386 847 5187",
-      "note": "In the system as a DJ but has not applied for Oct."
+      "note": "Applied for Oct, comped. Not approved yet. Gengar and Dragonite are promised in the email."
     },
     {
       "item": "Drinks",
-      "state": "talking",
+      "state": "applied",
       "who": "Pearlfect Boba",
       "contact": "luongseastars@gmail.com \u00b7 909 560 6334",
-      "note": "Applied for Oct, comped, not approved yet. Starter drinks are announced as confirmed."
+      "note": "Applied for Oct, comped. Not approved yet. Starter drinks went out as confirmed."
+    },
+    {
+      "item": "DJ",
+      "state": "open",
+      "who": "DjYeahBrah! is the lead",
+      "contact": "tweekd88@yahoo.com \u00b7 386 847 5187",
+      "note": "In the system as a DJ. Has not applied for Oct."
     },
     {
       "item": "Face painting",
       "state": "open",
       "who": "",
       "contact": "",
-      "note": "Announced to 591 people. Nobody booked."
+      "note": "Promised to 591 people. Nobody approached."
     },
     {
       "item": "Balloon artist",
       "state": "open",
       "who": "",
       "contact": "",
-      "note": "Announced as Pokemon balloons. Nobody booked."
+      "note": "Promised as Pokemon balloons. Nobody approached."
+    }
+  ],
+  "ours": [
+    {
+      "item": "Venue",
+      "state": "open",
+      "note": "Announced as coming soon. The two confirms below both wait on it."
+    },
+    {
+      "item": "Confirm 3:00 to 8:30 PM",
+      "state": "open",
+      "note": "Already in the system and already announced. Needs the venue to say yes."
+    },
+    {
+      "item": "Confirm early set up",
+      "state": "open",
+      "note": "We want load in as early as we like, not the 2:00 PM currently on the event."
+    },
+    {
+      "item": "Scavenger hunt",
+      "state": "open",
+      "note": "Ran Friday and worked. Needs items picked, signs reprinted and the date moved."
+    },
+    {
+      "item": "Badges printed",
+      "state": "open",
+      "note": "Vendor badges for the day."
+    },
+    {
+      "item": "Front desk / help desk",
+      "state": "open",
+      "note": "Somebody on the door for check in, questions and the raffle."
     },
     {
       "item": "Giveaway product",
       "state": "open",
-      "who": "",
-      "contact": "",
-      "note": "Announced as giveaways all show. Nothing bought or set aside."
+      "note": "Promised as giveaways all show. Nothing set aside."
     },
     {
       "item": "Pack battle product",
       "state": "open",
-      "who": "",
-      "contact": "",
-      "note": "Announced as pack battles all afternoon. Nothing bought or set aside."
-    },
-    {
-      "item": "Venue",
-      "state": "open",
-      "who": "",
-      "contact": "",
-      "note": "Announced as coming soon. Everything else waits on this."
+      "note": "Promised as pack battles all afternoon. Nothing set aside."
     }
   ]
 }
