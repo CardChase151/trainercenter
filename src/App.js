@@ -20138,9 +20138,9 @@ function StaffVendorsPage({ isMobile, staff }) {
   };
 
   const finalizeDecision = async (appId, status, note) => {
-    // Per-event decision only. Profile approval lives in the All Vendors tab
-    // and is the prerequisite — admin UI prevents approving an event app for
-    // a non-approved vendor.
+    // Approving a date approves the vendor. There is no separate profile step
+    // to clear first: they apply, they save a card, staff approves and collects,
+    // and that is the whole flow.
     const decidedAt = new Date().toISOString();
     const { error } = await supabase
       .from('vendor_applications')
@@ -20149,6 +20149,22 @@ function StaffVendorsPage({ isMobile, staff }) {
     if (error) {
       alert('Error: ' + error.message);
       return;
+    }
+    if (status === 'approved') {
+      // Not conditional on what the local copy thinks the profile status is —
+      // approving a date is the approval, and re-approving an approved vendor
+      // costs nothing.
+      const vendorId = findAppById(appId)?.vendor_id;
+      if (vendorId) {
+        supabase.from('vendors')
+          .update({ status: 'approved', approved_by: staff.id, approved_at: decidedAt })
+          .neq('status', 'suspended')
+          .eq('id', vendorId)
+          .then(() => {
+            setAllVendors(prev => prev.map(v =>
+              v.id === vendorId ? { ...v, status: 'approved' } : v));
+          });
+      }
     }
     sendVendorEmail({ type: 'application_decided', application_id: appId });
     // A declined vendor should not be left with a card sitting on file for a
@@ -20869,10 +20885,10 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, on
               {v.name || '(no name)'}
               {profilePending && (
                 <span style={{
-                  marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#fef2f2', color: '#dc2626',
+                  marginLeft: '8px', fontSize: '0.7rem', backgroundColor: '#eff6ff', color: '#1d4ed8',
                   padding: '3px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px'
                 }}>
-                  Profile pending
+                  New vendor
                 </span>
               )}
             </div>
@@ -20961,16 +20977,6 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, on
         )}
       </div>
 
-      {profilePending && (
-        <div style={{
-          backgroundColor: '#fef2f2', border: '1px solid #fecaca',
-          borderRadius: '8px', padding: '10px 12px', marginBottom: '10px',
-          fontSize: '0.82rem', color: '#991b1b', lineHeight: '1.5'
-        }}>
-          Approve this vendor's profile in the <strong>All vendors</strong> tab first. You can't add a vendor to a Vendor Day until they're a recognized Trainer Center HB vendor.
-        </div>
-      )}
-
       {/* Vendor profile preview (when first-time) */}
       {profilePending && (
         <div style={{
@@ -21012,10 +21018,10 @@ function PendingApplicationCard({ app, onDecide, onOpenNotes, onRatingChange, on
         }}
       />
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        <button onClick={() => handle('approved')} disabled={busy || profilePending} title={profilePending ? "Approve their profile first" : ''} style={{
-          backgroundColor: profilePending ? '#ccc' : '#16a34a', color: '#fff', padding: '8px 16px',
+        <button onClick={() => handle('approved')} disabled={busy} style={{
+          backgroundColor: '#16a34a', color: '#fff', padding: '8px 16px',
           border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem',
-          cursor: profilePending ? 'not-allowed' : (busy ? 'wait' : 'pointer')
+          cursor: busy ? 'wait' : 'pointer'
         }}>
           {(app.fee_cents || 0) > 0 && !['charged', 'waived'].includes(app.payment_status) ? 'Approve & collect' : 'Approve for this date'}
         </button>
