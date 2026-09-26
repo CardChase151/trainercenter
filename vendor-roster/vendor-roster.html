@@ -1,267 +1,295 @@
-<title>Vendor Roster</title>
+<title>Event Control</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;700;800&display=swap">
 <style>
   :root {
     color-scheme: light;
-    --ink: #17161a;
-    --soft: #5d5a63;
-    --faint: #928d99;
-    --ground: #f6f4f1;
+    --ink: #16151a;
+    --soft: #5a5762;
+    --faint: #8f8a99;
+    --ground: #f4f2ef;
     --card: #ffffff;
-    --line: #e4e0db;
-    --in: #15803d;
-    --in-bg: #e9f5ed;
-    --comp: #2a6ebb;
-    --comp-bg: #e8f0fa;
-    --stop: #c8102e;
-    --stop-bg: #fdeaed;
-    --gold: #b8891a;
-    --shadow: 0 1px 2px rgba(23,22,26,.05), 0 8px 24px rgba(23,22,26,.05);
+    --line: #e5e1dc;
+    --line-soft: #f0ece7;
+    --done: #157f3d;
+    --done-bg: #e7f4ec;
+    --part: #b5861a;
+    --part-bg: #fdf4de;
+    --todo: #c0142c;
+    --todo-bg: #fceaec;
+    --shadow: 0 1px 2px rgba(22,21,26,.04), 0 10px 28px rgba(22,21,26,.05);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --ink: #f2f0ed; --soft: #b2adb7; --faint: #7d7885;
-      --ground: #141317; --card: #1f1e23; --line: #322f38;
-      --in: #4ade80; --in-bg: #16301f;
-      --comp: #7ab5f5; --comp-bg: #142438;
-      --stop: #ff5d75; --stop-bg: #331218;
-      --gold: #f0c257;
-      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+      --ink: #f1efec; --soft: #aeaab5; --faint: #79747f;
+      --ground: #121116; --card: #1d1c21; --line: #302d37; --line-soft: #262430;
+      --done: #4ade80; --done-bg: #14301e;
+      --part: #f0c257; --part-bg: #2e2413;
+      --todo: #ff5d75; --todo-bg: #331218;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.34);
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --ink: #f2f0ed; --soft: #b2adb7; --faint: #7d7885;
-    --ground: #141317; --card: #1f1e23; --line: #322f38;
-    --in: #4ade80; --in-bg: #16301f;
-    --comp: #7ab5f5; --comp-bg: #142438;
-    --stop: #ff5d75; --stop-bg: #331218;
-    --gold: #f0c257;
-    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --ink: #f1efec; --soft: #aeaab5; --faint: #79747f;
+    --ground: #121116; --card: #1d1c21; --line: #302d37; --line-soft: #262430;
+    --done: #4ade80; --done-bg: #14301e;
+    --part: #f0c257; --part-bg: #2e2413;
+    --todo: #ff5d75; --todo-bg: #331218;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.34);
   }
 
-  body {
-    background: var(--ground); color: var(--ink);
+  body { background: var(--ground); color: var(--ink);
     font-family: Barlow, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 16px; line-height: 1.5;
-  }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 64px; }
+    font-size: 15px; line-height: 1.45; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 56px; }
 
-  header { padding-block: 28px 8px; }
-  .kicker { font-size: 11px; font-weight: 800; letter-spacing: .2em;
-    text-transform: uppercase; color: var(--stop); }
+  /* ---------- the one line that answers "am I on track" ---------- */
+  .top { display: grid; gap: 14px; grid-template-columns: 1fr auto;
+    align-items: center; padding-block: 24px 6px; }
+  .eyebrow { font-size: 10.5px; font-weight: 800; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--todo); }
   h1 { font-family: Anton, Impact, sans-serif; font-weight: 400;
-    font-size: clamp(30px, 8vw, 46px); line-height: 1; text-transform: uppercase;
-    letter-spacing: .01em; margin: 8px 0 0; text-wrap: balance; }
-  .when { color: var(--soft); margin: 10px 0 0; font-size: 15.5px; }
-  .when b { color: var(--ink); }
-  .stamp { font-size: 12.5px; color: var(--faint); margin: 6px 0 0; }
+    font-size: clamp(26px, 6vw, 38px); line-height: 1; text-transform: uppercase;
+    letter-spacing: .01em; margin: 7px 0 0; }
+  .sub { color: var(--soft); font-size: 14px; margin: 7px 0 0; }
+  .sub b { color: var(--ink); }
 
-  .tiles { display: grid; gap: 12px; margin: 22px 0 8px;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .tile { background: var(--card); border: 1px solid var(--line);
-    border-radius: 13px; padding: 15px 16px; box-shadow: var(--shadow); }
-  .tile .n { font-family: Anton, Impact, sans-serif; font-size: 34px; line-height: 1;
+  .ring { display: flex; align-items: center; gap: 13px; }
+  .ring svg { display: block; flex: none; }
+  .ring .pc { font-family: Anton, Impact, sans-serif; font-size: 27px;
+    line-height: 1; font-variant-numeric: tabular-nums; }
+  .ring .lb { font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-top: 4px; }
+  .days { text-align: right; }
+  .days .n { font-family: Anton, Impact, sans-serif; font-size: 34px; line-height: 1; }
+  .days .l { font-size: 10.5px; font-weight: 800; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--faint); margin-top: 3px; }
+
+  /* ---------- blockers ---------- */
+  .blocker { display: flex; gap: 11px; align-items: flex-start;
+    background: var(--todo-bg); border: 1px solid transparent; border-radius: 12px;
+    padding: 13px 15px; margin-top: 16px; font-size: 14px; line-height: 1.55; }
+  .blocker .dot { width: 9px; height: 9px; border-radius: 50%;
+    background: var(--todo); margin-top: 6px; flex: none; }
+  .blocker b { color: var(--ink); }
+
+  /* ---------- the board ---------- */
+  .board { display: grid; gap: 14px; margin-top: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); align-items: start; }
+  .panel { background: var(--card); border: 1px solid var(--line);
+    border-radius: 15px; box-shadow: var(--shadow); overflow: hidden; }
+  .phead { padding: 15px 17px 13px; border-bottom: 1px solid var(--line-soft); }
+  .ptitle { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .ptitle h2 { font-size: 12px; font-weight: 800; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--faint); margin: 0; }
+  .score { font-family: Anton, Impact, sans-serif; font-size: 17px;
     font-variant-numeric: tabular-nums; }
-  .tile .l { font-size: 11.5px; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--faint); margin-top: 7px; }
-  .tile.money .n { color: var(--in); }
-  .tile.goal .n { color: var(--gold); }
+  .track { height: 6px; border-radius: 99px; background: var(--line);
+    overflow: hidden; margin-top: 10px; }
+  .track i { display: block; height: 100%; border-radius: 99px;
+    background: var(--done); transition: width .4s ease; }
+  .track.warm i { background: var(--part); }
+  .phint { font-size: 12px; color: var(--faint); margin: 9px 0 0; }
 
-  .bar { height: 9px; border-radius: 99px; background: var(--line);
-    overflow: hidden; margin: 6px 0 0; }
-  .bar i { display: block; height: 100%; background: var(--gold); border-radius: 99px; }
+  ul.rows { list-style: none; margin: 0; padding: 4px 0; }
+  ul.rows li { display: flex; gap: 11px; align-items: flex-start;
+    padding: 9px 17px; border-bottom: 1px solid var(--line-soft); }
+  ul.rows li:last-child { border-bottom: 0; }
+  .mark { width: 19px; height: 19px; border-radius: 6px; flex: none; margin-top: 1px;
+    display: grid; place-items: center; font-size: 12px; font-weight: 800;
+    border: 1.5px solid var(--line); color: transparent; }
+  .mark.done { background: var(--done); border-color: var(--done); color: #fff; }
+  .mark.part { background: var(--part-bg); border-color: var(--part); color: var(--part); }
+  .body { flex: 1; min-width: 0; }
+  .label { font-weight: 700; font-size: 14.5px; line-height: 1.35; }
+  li.is-done .label { color: var(--faint); text-decoration: line-through; }
+  .meta { font-size: 12.5px; color: var(--soft); margin-top: 2px; }
+  .why { font-size: 12px; color: var(--faint); margin-top: 3px; line-height: 1.45; }
+  .tag { font-size: 9.5px; font-weight: 800; letter-spacing: .09em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 99px;
+    white-space: nowrap; flex: none; margin-top: 1px; }
+  .tag.done { background: var(--done-bg); color: var(--done); }
+  .tag.part { background: var(--part-bg); color: var(--part); }
+  .tag.todo { background: var(--todo-bg); color: var(--todo); }
 
-  h2 { font-size: 12px; font-weight: 800; letter-spacing: .16em;
-    text-transform: uppercase; color: var(--faint);
-    margin: 32px 0 12px; display: flex; align-items: center; gap: 9px; }
-  h2 .count { color: var(--ink); }
-
-  .rows { display: grid; gap: 10px; }
-  .row { background: var(--card); border: 1px solid var(--line); border-radius: 13px;
-    padding: 14px 16px; box-shadow: var(--shadow);
-    display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-  .row .main { flex: 1 1 220px; min-width: 0; }
-  .nm { font-weight: 800; font-size: 16.5px; line-height: 1.25; }
-  .ig { color: var(--soft); font-size: 13.5px; margin-top: 1px; }
-  .contact { font-size: 13px; color: var(--faint); margin-top: 5px;
-    word-break: break-word; }
-  .note { font-size: 12.5px; color: var(--faint); margin-top: 6px; font-style: italic; }
-  .right { display: flex; flex-direction: column; align-items: flex-end;
-    gap: 6px; flex: 0 0 auto; }
-  .pill { font-size: 10.5px; font-weight: 800; letter-spacing: .08em;
-    text-transform: uppercase; padding: 4px 10px; border-radius: 99px; white-space: nowrap; }
-  .pill.in { background: var(--in-bg); color: var(--in); }
-  .pill.comped { background: var(--comp-bg); color: var(--comp); }
-  .pill.nocard { background: var(--stop-bg); color: var(--stop); }
-  .amt { font-family: Anton, Impact, sans-serif; font-size: 22px;
+  /* ---------- tables panel ---------- */
+  .big { display: flex; align-items: baseline; gap: 9px; padding: 3px 17px 0; }
+  .big .n { font-family: Anton, Impact, sans-serif; font-size: 44px; line-height: 1;
     font-variant-numeric: tabular-nums; }
-  .kind { font-size: 11.5px; color: var(--faint); }
+  .big .of { font-size: 14px; color: var(--faint); font-weight: 600; }
+  .money { padding: 2px 17px 12px; font-size: 13px; color: var(--soft); }
+  .money b { color: var(--done); font-size: 15px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 17px 15px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 99px;
+    background: var(--done-bg); color: var(--done); }
+  .chip.grey { background: var(--line-soft); color: var(--soft); }
+  .chip.warn { background: var(--todo-bg); color: var(--todo); }
 
-  .legend { margin-top: 30px; padding: 16px 18px; background: var(--card);
-    border: 1px solid var(--line); border-radius: 12px;
-    font-size: 14px; color: var(--soft); line-height: 1.65; }
-  .legend b { color: var(--ink); }
-  .empty { color: var(--faint); font-size: 14px; font-style: italic;
-    padding: 4px 2px; }
-
-  /* ---------- show checklist: everything that is not a table ---------- */
-  .prod { display: grid; gap: 9px; }
-  .pitem { background: var(--card); border: 1px solid var(--line);
-    border-left: 5px solid var(--line); border-radius: 12px; padding: 13px 15px;
-    box-shadow: var(--shadow); display: flex; gap: 14px;
-    align-items: flex-start; flex-wrap: wrap; }
-  .pitem.confirmed { border-left-color: var(--in); }
-  .pitem.applied   { border-left-color: var(--gold); }
-  .pitem.open      { border-left-color: var(--stop); }
-  .pitem .main { flex: 1 1 240px; min-width: 0; }
-  .pname { font-weight: 800; font-size: 16px; }
-  .pwho { font-size: 13.5px; color: var(--soft); margin-top: 2px; }
-  .pcontact { font-size: 12.5px; color: var(--faint); margin-top: 3px;
-    word-break: break-word; }
-  .pnote { font-size: 12.5px; color: var(--faint); margin-top: 6px; font-style: italic; }
-  .pill.confirmed { background: var(--in-bg);   color: var(--in); }
-  .pill.applied   { background: #fdf3dd;        color: var(--gold); }
-  .pill.open      { background: var(--stop-bg); color: var(--stop); }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .pill.applied { background: #2e2413; }
-  }
-  :root[data-theme="dark"] .pill.applied { background: #2e2413; }
+  .foot { margin-top: 20px; font-size: 12.5px; color: var(--faint); text-align: center; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
 <div class="wrap">
-  <header>
-    <div class="kicker" id="kicker">Trainer Center HB</div>
-    <h1 id="title">Vendor Roster</h1>
-    <p class="when" id="when"></p>
-    <p class="stamp" id="stamp"></p>
-  </header>
-
-  <div class="tiles">
-    <div class="tile"><div class="n" id="t-in">0</div><div class="l">Confirmed</div></div>
-    <div class="tile money"><div class="n" id="t-money">$0</div><div class="l">Collected</div></div>
-    <div class="tile"><div class="n" id="t-comp">0</div><div class="l">Comped</div></div>
-    <div class="tile goal">
-      <div class="n" id="t-goal">0</div><div class="l" id="t-goal-l">Of 30 tables</div>
-      <div class="bar"><i id="t-bar" style="width:0%"></i></div>
+  <div class="top">
+    <div>
+      <div class="eyebrow" id="eyebrow">Trainer Center HB</div>
+      <h1 id="title">Event Control</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="ring">
+      <svg width="74" height="74" viewBox="0 0 74 74" aria-hidden="true">
+        <circle cx="37" cy="37" r="31" fill="none" stroke="var(--line)" stroke-width="8"/>
+        <circle id="arc" cx="37" cy="37" r="31" fill="none" stroke="var(--part)"
+                stroke-width="8" stroke-linecap="round"
+                stroke-dasharray="195" stroke-dashoffset="195"
+                transform="rotate(-90 37 37)"/>
+      </svg>
+      <div>
+        <div class="pc" id="pc">0%</div>
+        <div class="lb">Ready</div>
+        <div class="days" style="text-align:left;margin-top:9px">
+          <div class="n" id="days">—</div>
+          <div class="l">Days out</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <h2>In and paid <span class="count" id="h-in"></span></h2>
-  <div class="rows" id="list-in"></div>
+  <div id="blockers"></div>
 
-  <h2>Comped, no fee <span class="count" id="h-comp"></span></h2>
-  <div class="rows" id="list-comped"></div>
+  <div class="board">
+    <section class="panel">
+      <div class="phead">
+        <div class="ptitle"><h2>Vendor tables</h2><span class="score" id="tb-score"></span></div>
+        <div class="track warm"><i id="tb-bar" style="width:0%"></i></div>
+        <p class="phint" id="tb-hint"></p>
+      </div>
+      <div class="big"><span class="n" id="tb-n">0</span><span class="of" id="tb-of"></span></div>
+      <div class="money" id="tb-money"></div>
+      <div class="chips" id="tb-chips"></div>
+    </section>
 
-  <h2>Needs a card <span class="count" id="h-nocard"></span></h2>
-  <div class="rows" id="list-nocard"></div>
+    <section class="panel">
+      <div class="phead">
+        <div class="ptitle"><h2>People to book</h2><span class="score" id="pb-score"></span></div>
+        <div class="track"><i id="pb-bar" style="width:0%"></i></div>
+      </div>
+      <ul class="rows" id="pb-rows"></ul>
+    </section>
 
-  <h2>People to book <span class="count" id="h-prod"></span></h2>
-  <div class="prod" id="list-prod"></div>
+    <section class="panel">
+      <div class="phead">
+        <div class="ptitle"><h2>Ours to sort out</h2><span class="score" id="ou-score"></span></div>
+        <div class="track"><i id="ou-bar" style="width:0%"></i></div>
+      </div>
+      <ul class="rows" id="ou-rows"></ul>
+    </section>
+  </div>
 
-  <h2>Ours to sort out <span class="count" id="h-ours"></span></h2>
-  <div class="prod" id="list-ours"></div>
-
-  <p class="legend">
-    <b>Two states that matter.</b> A vendor is either in, meaning the card is charged
-    and the table is confirmed, or they are not. Comped roles owe nothing and just need
-    a yes. Anyone under <b>needs a card</b> applied before a card was required and cannot
-    be approved until one is on file.
-  </p>
+  <p class="foot" id="foot"></p>
 </div>
 
 <script>
-  fetch('roster-data.json')
-    .then(r => r.json())
-    .then(render)
-    .catch(() => {
-      document.getElementById('stamp').textContent = 'Could not load the roster data.';
-    });
+  fetch('roster-data.json').then(r => r.json()).then(render)
+    .catch(() => { document.getElementById('sub').textContent = 'Could not load the data.'; });
 
-  function esc(s) {
-    return String(s || '').replace(/[&<>"]/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  }
+  const esc = s => String(s || '').replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // applied and confirmed on the talent side map onto the same three marks the
+  // to-do side uses, so one glance reads the whole board the same way.
+  const RANK = { confirmed: 2, applied: 1, open: 0, done: 2, part: 1 };
+  const TAG = { 2: ['done', 'Confirmed'], 1: ['part', 'Applied'], 0: ['todo', 'Open'] };
 
   function render(d) {
-    document.getElementById('kicker').textContent =
-      'Trainer Center HB · ' + d.tagline;
+    document.getElementById('eyebrow').textContent =
+      'Trainer Center HB \u00b7 ' + d.tagline;
     document.getElementById('title').textContent = d.event;
-    document.getElementById('when').innerHTML =
-      '<b>' + esc(d.date) + '</b> · ' + esc(d.hours) +
-      ' · vendors load in ' + esc(d.loadIn) + '<br>' + esc(d.venue) +
-      ' · tables $' + d.fee + ', or $' + d.feeReturning + ' returning';
-    document.getElementById('stamp').textContent = 'Pulled ' + d.pulled;
+    document.getElementById('sub').innerHTML =
+      '<b>' + esc(d.date) + '</b> \u00b7 ' + esc(d.hours) + ' \u00b7 ' + esc(d.venue);
 
-    const by = k => d.vendors.filter(v => v.state === k);
-    const ins = by('in'), comps = by('comped'), nocards = by('nocard');
-    const money = ins.reduce((n, v) => n + (v.paid || 0), 0);
-    // The target counts card vendor tables only. A character act or a drinks
-    // stand is on the floor but is not one of the thirty.
-    const booked = ins.filter(v => v.table).length;
-
-    document.getElementById('t-in').textContent = ins.length;
-    document.getElementById('t-money').textContent = '$' + money.toLocaleString();
-    document.getElementById('t-comp').textContent = comps.length;
-    document.getElementById('t-goal').textContent = booked;
-    document.getElementById('t-goal-l').textContent = 'Of ' + d.target + ' ' + (d.targetLabel || 'tables');
-    document.getElementById('t-bar').style.width =
-      Math.min(100, Math.round(booked / d.target * 100)) + '%';
-
-    renderProduction('list-prod', 'h-prod', d.production || []);
-    renderProduction('list-ours', 'h-ours', d.ours || []);
-    fill('list-in', ins, 'in', 'Nobody confirmed yet.');
-    fill('list-comped', comps, 'comped', 'No comped vendors.');
-    fill('list-nocard', nocards, 'nocard', 'Nobody is stuck. Good.');
-    document.getElementById('h-in').textContent = ins.length;
-    document.getElementById('h-comp').textContent = comps.length;
-    document.getElementById('h-nocard').textContent = nocards.length;
-  }
-
-  const LABEL = { in: 'Paid', comped: 'Comped', nocard: 'No card' };
-  const PLABEL = { confirmed: 'Confirmed', applied: 'Applied', open: 'Open' };
-
-  function renderProduction(listId, countId, items) {
-    const host = document.getElementById(listId);
-    const done = items.filter(i => i.state === 'confirmed').length;
-    document.getElementById(countId).textContent =
-      done + ' of ' + items.length + ' confirmed';
-    if (!items.length) { host.innerHTML = '<p class="empty">Nothing tracked.</p>'; return; }
-    host.innerHTML = items.map(i =>
-      '<div class="pitem ' + i.state + '">' +
-        '<div class="main">' +
-          '<div class="pname">' + esc(i.item) + '</div>' +
-          (i.who ? '<div class="pwho">' + esc(i.who) + '</div>' : '') +
-          (i.contact ? '<div class="pcontact">' + esc(i.contact) + '</div>' : '') +
-          (i.note ? '<div class="pnote">' + esc(i.note) + '</div>' : '') +
-        '</div>' +
-        '<span class="pill ' + i.state + '">' + PLABEL[i.state] + '</span>' +
-      '</div>').join('');
-  }
-
-  function fill(id, list, state, emptyMsg) {
-    const host = document.getElementById(id);
-    if (!list.length) {
-      host.innerHTML = '<p class="empty">' + emptyMsg + '</p>';
-      return;
+    const ev = new Date(d.date);
+    if (!isNaN(ev)) {
+      const days = Math.ceil((ev - new Date()) / 86400000);
+      document.getElementById('days').textContent = days >= 0 ? days : '—';
     }
-    host.innerHTML = list.map(v =>
-      '<div class="row">' +
-        '<div class="main">' +
-          '<div class="nm">' + esc(v.name) + '</div>' +
-          (v.ig ? '<div class="ig">@' + esc(v.ig) + '</div>' : '') +
-          '<div class="contact">' + esc(v.email) +
-            (v.phone ? ' · ' + esc(v.phone) : '') + '</div>' +
-          (v.note ? '<div class="note">' + esc(v.note) + '</div>' : '') +
-        '</div>' +
-        '<div class="right">' +
-          '<span class="pill ' + state + '">' + LABEL[state] + '</span>' +
-          (v.paid ? '<span class="amt">$' + v.paid + '</span>' : '') +
-          '<span class="kind">' + esc(v.kind) + '</span>' +
-        '</div>' +
-      '</div>').join('');
+
+    // ---- tables ----
+    const ins = d.vendors.filter(v => v.state === 'in');
+    const booked = ins.filter(v => v.table).length;
+    const money = ins.reduce((n, v) => n + (v.paid || 0), 0);
+    const pctTables = Math.min(100, Math.round(booked / d.target * 100));
+    document.getElementById('tb-n').textContent = booked;
+    document.getElementById('tb-of').textContent = 'of ' + d.target + ' ' + (d.targetLabel || 'tables');
+    document.getElementById('tb-score').textContent = pctTables + '%';
+    document.getElementById('tb-bar').style.width = pctTables + '%';
+    document.getElementById('tb-money').innerHTML = '<b>$' + money.toLocaleString() + '</b> collected';
+    document.getElementById('tb-hint').textContent =
+      (d.target - booked) + ' more tables to fill';
+
+    const chips = [];
+    ins.forEach(v => chips.push('<span class="chip">' + esc(v.name) + '</span>'));
+    d.vendors.filter(v => v.state === 'comped').forEach(v =>
+      chips.push('<span class="chip grey">' + esc(v.name) + ' \u00b7 comped</span>'));
+    d.vendors.filter(v => v.state === 'nocard').forEach(v =>
+      chips.push('<span class="chip warn">' + esc(v.name) + ' \u00b7 no card</span>'));
+    document.getElementById('tb-chips').innerHTML = chips.join('');
+
+    // ---- the two checklists ----
+    const pb = panel('pb', d.production || []);
+    const ou = panel('ou', d.ours || []);
+
+    // ---- one readiness number across everything ----
+    const all = [].concat(d.production || [], d.ours || []);
+    const scored = all.reduce((n, i) => n + RANK[i.state], 0) + (pctTables / 100) * 2;
+    const total = all.length * 2 + 2;
+    const pct = Math.round(scored / total * 100);
+    document.getElementById('pc').textContent = pct + '%';
+    const arc = document.getElementById('arc');
+    arc.style.strokeDashoffset = String(195 - 195 * pct / 100);
+    arc.setAttribute('stroke', pct >= 80 ? 'var(--done)' : pct >= 40 ? 'var(--part)' : 'var(--todo)');
+
+    // ---- what is actually blocking ----
+    const blocked = all.filter(i => i.state === 'open' && /venue/i.test(i.note || ''));
+    const venueOpen = (d.ours || []).some(i => /venue/i.test(i.item) && i.state === 'open');
+    if (venueOpen) {
+      document.getElementById('blockers').innerHTML =
+        '<div class="blocker"><span class="dot"></span><div>' +
+        '<b>The venue is the blocker.</b> It is announced as coming soon, ' +
+        (blocked.length ? blocked.length + ' other items wait on it, and ' : '') +
+        'vendors are unlikely to apply in volume until it is named.' +
+        '</div></div>';
+    }
+
+    document.getElementById('foot').textContent =
+      'Pulled ' + d.pulled + ' \u00b7 ' + (pb + ou) + ' of ' + all.length + ' checklist items confirmed';
+  }
+
+  function panel(id, items) {
+    const done = items.filter(i => RANK[i.state] === 2).length;
+    const score = items.reduce((n, i) => n + RANK[i.state], 0);
+    const pct = items.length ? Math.round(score / (items.length * 2) * 100) : 0;
+    document.getElementById(id + '-score').textContent = done + '/' + items.length;
+    const bar = document.getElementById(id + '-bar');
+    bar.style.width = pct + '%';
+    bar.parentElement.classList.toggle('warm', done < items.length);
+    document.getElementById(id + '-rows').innerHTML = items.map(i => {
+      const r = RANK[i.state];
+      const [cls, label] = TAG[r];
+      const mark = r === 2 ? 'done' : r === 1 ? 'part' : '';
+      return '<li class="' + (r === 2 ? 'is-done' : '') + '">' +
+        '<span class="mark ' + mark + '">' + (r === 2 ? '✓' : r === 1 ? '·' : '') + '</span>' +
+        '<span class="body">' +
+          '<span class="label">' + esc(i.item) + '</span>' +
+          (i.who ? '<div class="meta">' + esc(i.who) + '</div>' : '') +
+          (i.note ? '<div class="why">' + esc(i.note) + '</div>' : '') +
+        '</span>' +
+        '<span class="tag ' + cls + '">' + label + '</span>' +
+      '</li>';
+    }).join('');
+    return done;
   }
 </script>
