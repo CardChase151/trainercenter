@@ -11557,7 +11557,7 @@ function VendorFinishPage({ isMobile }) {
           .insert({
             vendor_id: savedVendor.id,
             event_id: ev.id,
-            status: 'pending',
+            status: fee === 0 ? 'pending' : 'incomplete',
             // NOT NULL on this table. Default to the event's own vendor window.
             requested_start_time: ev.vendor_start_time || ev.start_time || '12:00',
             requested_end_time: ev.vendor_end_time || ev.end_time || '22:00',
@@ -12956,6 +12956,15 @@ function VendorEventCard({ event, application, attendance, vendorId, vendorStatu
         </div>
       );
     }
+  } else if (application.status === 'incomplete') {
+    actionEl = (
+      <div style={{ maxWidth: '260px', textAlign: isMobile ? 'left' : 'right' }}>
+        {statusPill('#fef2f2', '#b91c1c', <AlertCircle size={14} />, 'Card needed')}
+        <div style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.5, marginTop: '6px' }}>
+          Your application is not in yet. Save a card to finish it.
+        </div>
+      </div>
+    );
   } else if (application.status === 'pending') {
     actionEl = (
       <div style={{ maxWidth: '260px', textAlign: isMobile ? 'left' : 'right' }}>
@@ -20031,7 +20040,7 @@ function StaffVendorsPage({ isMobile, staff }) {
       // Pending applications joined with vendor + event
       supabase.from('vendor_applications')
         .select('*, vendor:vendors(*), event:events(*)')
-        .eq('status', 'pending')
+        .eq('status', 'pending')   // 'incomplete' = applied but never saved a card
         .order('applied_at', { ascending: true }),
       // All vendors for the vendor list tab
       supabase.from('vendors').select('*').order('created_at', { ascending: false }),
