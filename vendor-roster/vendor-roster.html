@@ -1,0 +1,217 @@
+<title>Vendor Roster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600;800&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #17161a;
+    --soft: #5d5a63;
+    --faint: #928d99;
+    --ground: #f6f4f1;
+    --card: #ffffff;
+    --line: #e4e0db;
+    --in: #15803d;
+    --in-bg: #e9f5ed;
+    --comp: #2a6ebb;
+    --comp-bg: #e8f0fa;
+    --stop: #c8102e;
+    --stop-bg: #fdeaed;
+    --gold: #b8891a;
+    --shadow: 0 1px 2px rgba(23,22,26,.05), 0 8px 24px rgba(23,22,26,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ink: #f2f0ed; --soft: #b2adb7; --faint: #7d7885;
+      --ground: #141317; --card: #1f1e23; --line: #322f38;
+      --in: #4ade80; --in-bg: #16301f;
+      --comp: #7ab5f5; --comp-bg: #142438;
+      --stop: #ff5d75; --stop-bg: #331218;
+      --gold: #f0c257;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ink: #f2f0ed; --soft: #b2adb7; --faint: #7d7885;
+    --ground: #141317; --card: #1f1e23; --line: #322f38;
+    --in: #4ade80; --in-bg: #16301f;
+    --comp: #7ab5f5; --comp-bg: #142438;
+    --stop: #ff5d75; --stop-bg: #331218;
+    --gold: #f0c257;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  body {
+    background: var(--ground); color: var(--ink);
+    font-family: Barlow, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.5;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 64px; }
+
+  header { padding-block: 28px 8px; }
+  .kicker { font-size: 11px; font-weight: 800; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--stop); }
+  h1 { font-family: Anton, Impact, sans-serif; font-weight: 400;
+    font-size: clamp(30px, 8vw, 46px); line-height: 1; text-transform: uppercase;
+    letter-spacing: .01em; margin: 8px 0 0; text-wrap: balance; }
+  .when { color: var(--soft); margin: 10px 0 0; font-size: 15.5px; }
+  .when b { color: var(--ink); }
+  .stamp { font-size: 12.5px; color: var(--faint); margin: 6px 0 0; }
+
+  .tiles { display: grid; gap: 12px; margin: 22px 0 8px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .tile { background: var(--card); border: 1px solid var(--line);
+    border-radius: 13px; padding: 15px 16px; box-shadow: var(--shadow); }
+  .tile .n { font-family: Anton, Impact, sans-serif; font-size: 34px; line-height: 1;
+    font-variant-numeric: tabular-nums; }
+  .tile .l { font-size: 11.5px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint); margin-top: 7px; }
+  .tile.money .n { color: var(--in); }
+  .tile.goal .n { color: var(--gold); }
+
+  .bar { height: 9px; border-radius: 99px; background: var(--line);
+    overflow: hidden; margin: 6px 0 0; }
+  .bar i { display: block; height: 100%; background: var(--gold); border-radius: 99px; }
+
+  h2 { font-size: 12px; font-weight: 800; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--faint);
+    margin: 32px 0 12px; display: flex; align-items: center; gap: 9px; }
+  h2 .count { color: var(--ink); }
+
+  .rows { display: grid; gap: 10px; }
+  .row { background: var(--card); border: 1px solid var(--line); border-radius: 13px;
+    padding: 14px 16px; box-shadow: var(--shadow);
+    display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+  .row .main { flex: 1 1 220px; min-width: 0; }
+  .nm { font-weight: 800; font-size: 16.5px; line-height: 1.25; }
+  .ig { color: var(--soft); font-size: 13.5px; margin-top: 1px; }
+  .contact { font-size: 13px; color: var(--faint); margin-top: 5px;
+    word-break: break-word; }
+  .note { font-size: 12.5px; color: var(--faint); margin-top: 6px; font-style: italic; }
+  .right { display: flex; flex-direction: column; align-items: flex-end;
+    gap: 6px; flex: 0 0 auto; }
+  .pill { font-size: 10.5px; font-weight: 800; letter-spacing: .08em;
+    text-transform: uppercase; padding: 4px 10px; border-radius: 99px; white-space: nowrap; }
+  .pill.in { background: var(--in-bg); color: var(--in); }
+  .pill.comped { background: var(--comp-bg); color: var(--comp); }
+  .pill.nocard { background: var(--stop-bg); color: var(--stop); }
+  .amt { font-family: Anton, Impact, sans-serif; font-size: 22px;
+    font-variant-numeric: tabular-nums; }
+  .kind { font-size: 11.5px; color: var(--faint); }
+
+  .legend { margin-top: 30px; padding: 16px 18px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px;
+    font-size: 14px; color: var(--soft); line-height: 1.65; }
+  .legend b { color: var(--ink); }
+  .empty { color: var(--faint); font-size: 14px; font-style: italic;
+    padding: 4px 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker" id="kicker">Trainer Center HB</div>
+    <h1 id="title">Vendor Roster</h1>
+    <p class="when" id="when"></p>
+    <p class="stamp" id="stamp"></p>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><div class="n" id="t-in">0</div><div class="l">Confirmed</div></div>
+    <div class="tile money"><div class="n" id="t-money">$0</div><div class="l">Collected</div></div>
+    <div class="tile"><div class="n" id="t-comp">0</div><div class="l">Comped</div></div>
+    <div class="tile goal">
+      <div class="n" id="t-goal">0</div><div class="l" id="t-goal-l">Of 30 tables</div>
+      <div class="bar"><i id="t-bar" style="width:0%"></i></div>
+    </div>
+  </div>
+
+  <h2>In and paid <span class="count" id="h-in"></span></h2>
+  <div class="rows" id="list-in"></div>
+
+  <h2>Comped, no fee <span class="count" id="h-comp"></span></h2>
+  <div class="rows" id="list-comped"></div>
+
+  <h2>Needs a card <span class="count" id="h-nocard"></span></h2>
+  <div class="rows" id="list-nocard"></div>
+
+  <p class="legend">
+    <b>Two states that matter.</b> A vendor is either in, meaning the card is charged
+    and the table is confirmed, or they are not. Comped roles owe nothing and just need
+    a yes. Anyone under <b>needs a card</b> applied before a card was required and cannot
+    be approved until one is on file.
+  </p>
+</div>
+
+<script>
+  fetch('roster-data.json')
+    .then(r => r.json())
+    .then(render)
+    .catch(() => {
+      document.getElementById('stamp').textContent = 'Could not load the roster data.';
+    });
+
+  function esc(s) {
+    return String(s || '').replace(/[&<>"]/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  function render(d) {
+    document.getElementById('kicker').textContent =
+      'Trainer Center HB · ' + d.tagline;
+    document.getElementById('title').textContent = d.event;
+    document.getElementById('when').innerHTML =
+      '<b>' + esc(d.date) + '</b> · ' + esc(d.hours) +
+      ' · vendors load in ' + esc(d.loadIn) + '<br>' + esc(d.venue) +
+      ' · tables $' + d.fee + ', or $' + d.feeReturning + ' returning';
+    document.getElementById('stamp').textContent = 'Pulled ' + d.pulled;
+
+    const by = k => d.vendors.filter(v => v.state === k);
+    const ins = by('in'), comps = by('comped'), nocards = by('nocard');
+    const money = ins.reduce((n, v) => n + (v.paid || 0), 0);
+    // The target counts card vendor tables only. A character act or a drinks
+    // stand is on the floor but is not one of the thirty.
+    const booked = ins.filter(v => v.table).length;
+
+    document.getElementById('t-in').textContent = ins.length;
+    document.getElementById('t-money').textContent = '$' + money.toLocaleString();
+    document.getElementById('t-comp').textContent = comps.length;
+    document.getElementById('t-goal').textContent = booked;
+    document.getElementById('t-goal-l').textContent = 'Of ' + d.target + ' ' + (d.targetLabel || 'tables');
+    document.getElementById('t-bar').style.width =
+      Math.min(100, Math.round(booked / d.target * 100)) + '%';
+
+    fill('list-in', ins, 'in', 'Nobody confirmed yet.');
+    fill('list-comped', comps, 'comped', 'No comped vendors.');
+    fill('list-nocard', nocards, 'nocard', 'Nobody is stuck. Good.');
+    document.getElementById('h-in').textContent = ins.length;
+    document.getElementById('h-comp').textContent = comps.length;
+    document.getElementById('h-nocard').textContent = nocards.length;
+  }
+
+  const LABEL = { in: 'Paid', comped: 'Comped', nocard: 'No card' };
+
+  function fill(id, list, state, emptyMsg) {
+    const host = document.getElementById(id);
+    if (!list.length) {
+      host.innerHTML = '<p class="empty">' + emptyMsg + '</p>';
+      return;
+    }
+    host.innerHTML = list.map(v =>
+      '<div class="row">' +
+        '<div class="main">' +
+          '<div class="nm">' + esc(v.name) + '</div>' +
+          (v.ig ? '<div class="ig">@' + esc(v.ig) + '</div>' : '') +
+          '<div class="contact">' + esc(v.email) +
+            (v.phone ? ' · ' + esc(v.phone) : '') + '</div>' +
+          (v.note ? '<div class="note">' + esc(v.note) + '</div>' : '') +
+        '</div>' +
+        '<div class="right">' +
+          '<span class="pill ' + state + '">' + LABEL[state] + '</span>' +
+          (v.paid ? '<span class="amt">$' + v.paid + '</span>' : '') +
+          '<span class="kind">' + esc(v.kind) + '</span>' +
+        '</div>' +
+      '</div>').join('');
+  }
+</script>

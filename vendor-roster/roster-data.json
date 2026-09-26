@@ -1,0 +1,92 @@
+{
+  "event": "Pokemon Event",
+  "tagline": "Halloween",
+  "date": "Sunday, October 25, 2026",
+  "hours": "3:00 to 8:30 PM",
+  "loadIn": "2:00 PM",
+  "venue": "Venue to be announced",
+  "fee": 100,
+  "feeReturning": 75,
+  "target": 30,
+  "pulled": "09.26.2026",
+  "vendors": [
+    {
+      "name": "Jeffrey Tran",
+      "ig": "seasidecollects",
+      "email": "seasideripz@gmail.com",
+      "phone": "714 623 6149",
+      "kind": "Mixed",
+      "state": "in",
+      "paid": 75,
+      "note": "",
+      "table": true
+    },
+    {
+      "name": "MoosePulls",
+      "ig": "MoosePulls",
+      "email": "bryan_fiske71@yahoo.com",
+      "phone": "949 698 3302",
+      "kind": "Mixed",
+      "state": "in",
+      "paid": 75,
+      "note": "Moved off September, payment carried across",
+      "table": true
+    },
+    {
+      "name": "Quagtirecollects",
+      "ig": "quagtire_collects",
+      "email": "quagtirecollects@gmail.com",
+      "phone": "714 916 3801",
+      "kind": "Mixed",
+      "state": "in",
+      "paid": 75,
+      "note": "Moved off September, payment carried across",
+      "table": true
+    },
+    {
+      "name": "VNRTCG",
+      "ig": "vnrtcg",
+      "email": "email4niko@gmail.com",
+      "phone": "714 263 6968",
+      "kind": "Mixed",
+      "state": "in",
+      "paid": 75,
+      "note": "",
+      "table": true
+    },
+    {
+      "name": "Poke For Rent",
+      "ig": "pokeforrent",
+      "email": "chuongtravels@gmail.com",
+      "phone": "714 392 6975",
+      "kind": "Character",
+      "state": "comped",
+      "paid": 0,
+      "note": "Dragonite and friends",
+      "table": false
+    },
+    {
+      "name": "Pearlfect Boba",
+      "ig": "pearlfectboba",
+      "email": "luongseastars@gmail.com",
+      "phone": "909 560 6334",
+      "kind": "Other",
+      "state": "comped",
+      "paid": 0,
+      "note": "Comp code TC2026",
+      "table": false
+    },
+    {
+      "name": "TogotoTCG",
+      "ig": "TogotoTCG",
+      "email": "matttogoto@gmail.com",
+      "phone": "714 371 3672",
+      "kind": "Singles",
+      "state": "nocard",
+      "paid": 0,
+      "note": "Applied 09.21, never saved a card",
+      "table": true
+    }
+  ],
+  "targetLabel": "card vendor tables"
+}
