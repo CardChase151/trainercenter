@@ -21356,7 +21356,7 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
     })();
     return () => { cancelled = true; };
   }, [resultsTarget]); // refetch after the modal closes so a just-submitted survey lights up
-  // Per-event roster tab: 'approved' | 'interested' | 'no_request'.
+  // Per-event roster tab: 'approved' | 'interested' | 'no_card' | 'no_request'.
   // Stored as an object keyed by event id so each expanded event keeps
   // its own selection independently. Default is 'approved'.
   const [eventTab, setEventTab] = useState({});
@@ -21460,6 +21460,10 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
             const dateStr = new Date(ev.event_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
             const approved = apps.filter(a => a.status === 'approved');
             const pending = apps.filter(a => a.status === 'pending');
+            // Applied for a paid table and never saved a card. Deliberately
+            // kept out of Interested — they are not a real application yet —
+            // but they must be visible somewhere or there is nobody to chase.
+            const noCard = apps.filter(a => a.status === 'incomplete');
             const isExpanded = effectiveExpanded.has(ev.id);
             const isPast = ev.event_date < todayStr;
             // Everyone who's approved as a partner but hasn't applied to THIS
@@ -21506,6 +21510,9 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                   >
                     <span style={{ fontSize: '0.78rem', color: '#666' }}>
                       {approved.length} approved · {pending.length} pending
+                      {noCard.length > 0 && (
+                        <span style={{ color: '#b45309', fontWeight: 700 }}> · {noCard.length} no card</span>
+                      )}
                     </span>
                     {(ev.table_fee_cents || 0) > 0 && (() => {
                       // Money-at-a-glance for paid events: collected total +
@@ -21691,9 +21698,48 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                       );
                     } else if (a.status === 'pending') {
                       decLine = <span style={{ color: '#c2410c' }}>Pending decision</span>;
+                    } else if (a.status === 'incomplete') {
+                      const when = a.applied_at
+                        ? new Date(a.applied_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                        : null;
+                      decLine = (
+                        <span style={{ color: '#b45309' }}>
+                          {when ? `Started ${when}` : 'Started'} · never saved a card
+                        </span>
+                      );
                     }
                     let actions = null;
-                    if (a.status === 'pending' && !isPast) {
+                    if (a.status === 'incomplete' && !isPast) {
+                      // Nudge, not approve. Nothing about this row is decidable
+                      // until a card is on file.
+                      actions = (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Email ${v.name || 'this vendor'} to ask for a card on file?`)) return;
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-vendor-email`;
+                            const res = await fetch(url, {
+                              method: 'POST',
+                              headers: {
+                                'Authorization': `Bearer ${session?.access_token}`,
+                                'Content-Type': 'application/json',
+                                'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY,
+                              },
+                              body: JSON.stringify({ type: 'card_on_file_needed', vendor_id: a.vendor_id }),
+                            });
+                            const out = await res.json().catch(() => ({}));
+                            if (res.ok && out.ok) alert(`Asked ${v.name || 'them'} for a card.`);
+                            else alert('Could not send: ' + (out.error || res.status));
+                          }}
+                          style={{
+                            fontSize: '0.8rem', backgroundColor: '#b45309', color: '#fff',
+                            border: 'none', padding: '6px 14px', borderRadius: '6px',
+                            fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >Ask for a card</button>
+                      );
+                    } else if (a.status === 'pending' && !isPast) {
                       actions = (
                         <button onClick={(e) => { e.stopPropagation(); onDecide(a.id, 'approved', null); }} style={{
                           fontSize: '0.8rem', backgroundColor: '#16a34a', color: '#fff',
@@ -21791,6 +21837,13 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                     return ta - tb;
                   });
                   const noRequestSorted = notApplied.slice().sort(sortByName);
+                  // Oldest first here too: the longer they have sat without a
+                  // card, the sooner they need a nudge.
+                  const noCardSorted = noCard.slice().sort((a, b) => {
+                    const ta = a.applied_at ? new Date(a.applied_at).getTime() : 0;
+                    const tb = b.applied_at ? new Date(b.applied_at).getTime() : 0;
+                    return ta - tb;
+                  });
 
                   // Which list maps to cards based on the active tab.
                   let list = null;
@@ -21801,6 +21854,9 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                   } else if (activeTab === 'interested') {
                     list = interestedSorted;
                     emptyMsg = 'No pending applications. When vendors apply, they show up here.';
+                  } else if (activeTab === 'no_card') {
+                    list = noCardSorted;
+                    emptyMsg = 'Nobody is stuck at the card step for this event.';
                   } else {
                     list = noRequestSorted;
                     emptyMsg = isPast || ev.cancelled
@@ -21827,6 +21883,17 @@ function EventRosterList({ events, attendance, allVendors, profilesById, emailLo
                           style={tabBtnLocal(activeTab === 'interested')}
                         >
                           Interested ({interestedSorted.length})
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'no_card'); }}
+                          style={{
+                            ...tabBtnLocal(activeTab === 'no_card'),
+                            ...(activeTab !== 'no_card' && noCardSorted.length > 0
+                              ? { border: '1px solid #fcd34d', backgroundColor: '#fffbeb', color: '#92400e' }
+                              : {}),
+                          }}
+                        >
+                          No card ({noCardSorted.length})
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setTabFor(ev.id, 'no_request'); }}
@@ -22261,12 +22328,15 @@ function ApplicationStatusBadge({ status }) {
     approved: { bg: '#f0fdf4', text: '#15803d' },
     declined: { bg: '#fef2f2', text: '#991b1b' },
     cancelled: { bg: '#f3f4f6', text: '#6b7280' },
+    // 'incomplete' is a database word. Staff read "No card yet".
+    incomplete: { bg: '#fffbeb', text: '#92400e' },
   }[status] || { bg: '#f3f4f6', text: '#374151' };
+  const label = status === 'incomplete' ? 'No card yet' : status;
   return (
     <span style={{
       fontSize: '0.7rem', backgroundColor: styles.bg, color: styles.text,
       padding: '2px 8px', borderRadius: '20px', fontWeight: '700', textTransform: 'capitalize'
-    }}>{status}</span>
+    }}>{label}</span>
   );
 }
 
