@@ -772,6 +772,56 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, sent: ['vendor'] })
     }
 
+    // An applicant with no card saved. Vetting does not start until there is
+    // one, because a card is how we know the table fee can be covered, so this
+    // says that plainly and sends them back to the dashboard to add it. Nothing
+    // is charged by adding a card; the fee is only taken once they are approved.
+    if (type === 'card_on_file_needed') {
+      if (!payload.vendor_id) return json({ error: 'vendor_id required' }, 400)
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') || '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+      )
+      const { data: v, error: vErr } = await supabaseAdmin.from('vendors').select('*').eq('id', payload.vendor_id).single()
+      if (vErr || !v) return json({ error: vErr?.message || 'vendor not found' }, 404)
+
+      // Every date they have asked for and still has no card, named in the
+      // email. One applicant may be waiting on two events.
+      const { data: apps } = await supabaseAdmin
+        .from('vendor_applications')
+        .select('fee_cents, event:events(event_date, title)')
+        .eq('vendor_id', v.id)
+        .is('stripe_payment_method_id', null)
+        .in('payment_status', ['card_pending', 'unpaid'])
+      const rows = (apps || []).filter((a: any) => a.event?.event_date >= new Date().toISOString().slice(0, 10))
+      if (!rows.length) return json({ error: 'nothing is waiting on a card for this vendor' }, 400)
+
+      const lines = rows.map((a: any) => {
+        const cents = a.fee_cents || 0
+        const usd = `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
+        return `${a.event.title} on ${formatEventDate(a.event.event_date)} (${usd} table)`
+      })
+      const dateList = lines.length === 1 ? lines[0] : lines.join(', and ')
+      const feeWord = rows.length === 1
+        ? `the ${`$${((rows[0].fee_cents || 0) / 100).toFixed(0)}`} table fee`
+        : 'the table fees'
+
+      const subject = 'Card on file needed'
+      const body = `<p>Hi ${v.name},</p>` +
+        `<p>Thanks for your interest in ${dateList}.</p>` +
+        `<p>Before we vet a vendor we make sure there is a card on file. It shows us you are ready to cover ${feeWord}. Nothing is charged now, and nothing is charged unless you are approved for the date.</p>` +
+        `<p>If you would still like to be vetted, open your dashboard and add your card.</p>` +
+        `<p style="margin:24px 0"><a href="${SITE_URL}/vendors/dashboard" style="display:inline-block;background:#C8102E;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">Open your dashboard</a></p>` +
+        `<p style="font-size:14px;color:#666">Let us know if you have any questions.</p>`
+      const text = `Hi ${v.name},\n\nThanks for your interest in ${dateList}.\n\n` +
+        `Before we vet a vendor we make sure there is a card on file. It shows us you are ready to cover ${feeWord}. ` +
+        `Nothing is charged now, and nothing is charged unless you are approved for the date.\n\n` +
+        `If you would still like to be vetted, open your dashboard and add your card:\n${SITE_URL}/vendors/dashboard\n\n` +
+        `Let us know if you have any questions.`
+      await sendResendEmail([v.email], subject, wrapHtml(body), text)
+      return json({ ok: true, sent: [v.email], dates: lines })
+    }
+
     if (type === 'vendor_optout_notify') {
       // Vendor self-service opt-out or cancellation. Notifies STAFF only
       // (Chef + Chase) so they see the lineup change without the vendor

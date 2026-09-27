@@ -181,9 +181,19 @@ Deno.serve(async (req) => {
         payment_status: 'card_saved',
       })
         .eq('vendor_id', app.vendor_id)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'incomplete'])
         .is('stripe_payment_method_id', null)
         .gt('fee_cents', 0)
+
+      // 'incomplete' means they applied for a paid date and never saved a
+      // card, which keeps the row out of every staff queue. The card is here,
+      // so the application is real now — promote it. Scoped to 'incomplete'
+      // so an approved vendor swapping cards is never knocked back to pending.
+      await supabase.from('vendor_applications')
+        .update({ status: 'pending' })
+        .eq('vendor_id', app.vendor_id)
+        .eq('status', 'incomplete')
+        .not('stripe_payment_method_id', 'is', null)
 
       return json({ ok: true, application_id: app.id })
     }
@@ -275,9 +285,19 @@ Deno.serve(async (req) => {
         payment_status: 'card_saved',
       })
         .eq('vendor_id', app.vendor_id)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'incomplete'])
         .is('stripe_payment_method_id', null)
         .gt('fee_cents', 0)
+
+      // 'incomplete' means they applied for a paid date and never saved a
+      // card, which keeps the row out of every staff queue. The card is here,
+      // so the application is real now — promote it. Scoped to 'incomplete'
+      // so an approved vendor swapping cards is never knocked back to pending.
+      await supabase.from('vendor_applications')
+        .update({ status: 'pending' })
+        .eq('vendor_id', app.vendor_id)
+        .eq('status', 'incomplete')
+        .not('stripe_payment_method_id', 'is', null)
 
       // The "application received" confirmation is sent when the application is
       // created, not here. Gating it on a saved card meant every non-paying
