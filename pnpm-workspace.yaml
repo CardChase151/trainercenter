@@ -5,3 +5,10 @@ strictDepBuilds: false
 ignoredBuiltDependencies:
   - core-js
   - core-js-pure
+# create-react-app's eslint setup expects the flat npm-style layout; pnpm's
+# strict layout made Netlify fail with 'Plugin react was conflicted'. Hoisted
+# keeps the flat layout while still linking from the shared store.
+nodeLinker: hoisted
+allowBuilds:
+  core-js: set this to true or false
+  core-js-pure: set this to true or false
