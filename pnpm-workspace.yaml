@@ -1,0 +1,7 @@
+# pnpm 12 fails the install when a package wants to run an install script it
+# was not approved for. core-js only prints a funding note; skip it, and do
+# not fail the install over skipped scripts.
+strictDepBuilds: false
+ignoredBuiltDependencies:
+  - core-js
+  - core-js-pure
